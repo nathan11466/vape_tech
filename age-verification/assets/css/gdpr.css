@@ -1,0 +1,467 @@
+/**
+ * Age Verification GDPR & Cookie Consent Styles
+ */
+
+/* Cookie Banner */
+.av-cookie-banner {
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 999997;
+    background-color: #ffffff;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    animation: slideIn 0.4s ease-out;
+}
+
+.av-cookie-banner-bottom {
+    bottom: 0;
+}
+
+.av-cookie-banner-top {
+    top: 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.av-cookie-banner-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 600px;
+    width: 90%;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.av-cookie-banner-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.av-cookie-banner-message {
+    flex: 1;
+    min-width: 300px;
+}
+
+.av-cookie-banner-message p {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.av-cookie-banner-links {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.av-cookie-banner-links a {
+    color: #2271b1;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.av-cookie-banner-links a:hover {
+    text-decoration: underline;
+}
+
+.av-cookie-banner-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Cookie Buttons */
+.av-cookie-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.av-cookie-settings-btn {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.av-cookie-settings-btn:hover {
+    background-color: #e0e0e0;
+}
+
+.av-cookie-accept-btn {
+    background-color: #4CAF50;
+    color: #ffffff;
+}
+
+.av-cookie-accept-btn:hover {
+    background-color: #45a049;
+}
+
+.av-cookie-accept-selected {
+    background-color: #2271b1;
+    color: #ffffff;
+}
+
+.av-cookie-accept-selected:hover {
+    background-color: #135e96;
+}
+
+/* Cookie Settings Modal */
+.av-cookie-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 999998;
+}
+
+.av-cookie-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.av-cookie-modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #ffffff;
+    border-radius: 8px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -45%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.av-cookie-modal-header {
+    padding: 20px 25px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.av-cookie-modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    color: #333;
+}
+
+.av-cookie-modal-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: #999;
+    line-height: 1;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.av-cookie-modal-close:hover {
+    color: #333;
+}
+
+.av-cookie-modal-body {
+    padding: 25px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.av-cookie-modal-body > p {
+    margin: 0 0 20px 0;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.av-cookie-modal-footer {
+    padding: 20px 25px;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Cookie Categories */
+.av-cookie-category {
+    margin-bottom: 20px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.av-cookie-category-header {
+    background-color: #f8f8f8;
+    padding: 15px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.av-cookie-category-header:hover {
+    background-color: #f0f0f0;
+}
+
+.av-cookie-category-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    margin: 0;
+}
+
+.av-cookie-toggle {
+    margin: 0 10px 0 0;
+    cursor: pointer;
+}
+
+.av-cookie-toggle:disabled {
+    cursor: not-allowed;
+}
+
+.av-cookie-category-title {
+    font-weight: 600;
+    color: #333;
+    font-size: 15px;
+    flex: 1;
+}
+
+.av-cookie-category-badge {
+    background-color: #4CAF50;
+    color: #ffffff;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.av-cookie-category-description {
+    padding: 15px;
+    border-top: 1px solid #e0e0e0;
+    background-color: #ffffff;
+}
+
+.av-cookie-category-description p {
+    margin: 0 0 10px 0;
+    color: #666;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.av-cookie-category-description p:last-child {
+    margin-bottom: 0;
+}
+
+.av-cookie-list {
+    font-size: 12px !important;
+    color: #999 !important;
+    word-break: break-word;
+}
+
+/* Privacy Widget */
+.av-privacy-widget {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 999996;
+}
+
+.av-privacy-widget-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: #2271b1;
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.av-privacy-widget-btn:hover {
+    background-color: #135e96;
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.av-privacy-widget-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Animations */
+@keyframes slideIn {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.av-cookie-banner-top {
+    animation: slideInTop 0.4s ease-out;
+}
+
+@keyframes slideInTop {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .av-cookie-banner-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .av-cookie-banner-message {
+        min-width: auto;
+    }
+
+    .av-cookie-banner-actions {
+        width: 100%;
+    }
+
+    .av-cookie-btn {
+        flex: 1;
+        text-align: center;
+    }
+
+    .av-cookie-modal-content {
+        max-width: 95%;
+    }
+
+    .av-cookie-modal-header {
+        padding: 15px 20px;
+    }
+
+    .av-cookie-modal-body {
+        padding: 20px;
+    }
+
+    .av-cookie-modal-footer {
+        padding: 15px 20px;
+        flex-direction: column;
+    }
+
+    .av-cookie-modal-footer .av-cookie-btn {
+        width: 100%;
+    }
+
+    .av-privacy-widget {
+        bottom: 15px;
+        left: 15px;
+    }
+
+    .av-privacy-widget-btn {
+        width: 45px;
+        height: 45px;
+    }
+}
+
+/* Dark Mode Support (Optional) */
+@media (prefers-color-scheme: dark) {
+    .av-cookie-banner {
+        background-color: #1e1e1e;
+    }
+
+    .av-cookie-banner-message p {
+        color: #e0e0e0;
+    }
+
+    .av-cookie-modal-content {
+        background-color: #1e1e1e;
+    }
+
+    .av-cookie-modal-header,
+    .av-cookie-modal-footer {
+        border-color: #333;
+    }
+
+    .av-cookie-modal-header h2 {
+        color: #e0e0e0;
+    }
+
+    .av-cookie-modal-close {
+        color: #999;
+    }
+
+    .av-cookie-modal-close:hover {
+        color: #e0e0e0;
+    }
+
+    .av-cookie-modal-body > p {
+        color: #b0b0b0;
+    }
+
+    .av-cookie-category {
+        border-color: #333;
+    }
+
+    .av-cookie-category-header {
+        background-color: #2a2a2a;
+    }
+
+    .av-cookie-category-header:hover {
+        background-color: #333;
+    }
+
+    .av-cookie-category-title {
+        color: #e0e0e0;
+    }
+
+    .av-cookie-category-description {
+        background-color: #1e1e1e;
+        border-color: #333;
+    }
+
+    .av-cookie-category-description p {
+        color: #b0b0b0;
+    }
+}

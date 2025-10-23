@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Age Verification
+ * Plugin Name: Age Verification & Privacy Compliance
  * Plugin URI: https://github.com/nathan11466/vape_tech
- * Description: A comprehensive age verification plugin with multiple verification methods (slider, birthdate, simple buttons) to restrict website access.
- * Version: 1.0.0
+ * Description: A comprehensive age verification and GDPR/privacy compliance plugin with cookie consent management, multiple verification methods, and data protection tools.
+ * Version: 2.0.0
  * Author: Your Name
  * Author URI: https://github.com/nathan11466
  * License: GPL v2 or later
@@ -17,13 +17,15 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AGE_VERIFICATION_VERSION', '1.0.0');
+define('AGE_VERIFICATION_VERSION', '2.0.0');
 define('AGE_VERIFICATION_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AGE_VERIFICATION_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 // Include required files
 require_once AGE_VERIFICATION_PLUGIN_DIR . 'includes/class-age-verification-settings.php';
 require_once AGE_VERIFICATION_PLUGIN_DIR . 'includes/class-age-verification-frontend.php';
+require_once AGE_VERIFICATION_PLUGIN_DIR . 'includes/class-age-verification-gdpr.php';
+require_once AGE_VERIFICATION_PLUGIN_DIR . 'includes/class-age-verification-gdpr-frontend.php';
 
 /**
  * Main Age Verification Class
@@ -71,9 +73,17 @@ class Age_Verification {
         // Initialize settings
         Age_Verification_Settings::get_instance();
 
+        // Initialize GDPR settings
+        Age_Verification_GDPR::get_instance();
+
         // Initialize frontend only if plugin is enabled
         if (get_option('age_verification_enabled', 1)) {
             Age_Verification_Frontend::get_instance();
+        }
+
+        // Initialize GDPR frontend if enabled
+        if (get_option('av_cookie_consent_enabled', 0)) {
+            Age_Verification_GDPR_Frontend::get_instance();
         }
     }
 
@@ -81,7 +91,7 @@ class Age_Verification {
      * Plugin activation
      */
     public function activate() {
-        // Set default options
+        // Set default options for age verification
         $defaults = array(
             'age_verification_enabled' => 1,
             'age_verification_method' => 'simple_buttons',
@@ -100,11 +110,35 @@ class Age_Verification {
             'age_verification_deny_button_color' => '#f44336',
         );
 
-        foreach ($defaults as $key => $value) {
+        // Set default options for GDPR/Privacy
+        $gdpr_defaults = array(
+            'av_cookie_consent_enabled' => 0,
+            'av_cookie_banner_position' => 'bottom',
+            'av_cookie_banner_message' => 'We use cookies to ensure you get the best experience on our website. By continuing to browse, you agree to our use of cookies.',
+            'av_privacy_policy_page' => 0,
+            'av_cookie_policy_page' => 0,
+            'av_cookies_necessary' => 'age_verified, PHPSESSID, wp-settings-*, wordpress_logged_in_*',
+            'av_cookies_analytics' => '_ga, _gid, _gat, _ga_*',
+            'av_cookies_marketing' => '_fbp, fr, IDE, test_cookie',
+            'av_cookies_preferences' => 'av_cookie_consent',
+            'av_enable_consent_log' => 1,
+            'av_consent_expiry' => 365,
+            'av_show_privacy_widget' => 1,
+            'av_enable_dnt' => 0,
+            'av_data_retention_days' => 730,
+            'av_auto_delete_logs' => 0,
+        );
+
+        $all_defaults = array_merge($defaults, $gdpr_defaults);
+
+        foreach ($all_defaults as $key => $value) {
             if (get_option($key) === false) {
                 add_option($key, $value);
             }
         }
+
+        // Create GDPR consent table
+        Age_Verification_GDPR::get_instance()->create_consent_table();
     }
 
     /**

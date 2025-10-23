@@ -97,6 +97,85 @@ input[type="range"] {
     margin: 20px 0;
 }
 
+/* GDPR Admin Styles */
+.button-danger {
+    background-color: #dc3232;
+    color: #ffffff;
+    border-color: #dc3232;
+}
+
+.button-danger:hover {
+    background-color: #c62828;
+    border-color: #c62828;
+}
+
+#data-request-result {
+    max-width: 600px;
+}
+
+#data-request-result .notice {
+    margin: 0;
+}
+
+/* Consent Logs Table */
+.wp-list-table th {
+    font-weight: 600;
+}
+
+.wp-list-table code {
+    background-color: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+/* Pagination */
+.tablenav {
+    margin-top: 20px;
+}
+
+.tablenav-pages {
+    float: right;
+}
+
+.tablenav-pages .page-numbers {
+    padding: 5px 10px;
+    margin: 0 2px;
+    border: 1px solid #ccc;
+    background: #fff;
+    text-decoration: none;
+    color: #2271b1;
+}
+
+.tablenav-pages .page-numbers.current {
+    background: #2271b1;
+    color: #fff;
+    border-color: #2271b1;
+}
+
+.tablenav-pages .page-numbers:hover {
+    background: #f0f0f0;
+}
+
+/* Data Request Forms */
+#export-ip,
+#delete-ip {
+    margin-right: 10px;
+}
+
+/* GDPR Info Boxes */
+.age-verification-info-box p {
+    margin: 5px 0;
+}
+
+.age-verification-info-box p:first-child {
+    margin-top: 0;
+}
+
+.age-verification-info-box p:last-child {
+    margin-bottom: 0;
+}
+
 /* Responsive */
 @media (max-width: 782px) {
     .form-table th {
@@ -106,5 +185,18 @@ input[type="range"] {
     input[type="range"] {
         width: 100%;
         max-width: 300px;
+    }
+
+    #export-ip,
+    #delete-ip {
+        display: block;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .tablenav-pages {
+        float: none;
+        text-align: center;
+        margin-top: 10px;
     }
 }

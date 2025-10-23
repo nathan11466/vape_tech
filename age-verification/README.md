@@ -1,193 +1,341 @@
-# Age Verification WordPress Plugin
+# Age Verification & Privacy Compliance WordPress Plugin
 
-A comprehensive and customizable age verification plugin for WordPress that restricts website access until visitors verify their age. Perfect for websites selling age-restricted products like vapes, alcohol, or adult content.
+A comprehensive dual-purpose plugin that handles both age verification and GDPR/privacy compliance for WordPress. Perfect for websites selling age-restricted products (vapes, alcohol, adult content) that also need to comply with privacy regulations.
 
 ## Features
 
-### Multiple Verification Methods
-- **Simple Buttons**: Quick "I'm over/under [age]" buttons
-- **Age Slider**: Interactive slider for selecting age
-- **Birthdate Entry**: Full birthdate verification with month/day/year dropdowns
+### Age Verification
+- **Multiple Verification Methods**
+  - Simple Buttons: Quick "I'm over/under [age]" buttons
+  - Age Slider: Interactive slider for selecting age (13-100)
+  - Birthdate Entry: Full birthdate verification with month/day/year dropdowns
 
-### Comprehensive Settings
-- **General Settings**
+- **Comprehensive Settings**
   - Enable/disable age verification
   - Choose verification method
   - Set minimum age requirement (default: 21)
-  - Configure cookie duration (how long verification is remembered)
+  - Configure cookie duration
   - Exclude specific pages from verification
+  - Customizable messaging and styling
+  - Full color customization
 
-- **Content Settings**
-  - Customizable headline
-  - Customizable verification message
-  - Customizable underage message
-  - Set redirect URL for underage visitors
-  - Optional logo display
+### GDPR & Privacy Compliance
+- **Cookie Consent Banner**
+  - Customizable position (top, bottom, modal)
+  - Granular cookie category controls
+  - "Accept All" and "Cookie Settings" options
+  - Links to privacy and cookie policies
+  - Fully customizable messaging
 
-- **Styling Settings**
-  - Overlay background color
-  - Overlay opacity control
-  - Modal background color
-  - Accept button color
-  - Button text color
-  - Deny button color
+- **Cookie Categories**
+  - Necessary (always enabled)
+  - Analytics (Google Analytics, etc.)
+  - Marketing (Facebook Pixel, ads, etc.)
+  - Preferences (user settings)
+  - Wildcard support for cookie patterns
 
-### User-Friendly Features
-- Modal cannot be closed without verification
-- Prevents body scrolling when modal is active
-- Cookie-based "remember me" functionality
-- Responsive design for all devices
-- Clean, modern interface
-- Right-click prevention on modal
-- Escape key prevention
+- **Compliance Features**
+  - Consent logging with audit trail
+  - IP address and user agent tracking
+  - Configurable consent expiry
+  - Do Not Track (DNT) support
+  - Data retention policies
+  - Auto-delete old logs
+
+- **Data Subject Rights (GDPR)**
+  - Export user data by IP address
+  - Delete user data by IP address
+  - View consent logs with pagination
+  - Downloadable consent records
+
+- **User Experience**
+  - Privacy preferences widget (floating button)
+  - Cookie settings modal
+  - Granular category controls
+  - Responsive design
+  - Dark mode support
 
 ## Installation
 
 1. Download the plugin folder
 2. Upload the `age-verification` folder to `/wp-content/plugins/`
 3. Activate the plugin through the 'Plugins' menu in WordPress
-4. Go to Settings > Age Verification to configure
+4. Configure age verification: Settings > Age Verification
+5. Configure privacy/GDPR: Settings > Privacy & GDPR
 
 ## Configuration
 
-### Basic Setup
+### Age Verification Setup
 
-1. Navigate to **Settings > Age Verification** in your WordPress admin
+1. Navigate to **Settings > Age Verification**
 2. In the **General** tab:
-   - Ensure "Enable Age Verification" is checked
-   - Select your preferred verification method
-   - Set the minimum age (default is 21)
-   - Set how long to remember verified users (in days)
+   - Enable age verification
+   - Select verification method (buttons, slider, or birthdate)
+   - Set minimum age (default: 21)
+   - Set cookie duration
+   - Exclude specific pages
 
 3. In the **Content** tab:
-   - Customize the headline and messages
-   - Set where underage visitors should be redirected
-   - Optionally add a logo URL
+   - Customize headline and messages
+   - Set underage redirect URL
+   - Add optional logo
 
 4. In the **Styling** tab:
-   - Customize colors to match your brand
-   - Adjust overlay opacity
-   - Customize button colors
+   - Customize colors and opacity
+   - Match your brand design
 
-### Excluding Pages
+### Privacy & GDPR Setup
 
-To exclude specific pages from age verification (e.g., privacy policy, terms of service):
+1. Navigate to **Settings > Privacy & GDPR**
 
-1. Go to **Settings > Age Verification**
-2. Click the **General** tab
-3. In the "Excluded Pages" dropdown, select the pages you want to exclude
-4. Hold Ctrl (Cmd on Mac) to select multiple pages
-5. Click "Save Changes"
+2. **Cookie Consent Tab**:
+   - Enable cookie consent banner
+   - Choose banner position (bottom/top/modal)
+   - Customize banner message
+   - Link to privacy and cookie policy pages
 
-## Verification Methods
+3. **Cookie Management Tab**:
+   - Define cookie categories
+   - List cookies for each category
+   - Use wildcards (e.g., `_ga_*`)
+   - Separate with commas
 
-### Simple Buttons
-The easiest method for users. Displays two buttons:
-- "I'm over [age]" - Grants access
-- "I'm under [age]" - Denies access and redirects
+4. **Compliance Tab**:
+   - Enable consent logging (recommended)
+   - Set consent expiry (default: 365 days)
+   - Enable privacy widget
+   - Honor Do Not Track
+   - Configure data retention
+   - Enable auto-delete old logs
 
-### Age Slider
-An interactive slider allowing users to select their age:
-- User drags slider to select their age (13-100)
-- Display shows selected age in real-time
-- User clicks "Confirm" to verify
-- Automatic validation against minimum age
+5. **Data Requests Tab**:
+   - Export user data by IP
+   - Delete user data by IP
+   - Handle GDPR data requests
 
-### Birthdate Entry
-The most secure method with full date validation:
-- Three dropdowns for Month, Day, and Year
-- Validates date correctness (e.g., no February 30th)
-- Calculates exact age
-- User clicks "Verify" to submit
+6. **Consent Logs Tab**:
+   - View all logged consents
+   - Audit trail for compliance
+   - Paginated results
+   - Search and filter
 
 ## File Structure
 
 ```
 age-verification/
 ├── age-verification.php                          # Main plugin file
-├── README.md                                      # This file
+├── README.md                                      # Documentation
 ├── includes/
-│   ├── class-age-verification-settings.php       # Admin settings class
-│   └── class-age-verification-frontend.php       # Frontend display class
+│   ├── class-age-verification-settings.php       # Age verification settings
+│   ├── class-age-verification-frontend.php       # Age verification frontend
+│   ├── class-age-verification-gdpr.php           # GDPR backend
+│   └── class-age-verification-gdpr-frontend.php  # GDPR frontend
 └── assets/
     ├── css/
     │   ├── admin.css                              # Admin styling
-    │   └── frontend.css                           # Frontend modal styling
+    │   ├── frontend.css                           # Age verification modal
+    │   └── gdpr.css                               # Cookie consent banner
     └── js/
         ├── admin.js                               # Admin functionality
-        └── frontend.js                            # Verification logic
+        ├── frontend.js                            # Age verification logic
+        └── gdpr.js                                # Cookie consent logic
 ```
 
 ## How It Works
 
-1. **First Visit**: When a visitor arrives at your site, the plugin checks for the `age_verified` cookie
-2. **No Cookie**: If no cookie exists, the age verification modal is displayed
-3. **Verification**: User verifies their age using the selected method
-4. **Age Check**: Plugin validates the user's age against the minimum requirement
-5. **Success**: If verified, a cookie is set for the configured duration and access is granted
-6. **Failure**: If underage, an error message is shown and the user is redirected after 3 seconds
-7. **Return Visits**: Cookie prevents re-verification for the configured duration
+### Age Verification Flow
+1. Visitor arrives at site
+2. Plugin checks for `age_verified` cookie
+3. If no cookie, display verification modal
+4. User verifies age using selected method
+5. Plugin validates age against minimum
+6. If valid, set cookie and grant access
+7. If invalid, show error and redirect
+8. Cookie prevents re-verification for configured duration
+
+### Cookie Consent Flow
+1. Visitor arrives at site
+2. Plugin checks for `av_cookie_consent` cookie
+3. If no cookie, display consent banner
+4. User can "Accept All" or customize via "Cookie Settings"
+5. User selects which cookie categories to allow
+6. Consent is saved and logged (if enabled)
+7. Non-consented cookies are blocked/deleted
+8. Privacy widget allows changing preferences anytime
+
+### GDPR Compliance
+The plugin provides tools to comply with GDPR requirements:
+
+1. **Lawful Basis**: Cookie consent before setting non-essential cookies
+2. **Transparency**: Clear information about cookie usage
+3. **User Control**: Granular category-level controls
+4. **Data Access**: Export user data on request
+5. **Right to Erasure**: Delete user data on request
+6. **Audit Trail**: Consent logging for accountability
+7. **Data Minimization**: Only essential data collected
+8. **Retention**: Configurable data retention periods
 
 ## Cookie Information
 
-The plugin uses a single cookie:
+### Age Verification
 - **Name**: `age_verified`
 - **Value**: `1` (when verified)
 - **Duration**: Configurable (default: 30 days)
 - **Purpose**: Remember verified visitors
 
+### Privacy Consent
+- **Name**: `av_cookie_consent`
+- **Value**: JSON object with consent preferences
+- **Duration**: Configurable (default: 365 days)
+- **Purpose**: Remember cookie preferences
+
+### Database Tables
+
+The plugin creates one database table:
+
+- **wp_av_consent_log**: Stores consent audit trail
+  - `id`: Unique identifier
+  - `ip_address`: Visitor IP
+  - `user_agent`: Browser info
+  - `consent_type`: Type of consent
+  - `consent_value`: JSON consent data
+  - `timestamp`: When consent was given
+
+## GDPR Data Requests
+
+### Exporting User Data
+
+1. Go to Settings > Privacy & GDPR > Data Requests
+2. Enter the visitor's IP address
+3. Click "Export Data"
+4. Download JSON file with all consent records
+
+### Deleting User Data
+
+1. Go to Settings > Privacy & GDPR > Data Requests
+2. Enter the visitor's IP address
+3. Click "Delete Data"
+4. Confirm deletion
+5. All consent records for that IP are permanently deleted
+
+## Advanced Features
+
+### Do Not Track (DNT)
+
+When enabled, the plugin automatically:
+- Detects DNT browser setting
+- Blocks non-essential cookies
+- Logs DNT-based consent
+- Skips showing consent banner
+
+### Cookie Blocking
+
+The plugin actively blocks/deletes cookies based on consent:
+- Checks cookie categories
+- Deletes cookies when consent withdrawn
+- Supports wildcard patterns
+- Triggers on consent changes
+
+### Consent Logging
+
+Every consent action is logged with:
+- IP address (for data requests)
+- User agent (browser/device info)
+- Consent type (cookie_consent, age_verification, etc.)
+- Consent value (detailed preferences)
+- Timestamp (ISO 8601 format)
+
+### Privacy Widget
+
+A floating button that allows users to:
+- Re-open cookie preferences
+- Change their consent choices
+- View current settings
+- Positioned bottom-left by default
+
 ## Customization
-
-### Changing Default Values
-
-Edit the activation hook in `age-verification.php` to change default settings:
-
-```php
-public function activate() {
-    $defaults = array(
-        'age_verification_minimum_age' => 21,      // Change minimum age
-        'age_verification_cookie_duration' => 30,  // Change cookie duration
-        // ... other defaults
-    );
-}
-```
 
 ### Custom Styling
 
-Add custom CSS to override plugin styles. Use your theme's `style.css` or the WordPress Customizer:
+Override plugin CSS in your theme:
 
 ```css
-/* Example: Change modal border radius */
-#age-verification-modal {
-    border-radius: 20px !important;
+/* Change cookie banner background */
+.av-cookie-banner {
+    background-color: #your-color !important;
 }
 
-/* Example: Change button hover effect */
-.age-verification-button:hover {
-    transform: scale(1.05) !important;
+/* Customize accept button */
+.av-cookie-accept-btn {
+    background-color: #your-brand-color !important;
+}
+
+/* Style privacy widget */
+.av-privacy-widget-btn {
+    background-color: #your-color !important;
+    bottom: 30px !important;
+    left: 30px !important;
 }
 ```
 
-### Translations
+### JavaScript Events
 
-The plugin is translation-ready with the text domain `age-verification`. Use a plugin like Loco Translate to create translations.
+Listen for consent changes:
+
+```javascript
+jQuery(document).on('av_consent_updated', function(event, consent) {
+    console.log('Consent updated:', consent);
+    // {necessary: true, analytics: true, marketing: false, ...}
+
+    // Load your scripts based on consent
+    if (consent.analytics) {
+        // Load Google Analytics
+    }
+    if (consent.marketing) {
+        // Load Facebook Pixel
+    }
+});
+```
+
+### Cookie Category Management
+
+Add custom cookies to categories in Settings > Privacy & GDPR > Cookie Management:
+
+```
+Necessary: age_verified, PHPSESSID, wp-settings-*, wordpress_logged_in_*
+Analytics: _ga, _gid, _gat, _ga_*, _gat_*, __utma, __utmb
+Marketing: _fbp, _fbq, fr, IDE, test_cookie, DSID
+Preferences: av_cookie_consent, wp-wpml_current_language
+```
 
 ## Frequently Asked Questions
 
-### Q: Will this affect my SEO?
-A: The age verification is client-side only and doesn't prevent search engines from crawling your site. However, it will affect user experience metrics.
+### Q: Is this plugin GDPR compliant?
+A: The plugin provides tools for GDPR compliance including consent management, data export/deletion, and audit logging. However, full GDPR compliance also depends on your privacy policy, data processing practices, and overall website configuration.
 
-### Q: Can users bypass this?
-A: Like all client-side verification, tech-savvy users can bypass it by manipulating cookies. This plugin is designed for legal compliance, not absolute security. For stricter requirements, consider server-side verification with account systems.
+### Q: Does this work with caching plugins?
+A: Yes, both age verification and cookie consent use client-side JavaScript and cookies, so they work with most caching plugins.
 
-### Q: Does it work with caching plugins?
-A: Yes, the plugin works with most caching plugins since it uses JavaScript and cookies for verification.
+### Q: Can users bypass the age verification?
+A: Tech-savvy users can manipulate cookies to bypass client-side verification. For legal compliance purposes, this is typically acceptable. For stricter requirements, consider server-side verification with account systems.
 
-### Q: Can I use this for GDPR compliance?
-A: This plugin is for age verification only, not GDPR compliance. For GDPR, you'll need a separate cookie consent plugin.
+### Q: What happens to existing cookies when consent is withdrawn?
+A: The plugin automatically deletes cookies from categories where consent was withdrawn.
 
-### Q: How do I reset my age verification?
-A: Clear your browser cookies for the site, specifically the `age_verified` cookie.
+### Q: How long are consent logs kept?
+A: Configurable under Settings > Privacy & GDPR > Compliance. Default is 730 days (2 years).
+
+### Q: Does this block Google Analytics automatically?
+A: Yes, if analytics cookies are not consented to, the plugin will delete Google Analytics cookies. However, you should also conditionally load the GA script based on consent.
+
+### Q: Can I customize which cookies are in each category?
+A: Yes, go to Settings > Privacy & GDPR > Cookie Management and define your cookie lists.
+
+### Q: What is the privacy widget?
+A: A floating button that allows users to reopen cookie preferences and change their consent at any time.
+
+### Q: How do I handle a GDPR data request?
+A: Use Settings > Privacy & GDPR > Data Requests to export or delete user data by IP address.
 
 ## Browser Support
 
@@ -196,19 +344,41 @@ A: Clear your browser cookies for the site, specifically the `age_verified` cook
 - Safari (latest)
 - Edge (latest)
 - Mobile browsers (iOS Safari, Chrome Mobile)
+- Dark mode support
+
+## Legal Disclaimer
+
+This plugin provides technical tools for age verification and privacy compliance but does not constitute legal advice. You are responsible for:
+
+1. Creating appropriate privacy and cookie policies
+2. Ensuring compliance with applicable laws (GDPR, CCPA, COPPA, etc.)
+3. Properly configuring the plugin for your jurisdiction
+4. Regularly reviewing and updating consent mechanisms
+5. Consulting with legal counsel for compliance requirements
+
+The plugin helps facilitate compliance but does not guarantee it.
 
 ## Support
 
 For issues, questions, or suggestions:
 - Create an issue on GitHub
 - Check existing issues for solutions
-- Review the code comments for implementation details
-
-## License
-
-GPL v2 or later
+- Review code comments for implementation details
 
 ## Changelog
+
+### Version 2.0.0
+- Added comprehensive GDPR/privacy compliance features
+- Cookie consent banner with granular controls
+- Cookie categorization (necessary, analytics, marketing, preferences)
+- Consent logging and audit trail
+- Data export and deletion tools
+- Privacy preferences widget
+- Do Not Track support
+- Data retention policies
+- Admin dashboard for consent management
+- View consent logs with pagination
+- Updated UI and styling
 
 ### Version 1.0.0
 - Initial release
@@ -220,10 +390,10 @@ GPL v2 or later
 - Responsive design
 - Multi-language ready
 
+## License
+
+GPL v2 or later
+
 ## Credits
 
-Developed for vape and age-restricted product websites.
-
-## Disclaimer
-
-This plugin provides age verification but does not guarantee complete age restriction. Users can potentially bypass client-side verification. This plugin should be used as part of a broader age verification strategy and in compliance with your local laws and regulations.
+Developed for age-restricted e-commerce websites with privacy compliance requirements.
