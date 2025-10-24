@@ -45,11 +45,19 @@ function av_inline_css_fallback() {
 
         .age-verification-logo {
             margin-bottom: 20px;
+            max-height: 120px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .age-verification-logo img {
-            max-width: 200px;
-            height: auto;
+            max-width: 180px !important;
+            max-height: 100px !important;
+            width: auto !important;
+            height: auto !important;
+            object-fit: contain !important;
         }
 
         .age-verification-headline {
