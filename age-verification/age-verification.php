@@ -3,7 +3,7 @@
  * Plugin Name: Age Verification & Privacy Compliance
  * Plugin URI: https://github.com/nathan11466/vape_tech
  * Description: A comprehensive age verification and GDPR/privacy compliance plugin with cookie consent management, multiple verification methods, and data protection tools.
- * Version: 2.0.0
+ * Version: 2.1.0
  * Author: Your Name
  * Author URI: https://github.com/nathan11466
  * License: GPL v2 or later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('AGE_VERIFICATION_VERSION', '2.0.0');
+define('AGE_VERIFICATION_VERSION', '2.1.0');
 define('AGE_VERIFICATION_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AGE_VERIFICATION_PLUGIN_URL', plugin_dir_url(__FILE__));
 
