@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+
+# Working data — merchant CSVs are not committed
+*.csv
+!fixture-*.csv
