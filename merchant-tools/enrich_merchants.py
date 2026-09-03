@@ -50,6 +50,7 @@ NEW_COLUMNS = [
 # Derived columns the WordPress template reads directly.
 DERIVED_COLUMNS = [
     "offer_display_mode",
+    "content_score",
     "low_confidence_fields",
     "review_notes",
 ]
@@ -100,7 +101,19 @@ KNOWN_BOILERPLATE = [
 ]
 
 # Claims that must never be published without a source + verification date.
+# Unsourced, these are suppressed at render time but do not by themselves make
+# the rest of the merchant page unpublishable.
 REQUIRES_SOURCE = ["company_trust_info"]
+
+# Negative reputation language is the one category that DOES block the whole
+# row. Publishing an unsourced claim that a business is untrustworthy carries
+# real risk, so those rows are held outright until sourced or removed.
+NEGATIVE_REPUTATION_RE = re.compile(
+    r"\b(low[\s-]?trust|scam|fraud|fraudulent|blacklist|black[\s-]?list|"
+    r"suspicious|avoid this|poor rating|bad rating|negative review|"
+    r"complaint|flag(?:s|ged)?\s+(?:as|for|low)|warning)\b",
+    re.I,
+)
 
 # --- Specificity signals ---------------------------------------------------
 
@@ -195,7 +208,13 @@ def find_boilerplate(rows, threshold):
             if value:
                 counts[value] += 1
         for value, count in counts.items():
-            if value in known or count >= threshold:
+            if value in known:
+                flagged[field].add(value)
+                continue
+            # A concrete, checkable value is a fact, not filler -- several
+            # merchants can genuinely share a $75 free-shipping threshold. Only
+            # vague text is treated as boilerplate on frequency alone.
+            if count >= threshold and not looks_specific(value):
                 flagged[field].add(value)
 
     return flagged
@@ -250,16 +269,29 @@ def grade_row(row, boilerplate):
             low_fields.append(field)
             notes.append(f"{field}: generic/duplicated text - rewrite or hide")
 
-    # 2. Claims that require a source before they may be published at all.
+    # 2. Claims that require a source before they may be published.
+    #
+    # An unsourced neutral claim (a rating, "no public rating found") only
+    # suppresses that field -- the WordPress helper renders nothing for it, and
+    # the rest of the page is still judged on its own merits. An unsourced
+    # NEGATIVE claim blocks the whole row, since publishing an unsupported
+    # assertion that a business is untrustworthy is the real risk.
     has_source = bool((row.get("fact_source_url") or "").strip())
     has_verified_date = bool((row.get("fact_last_verified") or "").strip())
     blocking = False
     for field in REQUIRES_SOURCE:
-        if (row.get(field) or "").strip() and not (has_source and has_verified_date):
-            if field not in low_fields:
-                low_fields.append(field)
-            notes.append(f"{field}: unsourced claim - needs fact_source_url + fact_last_verified before publishing")
+        value = (row.get(field) or "").strip()
+        if not value or (has_source and has_verified_date):
+            continue
+
+        if field not in low_fields:
+            low_fields.append(field)
+
+        if NEGATIVE_REPUTATION_RE.search(value):
+            notes.append(f"{field}: UNSOURCED NEGATIVE claim - remove or source before this merchant can publish")
             blocking = True
+        else:
+            notes.append(f"{field}: unsourced - field suppressed on the page; add fact_source_url + fact_last_verified to show it")
 
     # 3. Specificity: does this row carry any concrete, checkable detail?
     specific_fields = [
@@ -274,14 +306,24 @@ def grade_row(row, boilerplate):
     if not (row.get("primary_service_location") or "").strip():
         notes.append("location: primary_service_location unset")
 
-    # 5. Roll up.
+    # 5. Content strength: how much genuinely merchant-specific material this
+    #    row carries, independent of whether it has been sourced yet. This is
+    #    the triage signal -- source the highest scorers first.
+    score = 2 * len(specific_fields)
+    for field in CONTENT_FIELDS:
+        if field in low_fields:
+            continue
+        if (row.get(field) or "").strip():
+            score += 1
+
+    # 6. Roll up.
     if blocking:
         confidence, status = "Low", "Hold"
+    elif specific_fields and has_source and not low_fields:
+        confidence, status = "High", "Ready"
     elif low_fields:
         confidence = "Low"
         status = "Needs review"
-    elif specific_fields and has_source:
-        confidence, status = "High", "Ready"
     elif specific_fields:
         confidence = "High"
         status = "Needs review"
@@ -291,7 +333,7 @@ def grade_row(row, boilerplate):
         status = "Needs review"
         notes.append("no concrete offer/policy detail found - broad description only")
 
-    return confidence, status, low_fields, notes
+    return confidence, status, low_fields, notes, score
 
 
 def main():
@@ -331,9 +373,10 @@ def main():
         if not (row.get("display_brand_name") or "").strip():
             row["display_brand_name"] = row.get("brand_name", "")
 
-        confidence, status, low_fields, notes = grade_row(row, boilerplate)
+        confidence, status, low_fields, notes, score = grade_row(row, boilerplate)
         row["content_confidence"] = confidence
         row["publish_status"] = status
+        row["content_score"] = str(score)
         row["low_confidence_fields"] = "|".join(low_fields)
         row["review_notes"] = "; ".join(notes)
         row["offer_display_mode"] = decide_offer_display(row)
@@ -344,12 +387,16 @@ def main():
         if status != "Ready":
             review_rows.append({
                 "brand_name": row.get("brand_name", ""),
+                "content_score": score,
                 "publish_status": status,
                 "content_confidence": confidence,
                 "offer_display_mode": row["offer_display_mode"],
                 "low_confidence_fields": row["low_confidence_fields"],
                 "review_notes": row["review_notes"],
             })
+
+    # Strongest content first -- that is the order to do sourcing work in.
+    review_rows.sort(key=lambda r: -r["content_score"])
 
     with open(args.out, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
@@ -358,7 +405,7 @@ def main():
 
     if args.review:
         with open(args.review, "w", newline="", encoding="utf-8") as fh:
-            cols = ["brand_name", "publish_status", "content_confidence",
+            cols = ["brand_name", "content_score", "publish_status", "content_confidence",
                     "offer_display_mode", "low_confidence_fields", "review_notes"]
             writer = csv.DictWriter(fh, fieldnames=cols)
             writer.writeheader()
@@ -385,6 +432,12 @@ def main():
     if args.review:
         print()
         print(f"{len(review_rows)} merchants need work -> {args.review}")
+        top = [r for r in review_rows if r["publish_status"] != "Hold"][:15]
+        if top:
+            print()
+            print("Strongest content -- source these first:")
+            for r in top:
+                print(f"  [{r['content_score']:>3}] {r['brand_name'][:38]:<38} {r['offer_display_mode']}")
 
     return 0
 

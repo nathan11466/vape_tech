@@ -34,6 +34,10 @@ Fields that legitimately repeat — `payment_methods`, `verification_method`,
 `brand_category`, `editor_name` — are exempt. Most merchants really do take Visa,
 and `verification_method` describes our editorial process, not the merchant.
 
+Concrete values are also exempt from the frequency rule: four merchants can
+genuinely share a `$75` free-shipping threshold, and that is a coinciding fact
+rather than copied filler. Only vague text is flagged on frequency alone.
+
 **Offer display mode.** Derived per merchant, consumed by the template:
 
 | Mode | Meaning | Rendered as |
@@ -50,12 +54,20 @@ false claim.
 `content_confidence` is High / Medium / Low; `publish_status` is Ready / Needs
 review / Hold.
 
-- **Hold** — an unsourced reputation claim is present. `company_trust_info`
-  requires both `fact_source_url` and `fact_last_verified` before it may render.
+- **Hold** — an unsourced **negative** reputation claim ("flagged low trust",
+  "scam score") is present. Publishing an unsupported assertion that a business
+  is untrustworthy is the real risk, so the whole merchant is held.
 - **Needs review** — boilerplate present, or specific claims with no source.
-- **Ready** — merchant-specific detail plus a source.
+- **Ready** — merchant-specific detail plus a source, no flagged fields.
 
-An unset `publish_status` counts as unreviewed, never as approved.
+An unsourced *neutral* claim (a Trustpilot score, "no public rating found") is
+not row-blocking: the field is suppressed at render time and the rest of the
+page is judged on its own merits. An unset `publish_status` counts as
+unreviewed, never as approved.
+
+`content_score` ranks how much genuinely merchant-specific material a row
+carries, independent of sourcing. The review queue is sorted by it, so the top
+of the file is the order to do sourcing work in.
 
 ## WordPress side
 
