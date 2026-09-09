@@ -20,7 +20,9 @@ WordPress pages  ->  rendered live by [merchant_page] + JSON-LD schema
 | File | Role |
 | --- | --- |
 | `enrich_merchants.py` | Grades the CSV, appends provenance columns, decides what each page may claim |
-| `wp-merchant-fields.php` | **Main plugin.** Taxonomy, meta fields, display helpers. Loads the rest. |
+| `wp-merchant-fields.php` | **Main plugin.** Service-location taxonomy, meta fields, display helpers. Loads the rest. |
+| `wp-merchant-shipping.php` | `ships_to` taxonomy — countries plus all 50 US states, DC and Canadian provinces |
+| `derive_shipping.py` | Turns restriction prose into destination terms |
 | `wp-merchant-render.php` | The `[merchant_page]` shortcode that renders each page from meta |
 | `wp-merchant-seo.php` | SEO titles, meta descriptions, JSON-LD schema, Rank Math integration |
 | `wp-merchant-import.php` | CSV importer — admin screen plus a WP-CLI command |
@@ -160,6 +162,36 @@ review queue is sorted by it — that is a sensible order to work in.
 
 `review_notes` is shown at the top of each page in wp-admin to logged-in
 editors only, so you can see what was flagged while reading the page itself.
+
+## Filtering by shipping destination
+
+`ships_to` is a hierarchical, public taxonomy: **United States** with all 50
+states plus DC beneath it, **Canada** with its provinces, **United Kingdom**
+with its nations, and the other countries alongside. Because it has archives,
+`/ships-to/california/` becomes a browsable page listing every merchant that
+ships there — useful for filtering and as a landing page in its own right.
+
+Assigning a state also assigns its parent country, so country archives stay
+complete.
+
+`derive_shipping.py` resolves the terms from your existing restriction prose,
+and marks how far the result can be trusted:
+
+| Confidence | Source | Example |
+| --- | --- | --- |
+| `stated` | An explicit nationwide/all-states claim, minus its exceptions | "Ships nationwide except California and Massachusetts" |
+| `inferred` | Named exclusions imply coverage of the rest | "Does not ship to Utah" |
+| `unknown` | Nothing explicit — **no terms assigned** | "No shipping restrictions listed — confirm at checkout" |
+
+That last row matters: a boilerplate non-statement is never treated as a
+nationwide claim, so no merchant is listed as shipping somewhere on the strength
+of filler text. Sort the enriched CSV by `shipping_confidence` to spot-check the
+`inferred` rows.
+
+Places a merchant will **not** ship are kept in `restricted_states` as meta
+rather than terms — an archive of "merchants that cannot ship here" is not a
+page anyone wants — and rendered on the merchant page as a "Cannot ship to:"
+line.
 
 ## Data model notes
 

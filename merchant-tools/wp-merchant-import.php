@@ -42,6 +42,7 @@ function vc_merchant_import_meta_keys() {
         'contact_method', 'contact_verified_at', 'contact_source_url', 'fact_source_url',
         'fact_last_verified', 'content_confidence', 'publish_status', 'offer_display_mode',
         'content_score', 'low_confidence_fields', 'review_notes', 'section_origins',
+        'ships_to_terms', 'restricted_states', 'shipping_confidence',
     );
 }
 
@@ -147,6 +148,12 @@ function vc_merchant_import_row(array $row, $dry_run = false, $publish = false) 
         if (!empty($term_ids)) {
             wp_set_object_terms($post_id, $term_ids, 'service_location', false);
         }
+    }
+
+    // Shipping destinations -> ships_to taxonomy, so pages are filterable by
+    // where the merchant actually ships.
+    if (function_exists('vc_assign_ships_to')) {
+        vc_assign_ships_to($post_id, $row['ships_to_terms'] ?? '');
     }
 
     // Seed Rank Math's stored fields. The frontend filters in

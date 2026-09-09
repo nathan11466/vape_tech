@@ -27,7 +27,8 @@ function vc_merchant_post_types() {
  * Load the rest of the plugin. Each file is optional, so a partial upload
  * degrades rather than fataling the site.
  */
-foreach (array('wp-merchant-render.php', 'wp-merchant-seo.php', 'wp-merchant-import.php') as $vc_module) {
+foreach (array('wp-merchant-shipping.php', 'wp-merchant-render.php',
+               'wp-merchant-seo.php', 'wp-merchant-import.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
     if (file_exists($vc_path)) {
         require_once $vc_path;

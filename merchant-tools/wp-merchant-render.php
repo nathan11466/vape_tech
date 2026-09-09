@@ -75,6 +75,11 @@ function vc_merchant_render_page($atts = array()) {
     $out .= vc_merchant_section(__('If your code will not work', 'vc-merchant'), $m('why_code_not_work'));
     $out .= vc_merchant_section(__('Shipping restrictions', 'vc-merchant'), $m('shipping_restrictions'));
 
+    // Explicit "cannot ship to" list, when destinations were resolved.
+    if (function_exists('vc_merchant_restricted_line')) {
+        $out .= vc_merchant_restricted_line($post_id);
+    }
+
     // FAQs -- these also feed the FAQPage schema.
     $faqs = '';
     for ($i = 1; $i <= 3; $i++) {

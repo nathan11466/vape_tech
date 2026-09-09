@@ -31,6 +31,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import compose_sections
+import derive_shipping
 
 # --- New columns appended to the dataset -----------------------------------
 
@@ -55,6 +56,9 @@ NEW_COLUMNS = [
 DERIVED_COLUMNS = [
     "offer_display_mode",
     "content_score",
+    "ships_to_terms",
+    "restricted_states",
+    "shipping_confidence",
     "low_confidence_fields",
     "review_notes",
     "section_origins",
@@ -375,6 +379,7 @@ def main():
     tally = Counter()
     display_tally = Counter()
     compose_tally = Counter()
+    shipping_tally = Counter()
 
     for row in rows:
         for column in NEW_COLUMNS + DERIVED_COLUMNS:
@@ -395,6 +400,10 @@ def main():
             row["section_origins"] = "|".join(f"{f}:{o}" for f, o in sorted(origins.items()))
             compose_tally.update(origins.values())
             row["_disclosure_count"] = sum(1 for o in origins.values() if o == "disclosure")
+
+        # Resolve shipping destinations into taxonomy terms.
+        ship_conf = derive_shipping.apply_to_row(row)
+        shipping_tally[ship_conf] += 1
 
         confidence, status, low_fields, notes, score = grade_row(row, boilerplate)
 
@@ -463,6 +472,17 @@ def main():
                     "disclosure": "stated as not confirmed",
                 }[origin]
                 print(f"  {compose_tally[origin]:>4}  {label}")
+
+    print()
+    print("Shipping destinations:")
+    for conf in ("stated", "inferred", "unknown"):
+        if shipping_tally[conf]:
+            label = {
+                "stated": "explicitly stated",
+                "inferred": "inferred from named exclusions",
+                "unknown": "not determinable - no terms assigned",
+            }[conf]
+            print(f"  {shipping_tally[conf]:>4}  {label}")
 
     flagged_total = sum(len(v) for v in boilerplate.values())
     if flagged_total:
