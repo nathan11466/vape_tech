@@ -81,6 +81,46 @@ wp merchant import merchants-enriched.csv --limit=25
 Content is rendered live from meta via `[merchant_page]`, so changing the layout
 or the gating rules applies to every merchant at once with no re-import.
 
+## Fixing duplicate content: `--compose`
+
+```bash
+python3 enrich_merchants.py brands.csv --out enriched.csv --review queue.csv --compose
+```
+
+Spintax does not solve duplication. Rewording a generic sentence produces a
+unique string carrying identical (zero) information, and modern search systems
+evaluate meaning rather than surface text — so you would ship 112 pages that
+still have no reason to rank, while taking on site-wide scaled-content risk.
+
+`--compose` rebuilds the duplicated sections from each merchant's **own
+extracted facts** — code names, shipping thresholds, return windows, restricted
+states, excluded categories. The text differs because the underlying facts
+differ, not because it was reworded.
+
+Each section ends up in one of three states, tracked in `section_origins`:
+
+| Origin | Meaning |
+| --- | --- |
+| `original` | Already merchant-specific; left untouched |
+| `composed` | Rebuilt from this merchant's real values |
+| `disclosure` | Nothing to build from, so the page says so plainly |
+
+Composed, from Vape Street's own `DEVICE15` / `$70` / state-restriction fields:
+
+> Codes at Vape Street usually fail for one of these reasons: DEVICE15 is marked
+> as not combinable, so it fails when another code is already applied; FREESHIP
+> requires a cart of $70 or more; orders shipping to California and
+> Massachusetts may be blocked by state product restrictions.
+
+Two rules keep this honest:
+
+- **Boilerplate is never mined as a fact source.** Extracting "gift cards, sale
+  items" out of the generic string and rebuilding a sentence from it would be
+  spintax with extra steps, so fields being replaced are excluded as inputs.
+- **A merchant with 3+ unconfirmed sections is flagged as too thin to publish**
+  and cannot reach Ready. Honest disclosures are better than filler, but a page
+  that is mostly disclosure has not earned a ranking.
+
 ## The two safeguards
 
 **Boilerplate detection.** The known generic fallbacks are caught by exact

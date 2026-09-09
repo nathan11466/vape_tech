@@ -24,9 +24,13 @@ Usage:
 
 import argparse
 import csv
+import os
 import re
 import sys
 from collections import Counter, defaultdict
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import compose_sections
 
 # --- New columns appended to the dataset -----------------------------------
 
@@ -53,6 +57,7 @@ DERIVED_COLUMNS = [
     "content_score",
     "low_confidence_fields",
     "review_notes",
+    "section_origins",
 ]
 
 # --- Fields subject to boilerplate detection -------------------------------
@@ -196,7 +201,9 @@ def find_boilerplate(rows, threshold):
     shared by at least `threshold` merchants in a field that should be
     merchant-specific.
     """
-    known = set(KNOWN_BOILERPLATE)
+    # Normalize the known list the same way row values are normalized, or the
+    # trailing periods here would stop any of them ever matching.
+    known = {normalize(v) for v in KNOWN_BOILERPLATE}
     flagged = defaultdict(set)
 
     for field in CONTENT_FIELDS:
@@ -342,6 +349,9 @@ def main():
     parser.add_argument("input", help="source merchant CSV")
     parser.add_argument("--out", required=True, help="enriched CSV to write")
     parser.add_argument("--review", help="review-queue CSV for rows needing work")
+    parser.add_argument("--compose", action="store_true",
+                        help="rebuild boilerplate sections from each merchant's own facts; "
+                             "where there is nothing to build from, state that plainly")
     parser.add_argument("--boilerplate-threshold", type=int, default=3,
                         help="a value shared by this many merchants is boilerplate (default 3)")
     args = parser.parse_args()
@@ -364,6 +374,7 @@ def main():
     review_rows = []
     tally = Counter()
     display_tally = Counter()
+    compose_tally = Counter()
 
     for row in rows:
         for column in NEW_COLUMNS + DERIVED_COLUMNS:
@@ -373,7 +384,33 @@ def main():
         if not (row.get("display_brand_name") or "").strip():
             row["display_brand_name"] = row.get("brand_name", "")
 
+        # Rebuild boilerplate sections from this merchant's own facts BEFORE
+        # grading, so the grade reflects the copy that will actually publish.
+        if args.compose:
+            flagged = {
+                field for field, bad in boilerplate.items()
+                if normalize(row.get(field, "")) in bad and normalize(row.get(field, ""))
+            }
+            origins = compose_sections.compose_row(row, flagged)
+            row["section_origins"] = "|".join(f"{f}:{o}" for f, o in sorted(origins.items()))
+            compose_tally.update(origins.values())
+            row["_disclosure_count"] = sum(1 for o in origins.values() if o == "disclosure")
+
         confidence, status, low_fields, notes, score = grade_row(row, boilerplate)
+
+        # A page that is mostly "we could not confirm this" is honest but too
+        # thin to earn a ranking. Hold it back for research rather than
+        # publishing a page with nothing to say.
+        disclosures = int(row.pop("_disclosure_count", 0) or 0)
+        if disclosures >= 3 and status == "Ready":
+            status = "Needs review"
+            notes.append(
+                f"{disclosures} of 5 sections could not be confirmed - too thin to publish; "
+                f"research this merchant before going live"
+            )
+        elif disclosures >= 3:
+            notes.append(f"{disclosures} of 5 sections could not be confirmed - page will read thin")
+
         row["content_confidence"] = confidence
         row["publish_status"] = status
         row["content_score"] = str(score)
@@ -421,6 +458,18 @@ def main():
     print("Offer display mode:")
     for mode in ("verified_code", "best_deal", "no_code_confirmed"):
         print(f"  {mode:<19} {display_tally[mode]:>4}")
+
+    if args.compose and compose_tally:
+        print()
+        print("Section copy:")
+        for origin in ("original", "composed", "disclosure"):
+            if compose_tally[origin]:
+                label = {
+                    "original": "already merchant-specific",
+                    "composed": "rebuilt from this merchant's facts",
+                    "disclosure": "stated as not confirmed",
+                }[origin]
+                print(f"  {compose_tally[origin]:>4}  {label}")
 
     flagged_total = sum(len(v) for v in boilerplate.values())
     if flagged_total:
