@@ -42,6 +42,30 @@ function esc_html__($v, $d = null) { return htmlspecialchars((string) $v, ENT_QU
 function __($v, $d = null) { return $v; }
 function is_email($v) { return (bool) filter_var($v, FILTER_VALIDATE_EMAIL); }
 
+// Stubs for the modules wp-merchant-fields.php pulls in (render, seo, import).
+function add_shortcode() {}
+function do_shortcode($s) { return $s; }
+function shortcode_atts($pairs, $atts, $sc = '') { return array_merge($pairs, (array) $atts); }
+function wpautop($s) { return "<p>$s</p>"; }
+function update_post_meta($id, $k, $v) { $GLOBALS['meta'][$id][$k] = $v; return true; }
+function get_post_type($id = null) { return 'merchant'; }
+function is_singular() { return true; }
+function get_permalink($id = null) { return 'https://example.com/preview/'; }
+function date_i18n($fmt) { return date($fmt); }
+function wp_json_encode($v, $f = 0) { return json_encode($v, $f); }
+function esc_html_e($v, $d = null) { echo htmlspecialchars((string) $v, ENT_QUOTES); }
+function _e($v, $d = null) { echo $v; }
+function add_management_page() {}
+function wp_nonce_field() {}
+function submit_button() {}
+function wp_verify_nonce() { return false; }
+function get_posts() { return array(); }
+function wp_insert_post() { return 1; }
+function wp_update_post() { return 1; }
+function wp_set_object_terms() {}
+function sanitize_title($v) { return strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $v), '-')); }
+class WP_Error { public function get_error_message() { return ''; } }
+
 require __DIR__ . '/wp-merchant-fields.php';
 
 // --- Load the row ---------------------------------------------------------
