@@ -148,16 +148,23 @@ add_action('init', 'vc_register_merchant_meta');
  * ---------------------------------------------------------------------- */
 
 /**
- * True when the merchant is cleared for public display.
+ * Whether this merchant is publicly visible.
  *
- * Anything the enrichment script marked Hold stays off the front end entirely.
+ * This defers entirely to WordPress post status. The enrichment script's
+ * grading is advisory metadata for sorting a review queue -- it does not gate
+ * the front end, because a post you published is a post you decided to publish.
+ *
+ * Retained mainly for preview_page.php, which has no WordPress post status to
+ * consult.
  */
 function vc_merchant_is_publishable($post_id = null) {
     $post_id = $post_id ?: get_the_ID();
-    $status = trim((string) get_post_meta($post_id, 'publish_status', true));
 
-    // Unset status is treated as unreviewed, not as approved.
-    return $status === 'Ready' || $status === 'Needs review';
+    if (function_exists('get_post_status')) {
+        return get_post_status($post_id) === 'publish';
+    }
+
+    return true;
 }
 
 /**

@@ -398,17 +398,10 @@ def main():
 
         confidence, status, low_fields, notes, score = grade_row(row, boilerplate)
 
-        # A page that is mostly "we could not confirm this" is honest but too
-        # thin to earn a ranking. Hold it back for research rather than
-        # publishing a page with nothing to say.
+        # Flag pages that are mostly "we could not confirm this" so they are
+        # easy to spot in review. Advisory only -- the decision is yours.
         disclosures = int(row.pop("_disclosure_count", 0) or 0)
-        if disclosures >= 3 and status == "Ready":
-            status = "Needs review"
-            notes.append(
-                f"{disclosures} of 5 sections could not be confirmed - too thin to publish; "
-                f"research this merchant before going live"
-            )
-        elif disclosures >= 3:
+        if disclosures >= 3:
             notes.append(f"{disclosures} of 5 sections could not be confirmed - page will read thin")
 
         row["content_confidence"] = confidence

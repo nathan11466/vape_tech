@@ -52,10 +52,12 @@ python3 enrich_merchants.py brands_for_code_info_filled.csv \
 Then **Tools → Import Merchants**, upload `merchants-enriched.csv`, and run it
 with **Dry run** ticked first to see what would happen. Untick to import.
 
-Only merchants graded `Ready` are published. Everything else is imported as a
-**draft**, so it is editable in wp-admin but never publicly reachable. The
-import matches on `externalMerchantKey`, so re-running updates existing pages
-rather than duplicating them — run it as often as the data improves.
+Everything imports as a **draft** so you can review before publishing. Tick
+"Publish immediately" to skip that. A merchant you have already published is
+never demoted back to draft by a re-import.
+
+The import matches on `externalMerchantKey`, so re-running updates existing
+pages rather than duplicating them — run it as often as the data improves.
 
 With WP-CLI:
 
@@ -75,8 +77,6 @@ wp merchant import merchants-enriched.csv --limit=25
   `dateModified`
 - **Rank Math** — fed through its own filters rather than competing tags, so
   Rank Math owns the `<head>` and any manual override an editor sets still wins
-- **noindex on held merchants** — a page the gate refuses to render would
-  otherwise be a thin empty URL
 
 Content is rendered live from meta via `[merchant_page]`, so changing the layout
 or the gating rules applies to every merchant at once with no re-import.
@@ -117,9 +117,8 @@ Two rules keep this honest:
 - **Boilerplate is never mined as a fact source.** Extracting "gift cards, sale
   items" out of the generic string and rebuilding a sentence from it would be
   spintax with extra steps, so fields being replaced are excluded as inputs.
-- **A merchant with 3+ unconfirmed sections is flagged as too thin to publish**
-  and cannot reach Ready. Honest disclosures are better than filler, but a page
-  that is mostly disclosure has not earned a ranking.
+- **A merchant with 3+ unconfirmed sections is flagged in `review_notes`** as
+  likely to read thin. Advisory only — the call is yours.
 
 ## The two safeguards
 
@@ -145,19 +144,22 @@ schema:
 An unset mode falls through to `no_code_confirmed`, so a data gap never becomes
 a false claim.
 
-## Grading
+## Grading is advisory
 
-- **Hold** — an unsourced **negative** reputation claim ("flagged low trust",
-  "scam score"). Held merchants render nothing and are set to `noindex`.
+The grade does not gate anything. **WordPress post status is the publish gate** —
+drafts are not public, and a post you published is one you decided to publish.
+The columns below exist to sort your review queue, nothing more.
+
+- **Hold** — carries an unsourced **negative** reputation claim ("flagged low
+  trust", "scam score"). Worth looking at first.
 - **Needs review** — boilerplate present, or specific claims with no source.
 - **Ready** — merchant-specific detail plus a source, no flagged fields.
 
-An unsourced *neutral* claim (a Trustpilot score) is not row-blocking: the field
-is suppressed at render and the page is judged on its own merits. An unset
-`publish_status` counts as unreviewed, never as approved.
-
 `content_score` ranks merchant-specific substance independent of sourcing. The
-review queue is sorted by it — that is the order to do sourcing work in.
+review queue is sorted by it — that is a sensible order to work in.
+
+`review_notes` is shown at the top of each page in wp-admin to logged-in
+editors only, so you can see what was flagged while reading the page itself.
 
 ## Data model notes
 

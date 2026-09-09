@@ -126,19 +126,12 @@ add_filter('rank_math/frontend/description', function ($description) {
 });
 
 /**
- * Keep held merchants out of the index entirely.
+ * Indexing is left to WordPress and Rank Math.
  *
- * A page the publish gate refuses to render has no content, so letting Google
- * crawl it would create a thin/empty URL.
+ * Drafts are not public and are not indexed; a published post is one an editor
+ * chose to publish. To noindex a specific merchant, use the Rank Math meta box
+ * on that post.
  */
-add_filter('rank_math/frontend/robots', function ($robots) {
-    if (is_singular() && vc_merchant_is_merchant_post() && !vc_merchant_is_publishable()) {
-        $robots['index'] = 'noindex';
-        $robots['follow'] = 'nofollow';
-    }
-
-    return $robots;
-});
 
 /* -------------------------------------------------------------------------
  * JSON-LD schema
@@ -153,10 +146,6 @@ add_filter('rank_math/frontend/robots', function ($robots) {
  */
 function vc_merchant_schema_graph($post_id = null) {
     $post_id = $post_id ?: get_the_ID();
-
-    if (!vc_merchant_is_publishable($post_id)) {
-        return array();
-    }
 
     $name = vc_merchant_display_name($post_id);
     $url  = trim((string) get_post_meta($post_id, 'brand_url', true));

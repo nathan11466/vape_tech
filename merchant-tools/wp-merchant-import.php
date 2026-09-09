@@ -9,8 +9,9 @@
  * re-running updates the existing post instead of creating duplicates. Run it
  * as often as you like as the data improves.
  *
- * Post status follows the publish gate -- only rows graded Ready are
- * published; Needs review and Hold land as drafts.
+ * Everything imports as a draft by default, for manual review before
+ * publishing. Tick "Publish immediately" to skip that. A merchant you have
+ * already published is never demoted back to draft by a re-import.
  */
 
 if (!defined('ABSPATH')) {
@@ -40,14 +41,14 @@ function vc_merchant_import_meta_keys() {
         'alternative_brand_names', 'display_brand_name', 'contact_email', 'contact_page_url',
         'contact_method', 'contact_verified_at', 'contact_source_url', 'fact_source_url',
         'fact_last_verified', 'content_confidence', 'publish_status', 'offer_display_mode',
-        'content_score', 'low_confidence_fields', 'review_notes',
+        'content_score', 'low_confidence_fields', 'review_notes', 'section_origins',
     );
 }
 
 /**
  * Import one row. Returns array(action, post_id, message).
  */
-function vc_merchant_import_row(array $row, $dry_run = false) {
+function vc_merchant_import_row(array $row, $dry_run = false, $publish = false) {
     $types = vc_merchant_post_types();
     $post_type = reset($types);
 
@@ -57,11 +58,26 @@ function vc_merchant_import_row(array $row, $dry_run = false) {
     }
 
     $key = trim((string) ($row['externalMerchantKey'] ?? '')) ?: sanitize_title($brand);
-    $status = trim((string) ($row['publish_status'] ?? ''));
 
-    // Only fully graded rows go live. Everything else lands as a draft so it
-    // can be edited in wp-admin without ever being publicly reachable.
-    $post_status = ($status === 'Ready') ? 'publish' : 'draft';
+    // Everything imports as a draft by default, for manual review before
+    // publishing. Pass $publish = true to publish on import instead. The
+    // enrichment grade is advisory metadata and does not decide this.
+    $post_status = $publish ? 'publish' : 'draft';
+
+    // Never demote a merchant you have already published by re-importing.
+    if (!$publish) {
+        $existing_published = get_posts(array(
+            'post_type'   => reset($types),
+            'post_status' => 'publish',
+            'numberposts' => 1,
+            'fields'      => 'ids',
+            'meta_key'    => VC_MERCHANT_KEY_META,
+            'meta_value'  => $key,
+        ));
+        if (!empty($existing_published)) {
+            $post_status = 'publish';
+        }
+    }
 
     // Match an existing post on the merchant key.
     $existing = get_posts(array(
@@ -148,7 +164,7 @@ function vc_merchant_import_row(array $row, $dry_run = false) {
 /**
  * Import a whole CSV file. Returns a tally plus per-row messages.
  */
-function vc_merchant_import_csv($path, $dry_run = false, $limit = 0) {
+function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = false) {
     if (!is_readable($path)) {
         return new WP_Error('vc_unreadable', 'Cannot read the uploaded file.');
     }
@@ -183,7 +199,7 @@ function vc_merchant_import_csv($path, $dry_run = false, $limit = 0) {
         }
         $row = array_combine($header, $line);
 
-        list($action, $post_id, $message) = vc_merchant_import_row($row, $dry_run);
+        list($action, $post_id, $message) = vc_merchant_import_row($row, $dry_run, $publish);
         if (isset($tally[$action])) {
             $tally[$action]++;
         }
@@ -229,7 +245,8 @@ function vc_merchant_import_screen() {
         } else {
             $dry_run = !empty($_POST['dry_run']);
             $limit = isset($_POST['limit']) ? max(0, (int) $_POST['limit']) : 0;
-            $result = vc_merchant_import_csv($_FILES['merchant_csv']['tmp_name'], $dry_run, $limit);
+            $publish = !empty($_POST['publish_now']);
+            $result = vc_merchant_import_csv($_FILES['merchant_csv']['tmp_name'], $dry_run, $limit, $publish);
             if (is_wp_error($result)) {
                 $error = $result->get_error_message();
                 $result = null;
@@ -281,6 +298,13 @@ function vc_merchant_import_screen() {
                     </td>
                 </tr>
                 <tr>
+                    <th scope="row"><label for="publish_now"><?php esc_html_e('Publish immediately', 'vc-merchant'); ?></label></th>
+                    <td>
+                        <input type="checkbox" name="publish_now" id="publish_now" value="1" />
+                        <span class="description"><?php esc_html_e('Leave off to import everything as drafts for manual review. Merchants you have already published stay published either way.', 'vc-merchant'); ?></span>
+                    </td>
+                </tr>
+                <tr>
                     <th scope="row"><label for="limit"><?php esc_html_e('Limit', 'vc-merchant'); ?></label></th>
                     <td>
                         <input type="number" name="limit" id="limit" value="0" min="0" class="small-text" />
@@ -308,7 +332,8 @@ if (defined('WP_CLI') && WP_CLI) {
         $result = vc_merchant_import_csv(
             $path,
             isset($assoc['dry-run']),
-            isset($assoc['limit']) ? (int) $assoc['limit'] : 0
+            isset($assoc['limit']) ? (int) $assoc['limit'] : 0,
+            isset($assoc['publish'])
         );
 
         if (is_wp_error($result)) {

@@ -33,15 +33,18 @@ function vc_merchant_render_page($atts = array()) {
         return '';
     }
 
-    // The publish gate. A held merchant renders nothing at all.
-    if (!vc_merchant_is_publishable($post_id)) {
-        if (current_user_can('edit_posts')) {
-            $status = esc_html((string) get_post_meta($post_id, 'publish_status', true));
-            $notes  = esc_html((string) get_post_meta($post_id, 'review_notes', true));
-            return '<div class="vc-notice"><strong>Not published.</strong> publish_status = '
-                . ($status ?: 'unset') . '<br>' . $notes . '</div>';
+    // The page always renders. WordPress post status is the publish gate --
+    // a draft is not public, and a post you published is one you decided to
+    // publish. Grading is advisory only, surfaced to editors as a notice.
+    $notice = '';
+    if (current_user_can('edit_posts')) {
+        $notes = trim((string) get_post_meta($post_id, 'review_notes', true));
+        if ($notes !== '') {
+            $notice = '<div class="vc-editor-notice" style="background:#fff8e5;border-left:4px solid #dba617;'
+                . 'padding:10px;margin-bottom:15px;font-size:13px;">'
+                . '<strong>' . esc_html__('Review notes (visible to editors only):', 'vc-merchant') . '</strong> '
+                . esc_html($notes) . '</div>';
         }
-        return '';
     }
 
     $m = function ($key) use ($post_id) {
@@ -49,7 +52,7 @@ function vc_merchant_render_page($atts = array()) {
     };
 
     $name = vc_merchant_display_name($post_id);
-    $out  = '<div class="vc-merchant-page">';
+    $out  = '<div class="vc-merchant-page">' . $notice;
 
     // Offer status -- the gated claim.
     $out .= '<div class="vc-offer-status">' . vc_merchant_offer_badge($post_id) . '</div>';

@@ -110,10 +110,10 @@ function block($heading, $value, $extra = '') {
 // --- Page ----------------------------------------------------------------
 echo "<!-- SEO title: " . esc_html("$name Coupon Codes & Promo Codes") . " -->\n";
 
-if (!vc_merchant_is_publishable()) {
-    echo "<!-- publish_status = " . esc_html($row['publish_status']) . ": page is NOT rendered -->\n";
-    echo "<!-- reason: " . esc_html($row['review_notes']) . " -->\n";
-    exit(0);
+// The page always renders -- this is a review tool. Grading is shown as a
+// comment so you can see what the enrichment flagged while reading the page.
+if (trim((string) ($row['review_notes'] ?? '')) !== '') {
+    echo "<!-- review notes: " . esc_html($row['review_notes']) . " -->\n";
 }
 
 echo "<article class=\"merchant-page\">\n\n";
