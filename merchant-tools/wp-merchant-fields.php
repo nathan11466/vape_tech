@@ -37,6 +37,23 @@ foreach (array('wp-merchant-shipping.php', 'wp-merchant-render.php',
 }
 unset($vc_module, $vc_path);
 
+/**
+ * Front-end stylesheet. Scoped to .vc-* classes so it does not fight the theme.
+ */
+add_action('wp_enqueue_scripts', function () {
+    $rel = 'assets/merchant-pages.css';
+    $path = __DIR__ . '/' . $rel;
+    if (!file_exists($path)) {
+        return;
+    }
+    wp_enqueue_style(
+        'vc-merchant-pages',
+        plugins_url($rel, __FILE__),
+        array(),
+        (string) filemtime($path)
+    );
+});
+
 /* -------------------------------------------------------------------------
  * Service location taxonomy
  *

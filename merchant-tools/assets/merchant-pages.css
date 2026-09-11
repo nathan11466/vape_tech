@@ -1,0 +1,395 @@
+/**
+ * Merchant and destination-archive styling.
+ *
+ * Everything is scoped under .vc-merchant-page / .vc-archive-* so it does not
+ * fight the theme. Colours come from custom properties at the top -- override
+ * those in the Customiser to rebrand without touching this file.
+ */
+
+:root {
+  --vc-accent: #1f7a4d;
+  --vc-accent-dark: #17603c;
+  --vc-deal: #1d6fa5;
+  --vc-muted-badge: #6b7280;
+  --vc-text: #1f2328;
+  --vc-text-soft: #5b6470;
+  --vc-border: #e3e6ea;
+  --vc-surface: #ffffff;
+  --vc-surface-alt: #f6f8fa;
+  --vc-warn-bg: #fff8e5;
+  --vc-warn-border: #dba617;
+  --vc-radius: 8px;
+}
+
+.vc-merchant-page,
+.vc-archive-intro,
+.vc-archive-faqs,
+.vc-archive-siblings {
+  color: var(--vc-text);
+  line-height: 1.6;
+}
+
+/* ---------- Offer badge ---------- */
+
+.vc-offer-status {
+  margin: 0 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.vc-badge {
+  display: inline-block;
+  padding: 0.4em 0.9em;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: var(--vc-muted-badge);
+}
+
+.vc-badge--verified { background: var(--vc-accent); }
+.vc-badge--deal     { background: var(--vc-deal); }
+
+/* No confirmed code: deliberately quiet, and not dressed up as a win. */
+.vc-badge--none {
+  background: transparent;
+  color: var(--vc-text-soft);
+  border: 1px solid var(--vc-border);
+  font-weight: 600;
+}
+
+.vc-checked {
+  font-size: 0.85rem;
+  color: var(--vc-text-soft);
+}
+
+/* ---------- Sections ---------- */
+
+.vc-merchant-page .vc-section {
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-merchant-page .vc-section:first-of-type { border-top: 0; }
+
+.vc-merchant-page .vc-section h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+  letter-spacing: -0.01em;
+}
+
+.vc-merchant-page .vc-section p {
+  margin: 0 0 0.5rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-coupon-widget {
+  margin: 1.25rem 0;
+}
+
+/* ---------- Merchant info panel ---------- */
+
+.vc-merchant-info {
+  margin: 2rem 0;
+  padding: 1.25rem 1.4rem;
+  background: var(--vc-surface-alt);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+}
+
+.vc-merchant-info h2 {
+  font-size: 1rem;
+  margin: 0 0 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vc-text-soft);
+}
+
+.vc-merchant-info dl {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 0.5rem 1.25rem;
+  margin: 0;
+}
+
+.vc-merchant-info dt {
+  font-weight: 600;
+  color: var(--vc-text-soft);
+  font-size: 0.9rem;
+}
+
+.vc-merchant-info dd {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.vc-disclaimer,
+.vc-aliases,
+.vc-restricted {
+  margin: 0.9rem 0 0;
+  font-size: 0.85rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-restricted {
+  padding: 0.6rem 0.8rem;
+  background: var(--vc-warn-bg);
+  border-left: 3px solid var(--vc-warn-border);
+  border-radius: 3px;
+  color: var(--vc-text);
+}
+
+/* ---------- FAQs ---------- */
+
+.vc-faqs {
+  margin: 2rem 0;
+}
+
+.vc-faqs h2,
+.vc-archive-faqs h2 {
+  font-size: 1.2rem;
+  margin: 0 0 1rem;
+}
+
+.vc-faq {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--vc-border);
+}
+
+.vc-faq:last-child { border-bottom: 0; }
+
+.vc-faq h3,
+.vc-archive-faqs h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  margin: 0 0 0.35rem;
+}
+
+.vc-faq p,
+.vc-archive-faqs p {
+  margin: 0;
+  color: var(--vc-text-soft);
+}
+
+/* ---------- Trust + editorial ---------- */
+
+.vc-trust-section { margin: 2rem 0; }
+.vc-trust-section h2 { font-size: 1.1rem; margin: 0 0 0.6rem; }
+
+.vc-trust__source {
+  font-size: 0.85rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-editorial {
+  margin: 2rem 0 0;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  font-size: 0.88rem;
+  color: var(--vc-text-soft);
+  background: var(--vc-surface);
+}
+
+.vc-editorial p { margin: 0 0 0.35rem; }
+.vc-editorial p:last-child { margin-bottom: 0; }
+
+/* ---------- Related links ---------- */
+
+.vc-related { margin: 1.75rem 0 0; }
+
+.vc-related ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.vc-related a {
+  display: inline-block;
+  padding: 0.45em 0.9em;
+  border: 1px solid var(--vc-border);
+  border-radius: 999px;
+  font-size: 0.88rem;
+  text-decoration: none;
+  color: var(--vc-deal);
+}
+
+.vc-related a:hover {
+  border-color: var(--vc-deal);
+  background: var(--vc-surface-alt);
+}
+
+/* ---------- Editor-only notice ---------- */
+
+.vc-editor-notice {
+  background: var(--vc-warn-bg);
+  border-left: 4px solid var(--vc-warn-border);
+  padding: 0.7rem 0.9rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  border-radius: 3px;
+}
+
+/* ---------- Destination archive ---------- */
+
+.vc-archive-intro {
+  margin: 0 0 1.75rem;
+  font-size: 1.02rem;
+}
+
+.vc-archive-intro p { margin: 0 0 0.75rem; }
+
+.vc-archive-legal {
+  margin-top: 1rem;
+  padding: 0.9rem 1.1rem;
+  background: var(--vc-surface-alt);
+  border-left: 3px solid var(--vc-deal);
+  border-radius: 3px;
+  font-size: 0.93rem;
+}
+
+.vc-archive-legal p { margin: 0 0 0.5rem; }
+.vc-archive-legal p:last-child { margin-bottom: 0; }
+
+/* Merchant cards in the archive listing */
+
+.vc-archive-list {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.vc-archive-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  background: var(--vc-surface);
+  transition: border-color 0.15s ease;
+}
+
+.vc-archive-card:hover { border-color: var(--vc-deal); }
+
+.vc-archive-card__body { flex: 1; min-width: 0; }
+
+.vc-archive-card__name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 0.3rem;
+}
+
+.vc-archive-card__name a {
+  color: var(--vc-text);
+  text-decoration: none;
+}
+
+.vc-archive-card__name a:hover { color: var(--vc-deal); }
+
+.vc-archive-card__offer {
+  margin: 0 0 0.35rem;
+  color: var(--vc-text-soft);
+  font-size: 0.94rem;
+}
+
+.vc-archive-card__meta {
+  font-size: 0.84rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-archive-card__cta {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.vc-archive-card__cta a {
+  display: inline-block;
+  padding: 0.55em 1.1em;
+  background: var(--vc-accent);
+  color: #fff;
+  border-radius: var(--vc-radius);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.vc-archive-card__cta a:hover { background: var(--vc-accent-dark); }
+
+/* Sibling destination links */
+
+.vc-archive-siblings {
+  margin: 2.5rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-archive-siblings h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.9rem;
+}
+
+.vc-archive-siblings ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.5rem 1.25rem;
+}
+
+.vc-archive-siblings a {
+  color: var(--vc-deal);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.vc-archive-siblings a:hover { text-decoration: underline; }
+
+.vc-count {
+  color: var(--vc-text-soft);
+  font-size: 0.85rem;
+}
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 640px) {
+  .vc-merchant-info dl {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+
+  .vc-merchant-info dd { margin-bottom: 0.6rem; }
+
+  .vc-archive-card {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .vc-archive-card__cta { align-self: stretch; }
+  .vc-archive-card__cta a { display: block; text-align: center; }
+}
+
+/* ---------- Dark mode, when the theme opts in ---------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --vc-text: #e8eaed;
+    --vc-text-soft: #a8b0ba;
+    --vc-border: #343a42;
+    --vc-surface: #1b1f24;
+    --vc-surface-alt: #22272e;
+    --vc-warn-bg: #2e2718;
+  }
+}

@@ -471,3 +471,89 @@ add_action('wp_head', function () {
                          JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
         . "</script>\n";
 }, 20);
+
+/* -------------------------------------------------------------------------
+ * Listing markup
+ * ---------------------------------------------------------------------- */
+
+/**
+ * One merchant card for an archive listing.
+ *
+ * Exposed so the listing does not depend on whatever markup the theme's loop
+ * happens to produce -- these cards carry the offer and shipping detail that
+ * makes a destination page worth reading.
+ */
+function vc_archive_merchant_card($post_id) {
+    $name  = function_exists('vc_merchant_display_name')
+        ? vc_merchant_display_name($post_id)
+        : get_the_title($post_id);
+    $offer = trim((string) get_post_meta($post_id, 'best_offer_summary', true));
+    $ship  = trim((string) get_post_meta($post_id, 'free_shipping_info', true));
+    $badge = function_exists('vc_merchant_offer_badge') ? vc_merchant_offer_badge($post_id) : '';
+    $url   = get_permalink($post_id);
+
+    $out  = '<li class="vc-archive-card">';
+    $out .= '<div class="vc-archive-card__body">';
+    $out .= '<h3 class="vc-archive-card__name"><a href="' . esc_url($url) . '">'
+          . esc_html($name) . '</a></h3>';
+    if ($offer !== '') {
+        $out .= '<p class="vc-archive-card__offer">' . esc_html($offer) . '</p>';
+    }
+    $meta = array_filter(array($badge, $ship !== '' ? esc_html($ship) : ''));
+    if (!empty($meta)) {
+        $out .= '<div class="vc-archive-card__meta">' . implode(' &middot; ', $meta) . '</div>';
+    }
+    $out .= '</div>';
+    $out .= '<div class="vc-archive-card__cta"><a href="' . esc_url($url) . '">'
+          . esc_html__('See deals', 'vc-merchant') . '</a></div>';
+    $out .= '</li>';
+
+    return $out;
+}
+
+/**
+ * [merchant_list] -- render the current archive's merchants as cards, or a
+ * named destination via [merchant_list ships_to="California"].
+ */
+function vc_merchant_list_shortcode($atts) {
+    $atts = shortcode_atts(array('ships_to' => '', 'limit' => 50), $atts, 'merchant_list');
+
+    $args = array(
+        'post_type'      => vc_merchant_post_types(),
+        'post_status'    => 'publish',
+        'posts_per_page' => (int) $atts['limit'],
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+    );
+
+    if (trim((string) $atts['ships_to']) !== '') {
+        $args['tax_query'] = array(array(
+            'taxonomy' => 'ships_to',
+            'field'    => 'name',
+            'terms'    => trim((string) $atts['ships_to']),
+        ));
+    } elseif (is_tax('ships_to') || is_tax('merchant_category')) {
+        $term = get_queried_object();
+        $args['tax_query'] = array(array(
+            'taxonomy' => $term->taxonomy,
+            'field'    => 'term_id',
+            'terms'    => $term->term_id,
+        ));
+    }
+
+    $query = new WP_Query($args);
+    if (!$query->have_posts()) {
+        return '';
+    }
+
+    $out = '<ul class="vc-archive-list">';
+    foreach ($query->posts as $post) {
+        $out .= vc_archive_merchant_card($post->ID);
+    }
+    $out .= '</ul>';
+
+    wp_reset_postdata();
+
+    return $out;
+}
+add_shortcode('merchant_list', 'vc_merchant_list_shortcode');
