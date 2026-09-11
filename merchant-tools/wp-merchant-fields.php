@@ -28,7 +28,8 @@ function vc_merchant_post_types() {
  * degrades rather than fataling the site.
  */
 foreach (array('wp-merchant-shipping.php', 'wp-merchant-render.php',
-               'wp-merchant-seo.php', 'wp-merchant-import.php') as $vc_module) {
+               'wp-merchant-seo.php', 'wp-merchant-archive.php',
+               'wp-merchant-import.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
     if (file_exists($vc_path)) {
         require_once $vc_path;
