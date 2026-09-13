@@ -150,6 +150,29 @@ function vc_merchant_import_row(array $row, $dry_run = false, $publish = false) 
         }
     }
 
+    // Product categories -> merchant_category taxonomy. brand_category is a
+    // comma-separated list ("Vape Juice/E-Liquid, Box Mods, Nicotine Pouches").
+    $categories = array_filter(array_map('trim',
+        explode(',', (string) ($row['brand_category'] ?? ''))));
+    if (!empty($categories)) {
+        $cat_ids = array();
+        foreach ($categories as $category) {
+            $term = get_term_by('name', $category, 'merchant_category');
+            if (!$term) {
+                $created = wp_insert_term($category, 'merchant_category');
+                if (is_wp_error($created)) {
+                    continue;
+                }
+                $cat_ids[] = (int) $created['term_id'];
+                continue;
+            }
+            $cat_ids[] = (int) $term->term_id;
+        }
+        if (!empty($cat_ids)) {
+            wp_set_object_terms($post_id, $cat_ids, 'merchant_category', false);
+        }
+    }
+
     // Shipping destinations -> ships_to taxonomy, so pages are filterable by
     // where the merchant actually ships.
     if (function_exists('vc_assign_ships_to')) {

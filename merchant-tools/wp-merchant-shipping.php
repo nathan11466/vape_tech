@@ -112,7 +112,11 @@ function vc_seed_ships_to() {
         }
     }
 }
-register_activation_hook(__DIR__ . '/wp-merchant-fields.php', 'vc_seed_ships_to');
+// Seeding is triggered from wp-merchant-fields.php's own activation hook.
+// Registering it here against a hand-built path is unreliable, because
+// register_activation_hook() resolves its argument through plugin_basename()
+// and may not match the plugin actually being activated -- which would leave
+// zero terms and silently break every destination assignment.
 
 /**
  * Assign destination terms to a merchant from a pipe-delimited list.
@@ -161,8 +165,34 @@ function vc_assign_ships_to($post_id, $list) {
         if (!$term) {
             $term = get_term_by('name', $name, 'ships_to');
         }
+
+        // Create it rather than skipping. A missing term used to be swallowed
+        // silently, so a seeding failure meant every import assigned nothing
+        // with no error anywhere.
         if (!$term) {
-            continue;
+            $parent_id = 0;
+            if ($parent_name !== '') {
+                $parent_term = get_term_by('name', $parent_name, 'ships_to');
+                if (!$parent_term) {
+                    $created = wp_insert_term($parent_name, 'ships_to');
+                    if (!is_wp_error($created)) {
+                        $parent_id = (int) $created['term_id'];
+                    }
+                } else {
+                    $parent_id = (int) $parent_term->term_id;
+                }
+            }
+            $created = wp_insert_term($name, 'ships_to', array(
+                'parent' => $parent_id,
+                'slug'   => $slug,
+            ));
+            if (is_wp_error($created)) {
+                continue;
+            }
+            $term = get_term((int) $created['term_id'], 'ships_to');
+            if (!$term || is_wp_error($term)) {
+                continue;
+            }
         }
         $term_ids[] = (int) $term->term_id;
 

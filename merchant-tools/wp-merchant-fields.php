@@ -116,7 +116,53 @@ function vc_seed_service_locations() {
         }
     }
 }
-register_activation_hook(__FILE__, 'vc_seed_service_locations');
+/**
+ * Product-category taxonomy.
+ *
+ * brand_category was carried as plain meta text, which cannot be browsed or
+ * filtered. As a taxonomy it gives category archives and lets merchant pages
+ * link to related retailers.
+ */
+function vc_register_merchant_category_taxonomy() {
+    register_taxonomy('merchant_category', vc_merchant_post_types(), array(
+        'labels' => array(
+            'name'          => __('Product Categories', 'vc-merchant'),
+            'singular_name' => __('Product Category', 'vc-merchant'),
+            'all_items'     => __('All Product Categories', 'vc-merchant'),
+            'edit_item'     => __('Edit Product Category', 'vc-merchant'),
+            'add_new_item'  => __('Add New Product Category', 'vc-merchant'),
+            'menu_name'     => __('Product Categories', 'vc-merchant'),
+        ),
+        'hierarchical'      => true,
+        'public'            => true,
+        'show_admin_column' => true,
+        'show_in_rest'      => true,
+        'query_var'         => true,
+        'rewrite'           => array('slug' => 'vape-category', 'hierarchical' => true),
+    ));
+}
+add_action('init', 'vc_register_merchant_category_taxonomy');
+
+/**
+ * Single activation entry point.
+ *
+ * Every seeder runs from here, against __FILE__ of the main plugin file.
+ * Registering an activation hook from an included file with a hand-built path
+ * is unreliable -- WordPress resolves it through plugin_basename() and may not
+ * match the plugin being activated, which would leave the taxonomies empty.
+ */
+function vc_merchant_activate() {
+    vc_seed_service_locations();
+
+    if (function_exists('vc_seed_ships_to')) {
+        vc_seed_ships_to();
+    }
+
+    // Permalinks for the new taxonomy archives.
+    vc_register_merchant_category_taxonomy();
+    flush_rewrite_rules();
+}
+register_activation_hook(__FILE__, 'vc_merchant_activate');
 
 /* -------------------------------------------------------------------------
  * Merchant meta fields
