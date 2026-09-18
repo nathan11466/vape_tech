@@ -29,6 +29,9 @@ $GLOBALS['assigned'] = array();
 $GLOBALS['current_id'] = 1;
 $GLOBALS['queried'] = null;
 
+$GLOBALS['registered_post_types'] = array();
+function register_post_type($name, $args = array()) { $GLOBALS['registered_post_types'][$name] = $args; }
+function post_type_exists($name) { return isset($GLOBALS['registered_post_types'][$name]); }
 function register_taxonomy($name, $types, $args = array()) {
     $GLOBALS['registered_taxonomies'][$name] = $args;
 }
@@ -145,6 +148,19 @@ foreach (array('ships_to', 'merchant_category') as $tax) {
     $args = $GLOBALS['registered_taxonomies'][$tax] ?? array();
     check("$tax is public (archives reachable)", !empty($args['public']));
     check("$tax has a rewrite slug", !empty($args['rewrite']['slug']));
+}
+
+echo "\nPost type\n";
+$pts = $GLOBALS['registered_post_types'];
+check('a merchant post type is registered', !empty($pts),
+    'nothing registers it - imported posts would be orphaned with no admin menu');
+if (!empty($pts)) {
+    $args = reset($pts);
+    check('post type is public', !empty($args['public']));
+    check('post type has an archive', !empty($args['has_archive']));
+    check('post type supports custom-fields',
+        in_array('custom-fields', $args['supports'] ?? array(), true));
+    check('post type has a rewrite slug', !empty($args['rewrite']['slug']));
 }
 
 echo "\nActivation\n";

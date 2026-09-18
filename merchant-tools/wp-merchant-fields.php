@@ -24,6 +24,50 @@ function vc_merchant_post_types() {
 }
 
 /**
+ * Register a merchant post type, unless you have pointed the plugin at one of
+ * your own.
+ *
+ * One post here is one STORE (Vape Street), not one coupon code. Coupon
+ * plugins commonly have both a `coupon` post type for individual codes and a
+ * `store`/`brand` type for the retailer -- point the filter at the store one,
+ * never the codes one.
+ *
+ * Without this the plugin assumed a 'merchant' type already existed, and an
+ * import would have created posts of a type nothing had registered: no admin
+ * menu, no archive, no way to find them.
+ */
+function vc_register_merchant_post_type() {
+    // If the filter has moved us onto an existing post type, do not add ours.
+    if (!in_array('merchant', vc_merchant_post_types(), true)) {
+        return;
+    }
+    if (post_type_exists('merchant')) {
+        return;
+    }
+
+    register_post_type('merchant', array(
+        'labels' => array(
+            'name'               => __('Vape Shops', 'vc-merchant'),
+            'singular_name'      => __('Vape Shop', 'vc-merchant'),
+            'add_new_item'       => __('Add New Vape Shop', 'vc-merchant'),
+            'edit_item'          => __('Edit Vape Shop', 'vc-merchant'),
+            'all_items'          => __('All Vape Shops', 'vc-merchant'),
+            'search_items'       => __('Search Vape Shops', 'vc-merchant'),
+            'menu_name'          => __('Vape Shops', 'vc-merchant'),
+        ),
+        'public'       => true,
+        'has_archive'  => true,
+        'show_in_rest' => true,
+        'menu_icon'    => 'dashicons-store',
+        'supports'     => array('title', 'editor', 'excerpt', 'thumbnail', 'custom-fields'),
+        'rewrite'      => array(
+            'slug' => apply_filters('vc_merchant_post_type_slug', 'coupons'),
+        ),
+    ));
+}
+add_action('init', 'vc_register_merchant_post_type', 5);
+
+/**
  * Load the rest of the plugin. Each file is optional, so a partial upload
  * degrades rather than fataling the site.
  */
@@ -158,7 +202,8 @@ function vc_merchant_activate() {
         vc_seed_ships_to();
     }
 
-    // Permalinks for the new taxonomy archives.
+    // Permalinks for the new post type and taxonomy archives.
+    vc_register_merchant_post_type();
     vc_register_merchant_category_taxonomy();
     flush_rewrite_rules();
 }
