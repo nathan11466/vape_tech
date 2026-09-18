@@ -24,6 +24,22 @@ function vc_merchant_post_types() {
 }
 
 /**
+ * The product niche, used in public-facing archive titles.
+ *
+ * Kept as one switch because it appears in the titles that are the whole point
+ * of the destination pages -- "Online Vape Shops That Ship to California". Add
+ * a second niche (hemp, accessories) and that wording needs to change
+ * everywhere at once, or the pages misdescribe what they list.
+ *
+ * Set to an empty string for a niche-free "Online Shops That Ship to X".
+ *
+ *   add_filter('vc_merchant_niche_label', fn() => 'Vape & Hemp');
+ */
+function vc_merchant_niche_label() {
+    return apply_filters('vc_merchant_niche_label', 'Vape');
+}
+
+/**
  * Register a merchant post type, unless you have pointed the plugin at one of
  * your own.
  *
@@ -47,13 +63,13 @@ function vc_register_merchant_post_type() {
 
     register_post_type('merchant', array(
         'labels' => array(
-            'name'               => __('Vape Shops', 'vc-merchant'),
-            'singular_name'      => __('Vape Shop', 'vc-merchant'),
-            'add_new_item'       => __('Add New Vape Shop', 'vc-merchant'),
-            'edit_item'          => __('Edit Vape Shop', 'vc-merchant'),
-            'all_items'          => __('All Vape Shops', 'vc-merchant'),
-            'search_items'       => __('Search Vape Shops', 'vc-merchant'),
-            'menu_name'          => __('Vape Shops', 'vc-merchant'),
+            'name'               => __('Stores', 'vc-merchant'),
+            'singular_name'      => __('Store', 'vc-merchant'),
+            'add_new_item'       => __('Add New Store', 'vc-merchant'),
+            'edit_item'          => __('Edit Store', 'vc-merchant'),
+            'all_items'          => __('All Stores', 'vc-merchant'),
+            'search_items'       => __('Search Stores', 'vc-merchant'),
+            'menu_name'          => __('Stores', 'vc-merchant'),
         ),
         'public'       => true,
         'has_archive'  => true,

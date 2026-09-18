@@ -113,9 +113,19 @@ add_action('init', function () {
  * once here rather than editing 50 terms.
  */
 function vc_archive_title_template($term) {
-    $template = ($term && $term->taxonomy === 'ships_to')
-        ? __('Online Vape Shops That Ship to %s', 'vc-merchant')
-        : __('%s Vape Deals & Coupons', 'vc-merchant');
+    $niche = function_exists('vc_merchant_niche_label') ? trim(vc_merchant_niche_label()) : 'Vape';
+
+    if ($term && $term->taxonomy === 'ships_to') {
+        // "Online Vape Shops That Ship to %s", or "Online Shops That Ship to
+        // %s" when no niche is set.
+        $template = $niche !== ''
+            ? sprintf(__('Online %s Shops That Ship to %%s', 'vc-merchant'), $niche)
+            : __('Online Shops That Ship to %s', 'vc-merchant');
+    } else {
+        $template = $niche !== ''
+            ? sprintf(__('%%s %s Deals & Coupons', 'vc-merchant'), $niche)
+            : __('%s Deals & Coupons', 'vc-merchant');
+    }
 
     return apply_filters('vc_archive_title_template', $template, $term);
 }
