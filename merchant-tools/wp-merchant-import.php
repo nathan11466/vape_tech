@@ -49,7 +49,7 @@ function vc_merchant_import_meta_keys() {
 /**
  * Import one row. Returns array(action, post_id, message).
  */
-function vc_merchant_import_row(array $row, $dry_run = false, $publish = false) {
+function vc_merchant_import_row(array $row, $dry_run = false, $publish = false, $content_mode = 'shortcode') {
     $types = vc_merchant_post_types();
     $post_type = reset($types);
 
@@ -99,12 +99,17 @@ function vc_merchant_import_row(array $row, $dry_run = false, $publish = false) 
         );
     }
 
+    // Page body. 'shortcode' puts [merchant_page] in each post, which is what
+    // you want when the theme renders post content normally. 'empty' leaves the
+    // body blank for a theme or page-builder template that places the section
+    // shortcodes itself -- otherwise the template and the post content would
+    // both render, and the whole page would appear twice.
     $postarr = array(
         'post_type'    => $post_type,
         'post_title'   => $brand,
         'post_name'    => sanitize_title($brand),
         'post_status'  => $post_status,
-        'post_content' => '[merchant_page]',
+        'post_content' => ($content_mode === 'empty') ? '' : '[merchant_page]',
     );
 
     if ($post_id) {
@@ -194,7 +199,7 @@ function vc_merchant_import_row(array $row, $dry_run = false, $publish = false) 
 /**
  * Import a whole CSV file. Returns a tally plus per-row messages.
  */
-function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = false) {
+function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = false, $content_mode = 'shortcode') {
     if (!is_readable($path)) {
         return new WP_Error('vc_unreadable', 'Cannot read the uploaded file.');
     }
@@ -229,7 +234,7 @@ function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = 
         }
         $row = array_combine($header, $line);
 
-        list($action, $post_id, $message) = vc_merchant_import_row($row, $dry_run, $publish);
+        list($action, $post_id, $message) = vc_merchant_import_row($row, $dry_run, $publish, $content_mode);
         if (isset($tally[$action])) {
             $tally[$action]++;
         }
@@ -276,7 +281,9 @@ function vc_merchant_import_screen() {
             $dry_run = !empty($_POST['dry_run']);
             $limit = isset($_POST['limit']) ? max(0, (int) $_POST['limit']) : 0;
             $publish = !empty($_POST['publish_now']);
-            $result = vc_merchant_import_csv($_FILES['merchant_csv']['tmp_name'], $dry_run, $limit, $publish);
+            $content_mode = (isset($_POST['content_mode']) && $_POST['content_mode'] === 'empty')
+                ? 'empty' : 'shortcode';
+            $result = vc_merchant_import_csv($_FILES['merchant_csv']['tmp_name'], $dry_run, $limit, $publish, $content_mode);
             if (is_wp_error($result)) {
                 $error = $result->get_error_message();
                 $result = null;
@@ -328,6 +335,16 @@ function vc_merchant_import_screen() {
                     </td>
                 </tr>
                 <tr>
+                    <th scope="row"><label for="content_mode"><?php esc_html_e('Page content', 'vc-merchant'); ?></label></th>
+                    <td>
+                        <select name="content_mode" id="content_mode">
+                            <option value="shortcode"><?php esc_html_e('[merchant_page] shortcode (default)', 'vc-merchant'); ?></option>
+                            <option value="empty"><?php esc_html_e('Leave empty - my theme template renders the sections', 'vc-merchant'); ?></option>
+                        </select>
+                        <p class="description"><?php esc_html_e('Choose "leave empty" only if you have built a theme or page-builder template that places [merchant_offer], [merchant_about] and so on itself. Leaving the shortcode in as well would render the page twice.', 'vc-merchant'); ?></p>
+                    </td>
+                </tr>
+                <tr>
                     <th scope="row"><label for="publish_now"><?php esc_html_e('Publish immediately', 'vc-merchant'); ?></label></th>
                     <td>
                         <input type="checkbox" name="publish_now" id="publish_now" value="1" />
@@ -356,14 +373,15 @@ if (defined('WP_CLI') && WP_CLI) {
     WP_CLI::add_command('merchant import', function ($args, $assoc) {
         $path = $args[0] ?? '';
         if ($path === '') {
-            WP_CLI::error('Usage: wp merchant import <file.csv> [--dry-run] [--limit=<n>]');
+            WP_CLI::error('Usage: wp merchant import <file.csv> [--dry-run] [--limit=<n>] [--publish] [--content=shortcode|empty]');
         }
 
         $result = vc_merchant_import_csv(
             $path,
             isset($assoc['dry-run']),
             isset($assoc['limit']) ? (int) $assoc['limit'] : 0,
-            isset($assoc['publish'])
+            isset($assoc['publish']),
+            (isset($assoc['content']) && $assoc['content'] === 'empty') ? 'empty' : 'shortcode'
         );
 
         if (is_wp_error($result)) {
