@@ -26,7 +26,7 @@ function vc_merchant_section($heading, $value) {
 }
 
 function vc_merchant_render_page($atts = array()) {
-    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_page');
+    $atts = shortcode_atts(array('id' => 0, 'related' => 'yes'), $atts, 'merchant_page');
     $post_id = (int) $atts['id'] ?: get_the_ID();
 
     if (!$post_id) {
@@ -137,6 +137,12 @@ function vc_merchant_render_page($atts = array()) {
     }
     if ($items !== '') {
         $out .= '<nav class="vc-related"><ul>' . $items . '</ul></nav>';
+    }
+
+    // Similar stores. Suppressed with [merchant_page related="no"] if you would
+    // rather place [merchant_related] yourself.
+    if (($atts['related'] ?? 'yes') !== 'no' && shortcode_exists('merchant_related')) {
+        $out .= do_shortcode('[merchant_related id="' . $post_id . '" limit="8"]');
     }
 
     $out .= '</div>';

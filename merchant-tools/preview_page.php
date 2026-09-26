@@ -45,6 +45,7 @@ function is_email($v) { return (bool) filter_var($v, FILTER_VALIDATE_EMAIL); }
 // Stubs for the modules wp-merchant-fields.php pulls in (render, seo, import).
 function add_shortcode() {}
 function do_shortcode($s) { return $s; }
+function shortcode_exists($t) { return false; }
 function shortcode_atts($pairs, $atts, $sc = '') { return array_merge($pairs, (array) $atts); }
 function wpautop($s) { return "<p>$s</p>"; }
 function update_post_meta($id, $k, $v) { $GLOBALS['meta'][$id][$k] = $v; return true; }

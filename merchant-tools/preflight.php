@@ -110,6 +110,9 @@ function wp_update_post() { return 1; }
 function plugins_url($p, $f = '') { return $p; }
 function wp_enqueue_style() {}
 function do_shortcode($s) { return ''; }
+function shortcode_exists($t) { return isset($GLOBALS['registered_shortcodes'][$t]); }
+function wp_get_object_terms($id, $tax, $args = array()) { return array(); }
+class WP_Query { public $posts = array(); public function __construct($a = array()) {} }
 function shortcode_atts($pairs, $atts, $sc = '') { return array_merge($pairs, (array) $atts); }
 class WP_Error { public function get_error_message() { return ''; } }
 
@@ -213,14 +216,17 @@ foreach ($required as $fn) {
 }
 
 echo "\nShortcodes\n";
-foreach (array('merchant_page', 'merchant_list') as $sc) {
+foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_offer',
+               'merchant_about', 'merchant_policies', 'merchant_faqs', 'merchant_info',
+               'merchant_trust', 'merchant_editorial', 'merchant_field') as $sc) {
     check("[$sc] is registered", isset($GLOBALS['registered_shortcodes'][$sc]));
 }
 
 echo "\nShipped files\n";
 $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
-    'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-import.php',
+    'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
+    'wp-merchant-import.php',
     'assets/merchant-pages.css',
 );
 foreach ($files as $f) {

@@ -393,3 +393,48 @@
     --vc-warn-bg: #2e2718;
   }
 }
+
+/* ---------- Related stores ---------- */
+
+.vc-related-stores {
+  margin: 2.5rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-related-stores h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.9rem;
+}
+
+.vc-related-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem 1.25rem;
+}
+
+.vc-related-links a {
+  color: var(--vc-deal);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.vc-related-links a:hover { text-decoration: underline; }
+
+/* In a narrow column (sidebar), collapse to a single stack. */
+.vc-sidebar .vc-related-links,
+.widget .vc-related-links {
+  grid-template-columns: 1fr;
+}
+
+.vc-sidebar .vc-merchant-info dl,
+.widget .vc-merchant-info dl {
+  grid-template-columns: 1fr;
+  gap: 0.15rem;
+}
+
+.vc-sidebar .vc-merchant-info dd,
+.widget .vc-merchant-info dd { margin-bottom: 0.6rem; }

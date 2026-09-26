@@ -38,7 +38,35 @@ function apply_filters($tag, $value) { return $value; }
 function add_action() {}
 function add_filter() {}
 function add_shortcode() {}
-function do_shortcode($s) { return ''; }
+function shortcode_exists($t) { return $t === 'merchant_related'; }
+function wp_get_object_terms($id, $tax, $args = array()) {
+    // Derive categories from the row so related-by-category has something real.
+    if ($tax !== 'merchant_category') { return array(); }
+    $raw = (string) get_post_meta($id, 'brand_category', true);
+    $out = array();
+    foreach (array_filter(array_map('trim', explode(',', $raw))) as $name) {
+        $out[] = crc32($name);
+    }
+    return $out;
+}
+class WP_Query {
+    public $posts = array();
+    public function __construct($args = array()) {
+        // Every other loaded merchant, minus exclusions.
+        $exclude = $args['post__not_in'] ?? array();
+        $all = array_keys($GLOBALS['titles']);
+        $this->posts = array_values(array_diff($all, $exclude));
+        $limit = (int) ($args['posts_per_page'] ?? 10);
+        if ($limit > 0) { $this->posts = array_slice($this->posts, 0, $limit); }
+    }
+}
+function do_shortcode($s) {
+    if (strpos($s, 'merchant_related') !== false && function_exists('vc_merchant_related_shortcode')) {
+        preg_match('/id="(\\d+)"/', $s, $m);
+        return vc_merchant_related_shortcode(array('id' => $m[1] ?? 0, 'limit' => 8));
+    }
+    return '';
+}
 function shortcode_atts($p, $a, $s = '') { return array_merge($p, (array) $a); }
 function wpautop($s) { return '<p>' . str_replace("\n\n", '</p><p>', $s) . '</p>'; }
 function wp_kses_post($s) { return $s; }
