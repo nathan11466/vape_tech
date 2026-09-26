@@ -218,7 +218,8 @@ foreach ($required as $fn) {
 echo "\nShortcodes\n";
 foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_offer',
                'merchant_about', 'merchant_policies', 'merchant_faqs', 'merchant_info',
-               'merchant_trust', 'merchant_editorial', 'merchant_field') as $sc) {
+               'merchant_trust', 'merchant_editorial', 'merchant_field',
+               'merchant_name') as $sc) {
     check("[$sc] is registered", isset($GLOBALS['registered_shortcodes'][$sc]));
 }
 

@@ -338,6 +338,26 @@ add_shortcode('merchant_editorial', function ($atts) {
 });
 
 /**
+ * [merchant_name] -- the merchant's canonical public name.
+ *
+ * Its own shortcode because the name is the post title rather than meta, so
+ * looking it up by field key would not find it.
+ */
+add_shortcode('merchant_name', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_name');
+    $post_id = vc_section_post_id($atts);
+
+    return $post_id ? esc_html(vc_merchant_display_name($post_id)) : '';
+});
+
+/**
+ * Field keys that are not post meta, resolved specially.
+ */
+function vc_section_virtual_fields() {
+    return array('brand_name', 'display_brand_name', 'name', 'title');
+}
+
+/**
  * [merchant_field key="free_shipping_info"] -- any single field, raw.
  *
  * For dropping one value somewhere specific: a shipping threshold in a
@@ -353,12 +373,32 @@ add_shortcode('merchant_field', function ($atts) {
         return '';
     }
 
+    // The name lives in the post title, not meta, so resolve it directly --
+    // key="brand_name" is the obvious thing to try and used to silently
+    // produce nothing.
+    if (in_array($key, vc_section_virtual_fields(), true)) {
+        $value = vc_merchant_display_name($post_id);
+
+        return $value === ''
+            ? ''
+            : esc_html($atts['before']) . esc_html($value) . esc_html($atts['after']);
+    }
+
     // Only fields the importer manages, so this cannot be used to read
     // arbitrary post meta.
     $allowed = function_exists('vc_merchant_import_meta_keys')
         ? vc_merchant_import_meta_keys()
         : array();
+
     if (!empty($allowed) && !in_array($key, $allowed, true)) {
+        // An unrecognised key used to render as nothing at all, which looks
+        // identical to an empty field. Tell editors which it is.
+        if (current_user_can('edit_posts')) {
+            return '<span class="vc-field-error" style="color:#b32d2e;">'
+                . esc_html(sprintf(__('[merchant_field] unknown key "%s"', 'vc-merchant'), $key))
+                . '</span>';
+        }
+
         return '';
     }
 
