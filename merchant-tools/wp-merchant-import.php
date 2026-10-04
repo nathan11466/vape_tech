@@ -43,6 +43,8 @@ function vc_merchant_import_meta_keys() {
         'fact_last_verified', 'content_confidence', 'publish_status', 'offer_display_mode',
         'content_score', 'low_confidence_fields', 'review_notes', 'section_origins',
         'ships_to_terms', 'restricted_states', 'shipping_confidence',
+        'social_links', 'useful_links', 'shipping_policy_url', 'returns_policy_url',
+        'age_policy_url', 'do_they_id_on_delivery',
     );
 }
 

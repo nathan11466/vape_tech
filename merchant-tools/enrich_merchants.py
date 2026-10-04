@@ -36,6 +36,15 @@ import derive_shipping
 # --- New columns appended to the dataset -----------------------------------
 
 NEW_COLUMNS = [
+    # Merchant links. Named columns for the policy pages worth having
+    # consistently; two flexible pipe-delimited fields for everything else, so
+    # the sheet does not grow a column per social network.
+    "social_links",          # URLs only, pipe-separated; platform detected from the domain
+    "useful_links",          # "Label :: URL | Label :: URL"
+    "shipping_policy_url",
+    "returns_policy_url",
+    "age_policy_url",
+    "do_they_id_on_delivery",
     "service_locations",
     "primary_service_location",
     "ships_to_countries",

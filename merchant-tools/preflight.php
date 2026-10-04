@@ -219,7 +219,7 @@ echo "\nShortcodes\n";
 foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_offer',
                'merchant_about', 'merchant_policies', 'merchant_faqs', 'merchant_info',
                'merchant_trust', 'merchant_editorial', 'merchant_field',
-               'merchant_name', 'merchant_hero', 'merchant_quickfacts') as $sc) {
+               'merchant_name', 'merchant_hero', 'merchant_quickfacts', 'merchant_links') as $sc) {
     check("[$sc] is registered", isset($GLOBALS['registered_shortcodes'][$sc]));
 }
 
@@ -238,7 +238,8 @@ echo "\nImporter coverage\n";
 if (function_exists('vc_merchant_import_meta_keys')) {
     $keys = vc_merchant_import_meta_keys();
     foreach (array('ships_to_terms', 'restricted_states', 'brand_category',
-                   'offer_display_mode', 'section_origins') as $k) {
+                   'offer_display_mode', 'section_origins', 'social_links',
+                   'useful_links', 'do_they_id_on_delivery', 'shipping_policy_url') as $k) {
         check("importer carries '$k'", in_array($k, $keys, true));
     }
 }

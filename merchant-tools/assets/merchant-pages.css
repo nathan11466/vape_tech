@@ -492,3 +492,77 @@
     --vc-shadow: 0 1px 3px rgba(0, 0, 0, .35);
   }
 }
+
+/* ---------- Merchant links ---------- */
+
+.vc-links {
+  margin: 1.75rem 0;
+  padding: 1.35rem 1.5rem;
+  background: var(--vc-surface-alt);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+  max-width: var(--vc-max-width);
+}
+
+.vc-links > h2 {
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vc-text-soft);
+  font-weight: 700;
+}
+
+.vc-links__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem 2rem;
+}
+
+.vc-links__group h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vc-text-soft);
+  font-weight: 650;
+  margin: 0 0 0.5rem;
+}
+
+.vc-links__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.vc-links__list a {
+  color: var(--vc-deal);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.vc-links__list a:hover { text-decoration: underline; }
+
+/* Social reads better as chips than a stack. */
+.vc-links__list--social {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.vc-links__list--social a {
+  display: inline-block;
+  padding: 0.35em 0.85em;
+  border: 1px solid var(--vc-border-strong);
+  border-radius: 999px;
+  background: var(--vc-surface);
+  font-size: 0.85rem;
+}
+
+.vc-links__list--social a:hover {
+  border-color: var(--vc-deal);
+  background: var(--vc-deal-soft);
+  text-decoration: none;
+}

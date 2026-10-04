@@ -519,6 +519,12 @@ function vc_merchant_quick_facts($post_id) {
         }
     }
 
+    $id_delivery = vc_section_meta($post_id, 'do_they_id_on_delivery');
+    if ($id_delivery !== '' && stripos($id_delivery, 'not stated') === false
+        && stripos($id_delivery, 'unknown') === false) {
+        $facts[] = array(__('ID on delivery', 'vc-merchant'), $id_delivery);
+    }
+
     $restricted = vc_section_meta($post_id, 'restricted_states');
     if ($restricted !== '') {
         $list = array_filter(array_map('trim', explode('|', $restricted)));
@@ -546,4 +552,128 @@ add_shortcode('merchant_quickfacts', function ($atts) {
     $post_id = vc_section_post_id($atts);
 
     return $post_id ? vc_merchant_quick_facts($post_id) : '';
+});
+
+/* -------------------------------------------------------------------------
+ * Merchant links: social profiles, policy pages, anything else useful
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Social platforms recognised from a URL's host.
+ */
+function vc_social_platforms() {
+    return array(
+        'instagram.com' => 'Instagram',
+        'facebook.com'  => 'Facebook',
+        'fb.com'        => 'Facebook',
+        'x.com'         => 'X',
+        'twitter.com'   => 'X',
+        'youtube.com'   => 'YouTube',
+        'youtu.be'      => 'YouTube',
+        'tiktok.com'    => 'TikTok',
+        'reddit.com'    => 'Reddit',
+        'pinterest.com' => 'Pinterest',
+        'linkedin.com'  => 'LinkedIn',
+        'discord.gg'    => 'Discord',
+        'discord.com'   => 'Discord',
+        't.me'          => 'Telegram',
+        'threads.net'   => 'Threads',
+    );
+}
+
+/**
+ * Label a social URL by its host, falling back to the bare domain so an
+ * unrecognised network still renders something meaningful.
+ */
+function vc_social_label($url) {
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    if ($host === '') {
+        return '';
+    }
+    $host = preg_replace('/^www\./', '', $host);
+
+    foreach (vc_social_platforms() as $domain => $label) {
+        if ($host === $domain || substr($host, -strlen('.' . $domain)) === '.' . $domain) {
+            return $label;
+        }
+    }
+
+    return $host;
+}
+
+/**
+ * [merchant_links] -- social profiles, policy pages and any extra links.
+ *
+ * Policy links are named columns because they are predictable; everything else
+ * comes from useful_links as "Label :: URL" pairs, so the sheet does not need
+ * a column per link.
+ */
+function vc_merchant_links($post_id) {
+    $out = '';
+
+    // --- Policy and support pages ---
+    $pages = array(
+        __('Shipping policy', 'vc-merchant') => vc_section_meta($post_id, 'shipping_policy_url'),
+        __('Returns policy', 'vc-merchant')  => vc_section_meta($post_id, 'returns_policy_url'),
+        __('Age policy', 'vc-merchant')      => vc_section_meta($post_id, 'age_policy_url'),
+        __('Contact', 'vc-merchant')         => vc_section_meta($post_id, 'contact_page_url'),
+    );
+
+    // --- Anything else, as "Label :: URL" pairs ---
+    foreach (array_filter(array_map('trim', explode('|', vc_section_meta($post_id, 'useful_links')))) as $pair) {
+        if (strpos($pair, '::') === false) {
+            // Bare URL with no label: use its path as the label.
+            $label = trim((string) parse_url($pair, PHP_URL_PATH), '/');
+            $pages[$label !== '' ? ucfirst(str_replace(array('-', '_'), ' ', $label)) : $pair] = $pair;
+            continue;
+        }
+        list($label, $url) = array_map('trim', explode('::', $pair, 2));
+        if ($label !== '' && $url !== '') {
+            $pages[$label] = $url;
+        }
+    }
+
+    $items = '';
+    foreach ($pages as $label => $url) {
+        if (trim((string) $url) === '') {
+            continue;
+        }
+        $items .= '<li><a href="' . esc_url($url) . '" rel="nofollow noopener" target="_blank">'
+            . esc_html($label) . '</a></li>';
+    }
+
+    if ($items !== '') {
+        $out .= '<div class="vc-links__group"><h3>' . esc_html__('Store pages', 'vc-merchant')
+            . '</h3><ul class="vc-links__list">' . $items . '</ul></div>';
+    }
+
+    // --- Social profiles ---
+    $social = '';
+    foreach (array_filter(array_map('trim', explode('|', vc_section_meta($post_id, 'social_links')))) as $url) {
+        $label = vc_social_label($url);
+        if ($label === '') {
+            continue;
+        }
+        $social .= '<li><a href="' . esc_url($url) . '" rel="nofollow noopener" target="_blank">'
+            . esc_html($label) . '</a></li>';
+    }
+
+    if ($social !== '') {
+        $out .= '<div class="vc-links__group"><h3>' . esc_html__('Social', 'vc-merchant')
+            . '</h3><ul class="vc-links__list vc-links__list--social">' . $social . '</ul></div>';
+    }
+
+    if ($out === '') {
+        return '';
+    }
+
+    return '<section class="vc-links"><h2>'
+        . esc_html(sprintf(__('%s links', 'vc-merchant'), vc_merchant_display_name($post_id)))
+        . '</h2><div class="vc-links__groups">' . $out . '</div></section>';
+}
+add_shortcode('merchant_links', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_links');
+    $post_id = vc_section_post_id($atts);
+
+    return $post_id ? vc_merchant_links($post_id) : '';
 });

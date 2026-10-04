@@ -148,6 +148,11 @@ function vc_merchant_render_page($atts = array()) {
         $out .= '<nav class="vc-related"><ul>' . $items . '</ul></nav>';
     }
 
+    // Store pages and social profiles.
+    if (function_exists('vc_merchant_links')) {
+        $out .= vc_merchant_links($post_id);
+    }
+
     // Similar stores. Suppressed with [merchant_page related="no"] if you would
     // rather place [merchant_related] yourself.
     if (($atts['related'] ?? 'yes') !== 'no' && shortcode_exists('merchant_related')) {
