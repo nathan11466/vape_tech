@@ -159,7 +159,7 @@ function page_shell($title, $css, $body) {
         . "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
         . "<title>" . esc_html($title) . "</title>\n<style>\n"
         . "body{margin:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}\n"
-        . ".wrap{max-width:780px;margin:0 auto;padding:2.5rem 1.25rem 4rem;}\n"
+        . ".wrap{max-width:1100px;margin:0 auto;padding:2.5rem 1.25rem 4rem;}\n"
         . "h1{font-size:1.9rem;line-height:1.25;margin:0 0 1.25rem;letter-spacing:-0.02em;}\n"
         . ".preview-note{background:#eef4ff;border-left:4px solid #1d6fa5;padding:.7rem .9rem;"
         . "margin:0 0 1.75rem;font-size:.85rem;color:#31465c;border-radius:3px;}\n"

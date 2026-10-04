@@ -77,7 +77,7 @@ get_header();
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: 2.5rem;
-    max-width: 1180px;
+    max-width: var(--vc-max-width, 1100px);
     margin: 0 auto;
     padding: 2rem 1.25rem 4rem;
 }
