@@ -54,10 +54,19 @@ function vc_merchant_render_page($atts = array()) {
     $name = vc_merchant_display_name($post_id);
     $out  = '<div class="vc-merchant-page">' . $notice;
 
-    // Offer status -- the gated claim.
-    $out .= '<div class="vc-offer-status">' . vc_merchant_offer_badge($post_id) . '</div>';
+    // Hero: logo, badge, headline deal, CTA. Gives the page a focal point
+    // instead of opening on a wall of text sections.
+    if (function_exists('vc_merchant_hero')) {
+        $out .= vc_merchant_hero($post_id);
+    } else {
+        $out .= '<div class="vc-offer-status">' . vc_merchant_offer_badge($post_id) . '</div>';
+        $out .= vc_merchant_section(__('Best current deal', 'vc-merchant'), $m('best_offer_summary'));
+    }
 
-    $out .= vc_merchant_section(__('Best current deal', 'vc-merchant'), $m('best_offer_summary'));
+    // The facts a shopper scans for before reading anything.
+    if (function_exists('vc_merchant_quick_facts')) {
+        $out .= vc_merchant_quick_facts($post_id);
+    }
 
     // The coupon plugin's own widget.
     $shortcode = $m('coupon_plugin_shortcode');

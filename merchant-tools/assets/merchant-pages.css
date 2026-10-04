@@ -1,51 +1,136 @@
 /**
  * Merchant and destination-archive styling.
  *
- * Everything is scoped under .vc-merchant-page / .vc-archive-* so it does not
- * fight the theme. Colours come from custom properties at the top -- override
- * those in the Customiser to rebrand without touching this file.
+ * Scoped under .vc-* so it does not fight the theme. Colours are custom
+ * properties -- override them in the Customiser to rebrand without editing
+ * this file.
  */
 
 :root {
-  --vc-accent: #1f7a4d;
-  --vc-accent-dark: #17603c;
-  --vc-deal: #1d6fa5;
-  --vc-muted-badge: #6b7280;
-  --vc-text: #1f2328;
-  --vc-text-soft: #5b6470;
-  --vc-border: #e3e6ea;
+  --vc-accent: #137a4e;
+  --vc-accent-dark: #0f6340;
+  --vc-accent-soft: #e8f5ee;
+  --vc-deal: #1565a5;
+  --vc-deal-soft: #e8f1f8;
+  --vc-muted-badge: #717a85;
+  --vc-text: #16191d;
+  --vc-text-soft: #59616b;
+  --vc-border: #e4e7eb;
+  --vc-border-strong: #d2d7dd;
   --vc-surface: #ffffff;
-  --vc-surface-alt: #f6f8fa;
-  --vc-warn-bg: #fff8e5;
-  --vc-warn-border: #dba617;
-  --vc-radius: 8px;
+  --vc-surface-alt: #f7f9fa;
+  --vc-warn-bg: #fff6e3;
+  --vc-warn-border: #d99413;
+  --vc-radius: 10px;
+  --vc-radius-lg: 14px;
+  --vc-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .06);
 }
 
-.vc-merchant-page,
-.vc-archive-intro,
-.vc-archive-faqs,
-.vc-archive-siblings {
+.vc-merchant-page {
   color: var(--vc-text);
-  line-height: 1.6;
+  line-height: 1.65;
+  font-size: 16px;
 }
 
-/* ---------- Offer badge ---------- */
+/* ---------- Hero ---------- */
 
-.vc-offer-status {
-  margin: 0 0 1.5rem;
+.vc-hero {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  padding: 1.5rem;
+  margin: 0 0 1.25rem;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+  box-shadow: var(--vc-shadow);
+}
+
+.vc-hero__logo {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: var(--vc-radius);
+  border: 1px solid var(--vc-border);
+  background: var(--vc-surface);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.vc-hero__logo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Lettered tile for stores with no logo on file. */
+.vc-hero__logo--letter {
+  background: linear-gradient(140deg, var(--vc-accent), var(--vc-accent-dark));
+  border-color: transparent;
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.vc-hero__body { flex: 1; min-width: 0; }
+
+.vc-hero__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.vc-hero__offer {
+  margin: 0 0 1rem;
+  font-size: 1.22rem;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.vc-hero__cta {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
   flex-wrap: wrap;
 }
 
+.vc-btn {
+  display: inline-block;
+  padding: 0.7em 1.5em;
+  background: var(--vc-accent);
+  color: #fff !important;
+  border-radius: var(--vc-radius);
+  text-decoration: none !important;
+  font-weight: 650;
+  font-size: 0.97rem;
+  box-shadow: var(--vc-shadow);
+  transition: background .15s ease, transform .15s ease;
+}
+
+.vc-btn:hover {
+  background: var(--vc-accent-dark);
+  transform: translateY(-1px);
+}
+
+.vc-hero__checked { font-size: 0.85rem; color: var(--vc-text-soft); }
+
+/* ---------- Offer badge ---------- */
+
 .vc-badge {
   display: inline-block;
-  padding: 0.4em 0.9em;
+  padding: 0.35em 0.85em;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 0.85rem;
-  letter-spacing: 0.01em;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: #fff;
   background: var(--vc-muted-badge);
 }
@@ -53,269 +138,263 @@
 .vc-badge--verified { background: var(--vc-accent); }
 .vc-badge--deal     { background: var(--vc-deal); }
 
-/* No confirmed code: deliberately quiet, and not dressed up as a win. */
+/* No confirmed code: deliberately quiet, not dressed up as a win. */
 .vc-badge--none {
-  background: transparent;
+  background: var(--vc-surface-alt);
   color: var(--vc-text-soft);
+  border: 1px solid var(--vc-border-strong);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.vc-checked { font-size: 0.85rem; color: var(--vc-text-soft); }
+
+.vc-offer-status { margin: 0 0 1.25rem; display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+
+/* ---------- Quick facts ---------- */
+
+.vc-quickfacts {
+  list-style: none;
+  margin: 0 0 1.75rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--vc-border);
   border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  overflow: hidden;
+}
+
+.vc-quickfact {
+  background: var(--vc-surface-alt);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.vc-quickfact__label {
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vc-text-soft);
   font-weight: 600;
 }
 
-.vc-checked {
-  font-size: 0.85rem;
-  color: var(--vc-text-soft);
+.vc-quickfact__value {
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--vc-text);
 }
 
-/* ---------- Sections ---------- */
+/* ---------- Sections as cards ---------- */
 
 .vc-merchant-page .vc-section {
-  padding: 1.1rem 0;
-  border-top: 1px solid var(--vc-border);
-}
-
-.vc-merchant-page .vc-section:first-of-type { border-top: 0; }
-
-.vc-merchant-page .vc-section h2 {
-  font-size: 1.05rem;
-  font-weight: 700;
-  margin: 0 0 0.4rem;
-  letter-spacing: -0.01em;
-}
-
-.vc-merchant-page .vc-section p {
-  margin: 0 0 0.5rem;
-  color: var(--vc-text-soft);
-}
-
-.vc-coupon-widget {
-  margin: 1.25rem 0;
-}
-
-/* ---------- Merchant info panel ---------- */
-
-.vc-merchant-info {
-  margin: 2rem 0;
-  padding: 1.25rem 1.4rem;
-  background: var(--vc-surface-alt);
+  padding: 1.15rem 1.35rem;
+  margin: 0 0 0.85rem;
+  background: var(--vc-surface);
   border: 1px solid var(--vc-border);
   border-radius: var(--vc-radius);
 }
 
-.vc-merchant-info h2 {
-  font-size: 1rem;
-  margin: 0 0 0.9rem;
+.vc-merchant-page .vc-section h2 {
+  font-size: 0.82rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--vc-text-soft);
+  margin: 0 0 0.45rem;
+}
+
+.vc-merchant-page .vc-section p {
+  margin: 0 0 0.5rem;
+  color: var(--vc-text);
+}
+
+.vc-merchant-page .vc-section p:last-child { margin-bottom: 0; }
+
+.vc-coupon-widget { margin: 0 0 1.5rem; }
+
+/* ---------- Merchant info panel ---------- */
+
+.vc-merchant-info {
+  margin: 1.75rem 0;
+  padding: 1.35rem 1.5rem;
+  background: var(--vc-surface-alt);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+}
+
+.vc-merchant-info h2 {
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vc-text-soft);
+  font-weight: 700;
 }
 
 .vc-merchant-info dl {
   display: grid;
-  grid-template-columns: minmax(120px, 180px) 1fr;
-  gap: 0.5rem 1.25rem;
+  grid-template-columns: minmax(110px, 170px) 1fr;
+  gap: 0.6rem 1.25rem;
   margin: 0;
 }
 
-.vc-merchant-info dt {
-  font-weight: 600;
-  color: var(--vc-text-soft);
-  font-size: 0.9rem;
-}
+.vc-merchant-info dt { font-weight: 600; color: var(--vc-text-soft); font-size: 0.9rem; }
+.vc-merchant-info dd { margin: 0; font-size: 0.95rem; }
 
-.vc-merchant-info dd {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-.vc-disclaimer,
-.vc-aliases,
-.vc-restricted {
-  margin: 0.9rem 0 0;
+.vc-disclaimer, .vc-aliases {
+  margin: 1rem 0 0;
   font-size: 0.85rem;
   color: var(--vc-text-soft);
 }
 
 .vc-restricted {
-  padding: 0.6rem 0.8rem;
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem;
   background: var(--vc-warn-bg);
   border-left: 3px solid var(--vc-warn-border);
-  border-radius: 3px;
+  border-radius: 4px;
+  font-size: 0.9rem;
   color: var(--vc-text);
 }
 
 /* ---------- FAQs ---------- */
 
-.vc-faqs {
-  margin: 2rem 0;
-}
+.vc-faqs { margin: 1.75rem 0; }
 
-.vc-faqs h2,
-.vc-archive-faqs h2 {
-  font-size: 1.2rem;
+.vc-faqs h2, .vc-archive-faqs h2 {
+  font-size: 1.25rem;
   margin: 0 0 1rem;
+  letter-spacing: -0.01em;
 }
 
 .vc-faq {
-  padding: 0.9rem 0;
-  border-bottom: 1px solid var(--vc-border);
+  padding: 1.05rem 1.35rem;
+  margin-bottom: 0.6rem;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
 }
 
-.vc-faq:last-child { border-bottom: 0; }
-
-.vc-faq h3,
-.vc-archive-faqs h3 {
+.vc-faq h3, .vc-archive-faqs h3 {
   font-size: 1rem;
   font-weight: 650;
   margin: 0 0 0.35rem;
 }
 
-.vc-faq p,
-.vc-archive-faqs p {
-  margin: 0;
-  color: var(--vc-text-soft);
-}
+.vc-faq p, .vc-archive-faqs p { margin: 0; color: var(--vc-text-soft); }
 
 /* ---------- Trust + editorial ---------- */
 
-.vc-trust-section { margin: 2rem 0; }
+.vc-trust-section { margin: 1.75rem 0; }
 .vc-trust-section h2 { font-size: 1.1rem; margin: 0 0 0.6rem; }
-
-.vc-trust__source {
-  font-size: 0.85rem;
-  color: var(--vc-text-soft);
-}
+.vc-trust__source { font-size: 0.85rem; color: var(--vc-text-soft); }
 
 .vc-editorial {
-  margin: 2rem 0 0;
-  padding: 1rem 1.2rem;
+  margin: 1.75rem 0 0;
+  padding: 1.1rem 1.35rem;
+  background: var(--vc-surface-alt);
   border: 1px solid var(--vc-border);
   border-radius: var(--vc-radius);
   font-size: 0.88rem;
   color: var(--vc-text-soft);
-  background: var(--vc-surface);
 }
 
-.vc-editorial p { margin: 0 0 0.35rem; }
+.vc-editorial p { margin: 0 0 0.3rem; }
 .vc-editorial p:last-child { margin-bottom: 0; }
 
-/* ---------- Related links ---------- */
+/* ---------- Links out ---------- */
 
 .vc-related { margin: 1.75rem 0 0; }
 
 .vc-related ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.6rem;
 }
 
 .vc-related a {
   display: inline-block;
-  padding: 0.45em 0.9em;
-  border: 1px solid var(--vc-border);
+  padding: 0.5em 1em;
+  border: 1px solid var(--vc-border-strong);
   border-radius: 999px;
   font-size: 0.88rem;
   text-decoration: none;
   color: var(--vc-deal);
+  background: var(--vc-surface);
 }
 
-.vc-related a:hover {
-  border-color: var(--vc-deal);
-  background: var(--vc-surface-alt);
-}
+.vc-related a:hover { border-color: var(--vc-deal); background: var(--vc-deal-soft); }
 
 /* ---------- Editor-only notice ---------- */
 
 .vc-editor-notice {
   background: var(--vc-warn-bg);
   border-left: 4px solid var(--vc-warn-border);
-  padding: 0.7rem 0.9rem;
+  padding: 0.75rem 1rem;
   margin: 0 0 1.25rem;
   font-size: 0.85rem;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 /* ---------- Destination archive ---------- */
 
-.vc-archive-intro {
-  margin: 0 0 1.75rem;
-  font-size: 1.02rem;
-}
-
+.vc-archive-intro { margin: 0 0 1.75rem; font-size: 1.03rem; }
 .vc-archive-intro p { margin: 0 0 0.75rem; }
 
 .vc-archive-legal {
   margin-top: 1rem;
-  padding: 0.9rem 1.1rem;
-  background: var(--vc-surface-alt);
+  padding: 1rem 1.2rem;
+  background: var(--vc-deal-soft);
   border-left: 3px solid var(--vc-deal);
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 0.93rem;
 }
 
 .vc-archive-legal p { margin: 0 0 0.5rem; }
 .vc-archive-legal p:last-child { margin-bottom: 0; }
 
-/* Merchant cards in the archive listing */
-
 .vc-archive-list {
-  list-style: none;
-  margin: 0 0 2rem;
-  padding: 0;
-  display: grid;
-  gap: 0.9rem;
+  list-style: none; margin: 0 0 2rem; padding: 0;
+  display: grid; gap: 0.75rem;
 }
 
 .vc-archive-card {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 1.25rem;
-  padding: 1.1rem 1.25rem;
+  padding: 1.15rem 1.35rem;
   border: 1px solid var(--vc-border);
   border-radius: var(--vc-radius);
   background: var(--vc-surface);
-  transition: border-color 0.15s ease;
+  box-shadow: var(--vc-shadow);
+  transition: border-color .15s ease, transform .15s ease;
 }
 
-.vc-archive-card:hover { border-color: var(--vc-deal); }
+.vc-archive-card:hover { border-color: var(--vc-accent); transform: translateY(-1px); }
 
 .vc-archive-card__body { flex: 1; min-width: 0; }
 
-.vc-archive-card__name {
-  font-size: 1.05rem;
-  font-weight: 700;
-  margin: 0 0 0.3rem;
-}
+.vc-archive-card__name { font-size: 1.08rem; font-weight: 700; margin: 0 0 0.3rem; }
+.vc-archive-card__name a { color: var(--vc-text); text-decoration: none; }
+.vc-archive-card__name a:hover { color: var(--vc-accent); }
 
-.vc-archive-card__name a {
-  color: var(--vc-text);
-  text-decoration: none;
-}
-
-.vc-archive-card__name a:hover { color: var(--vc-deal); }
-
-.vc-archive-card__offer {
-  margin: 0 0 0.35rem;
-  color: var(--vc-text-soft);
-  font-size: 0.94rem;
-}
+.vc-archive-card__offer { margin: 0 0 0.45rem; color: var(--vc-text-soft); font-size: 0.95rem; }
 
 .vc-archive-card__meta {
-  font-size: 0.84rem;
-  color: var(--vc-text-soft);
+  font-size: 0.84rem; color: var(--vc-text-soft);
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
 }
 
-.vc-archive-card__cta {
-  flex-shrink: 0;
-  align-self: center;
-}
+.vc-archive-card__cta { flex-shrink: 0; }
 
 .vc-archive-card__cta a {
   display: inline-block;
-  padding: 0.55em 1.1em;
+  padding: 0.6em 1.25em;
   background: var(--vc-accent);
   color: #fff;
   border-radius: var(--vc-radius);
@@ -327,57 +406,56 @@
 
 .vc-archive-card__cta a:hover { background: var(--vc-accent-dark); }
 
-/* Sibling destination links */
+/* ---------- Related stores + siblings ---------- */
 
-.vc-archive-siblings {
-  margin: 2.5rem 0 0;
+.vc-related-stores, .vc-archive-siblings {
+  margin: 2.25rem 0 0;
   padding-top: 1.5rem;
   border-top: 1px solid var(--vc-border);
 }
 
-.vc-archive-siblings h2 {
-  font-size: 1.1rem;
-  margin: 0 0 0.9rem;
+.vc-related-stores h2, .vc-archive-siblings h2 {
+  font-size: 1.15rem; margin: 0 0 0.9rem; letter-spacing: -0.01em;
 }
 
-.vc-archive-siblings ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.vc-related-links, .vc-archive-siblings ul {
+  list-style: none; margin: 0; padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 0.5rem 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.45rem 1.25rem;
 }
 
-.vc-archive-siblings a {
-  color: var(--vc-deal);
-  text-decoration: none;
-  font-size: 0.92rem;
+.vc-related-links a, .vc-archive-siblings a {
+  color: var(--vc-deal); text-decoration: none; font-size: 0.93rem;
 }
 
-.vc-archive-siblings a:hover { text-decoration: underline; }
+.vc-related-links a:hover, .vc-archive-siblings a:hover { text-decoration: underline; }
 
-.vc-count {
-  color: var(--vc-text-soft);
-  font-size: 0.85rem;
-}
+.vc-count { color: var(--vc-text-soft); font-size: 0.85rem; }
+
+/* ---------- Narrow columns (sidebar / widget) ---------- */
+
+.vc-sidebar .vc-related-links,
+.widget .vc-related-links { grid-template-columns: 1fr; }
+
+.vc-sidebar .vc-merchant-info dl,
+.widget .vc-merchant-info dl { grid-template-columns: 1fr; gap: 0.15rem; }
+
+.vc-sidebar .vc-merchant-info dd,
+.widget .vc-merchant-info dd { margin-bottom: 0.6rem; }
 
 /* ---------- Small screens ---------- */
 
 @media (max-width: 640px) {
-  .vc-merchant-info dl {
-    grid-template-columns: 1fr;
-    gap: 0.15rem;
-  }
+  .vc-hero { flex-direction: column; gap: 1rem; padding: 1.25rem; }
+  .vc-hero__logo { width: 60px; height: 60px; }
+  .vc-hero__offer { font-size: 1.1rem; }
+  .vc-btn { display: block; text-align: center; }
 
+  .vc-merchant-info dl { grid-template-columns: 1fr; gap: 0.15rem; }
   .vc-merchant-info dd { margin-bottom: 0.6rem; }
 
-  .vc-archive-card {
-    flex-direction: column;
-    gap: 0.8rem;
-  }
-
-  .vc-archive-card__cta { align-self: stretch; }
+  .vc-archive-card { flex-direction: column; align-items: stretch; gap: 0.85rem; }
   .vc-archive-card__cta a { display: block; text-align: center; }
 }
 
@@ -385,56 +463,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --vc-text: #e8eaed;
-    --vc-text-soft: #a8b0ba;
-    --vc-border: #343a42;
-    --vc-surface: #1b1f24;
-    --vc-surface-alt: #22272e;
-    --vc-warn-bg: #2e2718;
+    --vc-text: #e9ecef;
+    --vc-text-soft: #a6aeb8;
+    --vc-border: #2f353c;
+    --vc-border-strong: #3c434b;
+    --vc-surface: #1a1e23;
+    --vc-surface-alt: #21262c;
+    --vc-accent-soft: #1530240;
+    --vc-deal-soft: #15283a;
+    --vc-warn-bg: #2f2718;
+    --vc-shadow: 0 1px 3px rgba(0, 0, 0, .35);
   }
 }
-
-/* ---------- Related stores ---------- */
-
-.vc-related-stores {
-  margin: 2.5rem 0 0;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--vc-border);
-}
-
-.vc-related-stores h2 {
-  font-size: 1.1rem;
-  margin: 0 0 0.9rem;
-}
-
-.vc-related-links {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.5rem 1.25rem;
-}
-
-.vc-related-links a {
-  color: var(--vc-deal);
-  text-decoration: none;
-  font-size: 0.92rem;
-}
-
-.vc-related-links a:hover { text-decoration: underline; }
-
-/* In a narrow column (sidebar), collapse to a single stack. */
-.vc-sidebar .vc-related-links,
-.widget .vc-related-links {
-  grid-template-columns: 1fr;
-}
-
-.vc-sidebar .vc-merchant-info dl,
-.widget .vc-merchant-info dl {
-  grid-template-columns: 1fr;
-  gap: 0.15rem;
-}
-
-.vc-sidebar .vc-merchant-info dd,
-.widget .vc-merchant-info dd { margin-bottom: 0.6rem; }

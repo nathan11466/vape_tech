@@ -101,6 +101,7 @@ function wp_update_post() { return 1; }
 function wp_set_object_terms() {}
 function plugins_url($p, $f = '') { return $p; }
 function wp_enqueue_style() {}
+function esc_attr__($v, $d = null) { return htmlspecialchars((string) $v, ENT_QUOTES); }
 function is_main_query() { return true; }
 class WP_Error { public function get_error_message() { return ''; } }
 class FakeTerm {

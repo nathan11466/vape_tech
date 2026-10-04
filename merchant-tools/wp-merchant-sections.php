@@ -409,3 +409,141 @@ add_shortcode('merchant_field', function ($atts) {
 
     return esc_html($atts['before']) . esc_html($value) . esc_html($atts['after']);
 });
+
+/* -------------------------------------------------------------------------
+ * Hero and quick facts
+ *
+ * A wall of text sections reads as nothing in particular. These give the page
+ * a focal point: who the store is, what the current deal is, and the one
+ * action worth taking -- plus the handful of facts a shopper scans for before
+ * reading anything.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Store mark: the logo when there is one, otherwise a lettered tile.
+ *
+ * brand_logo_url is empty across most merchant data, so without a fallback
+ * every page would open with a blank space.
+ */
+function vc_merchant_logo_mark($post_id) {
+    $logo = vc_section_meta($post_id, 'brand_logo_url');
+    $name = vc_merchant_display_name($post_id);
+
+    if ($logo !== '') {
+        return '<div class="vc-hero__logo"><img src="' . esc_url($logo) . '" alt="'
+            . esc_attr($name) . '" loading="lazy" /></div>';
+    }
+
+    $initial = function_exists('mb_substr') ? mb_substr(trim($name), 0, 1) : substr(trim($name), 0, 1);
+
+    return '<div class="vc-hero__logo vc-hero__logo--letter" aria-hidden="true">'
+        . esc_html(mb_strtoupper($initial)) . '</div>';
+}
+
+/**
+ * [merchant_hero] -- logo, name, offer badge, headline deal, and the CTA.
+ */
+function vc_merchant_hero($post_id) {
+    $name  = vc_merchant_display_name($post_id);
+    $offer = vc_section_meta($post_id, 'best_offer_summary');
+    $url   = vc_section_meta($post_id, 'brand_url');
+    $checked = vc_section_meta($post_id, 'last_checked_text');
+
+    $out  = '<div class="vc-hero">';
+    $out .= vc_merchant_logo_mark($post_id);
+
+    $out .= '<div class="vc-hero__body">';
+    $out .= '<div class="vc-hero__meta">' . vc_merchant_offer_badge($post_id) . '</div>';
+
+    if ($offer !== '') {
+        $out .= '<p class="vc-hero__offer">' . esc_html($offer) . '</p>';
+    }
+
+    if ($url !== '') {
+        // rel="sponsored nofollow" because an outbound merchant link on a
+        // deals page is a commercial link whether or not it is affiliate.
+        $out .= '<p class="vc-hero__cta"><a class="vc-btn" href="' . esc_url($url) . '"'
+            . ' rel="sponsored nofollow noopener" target="_blank">'
+            . esc_html(sprintf(__('Visit %s', 'vc-merchant'), $name)) . '</a>';
+        if ($checked !== '') {
+            $out .= ' <span class="vc-hero__checked">'
+                . esc_html(sprintf(__('Checked %s', 'vc-merchant'), $checked)) . '</span>';
+        }
+        $out .= '</p>';
+    }
+
+    $out .= '</div></div>';
+
+    return $out;
+}
+add_shortcode('merchant_hero', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_hero');
+    $post_id = vc_section_post_id($atts);
+
+    return $post_id ? vc_merchant_hero($post_id) : '';
+});
+
+/**
+ * [merchant_quickfacts] -- the handful of values a shopper scans for.
+ *
+ * Only facts actually present are shown; the strip disappears entirely rather
+ * than printing empty tiles.
+ */
+function vc_merchant_quick_facts($post_id) {
+    $facts = array();
+
+    $ship = vc_section_meta($post_id, 'free_shipping_info');
+    if ($ship !== '' && preg_match('/\$\s?([\d,]+)/', $ship, $m)) {
+        $facts[] = array(__('Free shipping over', 'vc-merchant'), '$' . $m[1]);
+    } elseif ($ship !== '' && stripos($ship, 'free shipping on all') !== false) {
+        $facts[] = array(__('Shipping', 'vc-merchant'), __('Free on all orders', 'vc-merchant'));
+    }
+
+    $returns = vc_section_meta($post_id, 'return_policy_summary');
+    if ($returns !== '' && preg_match('/\b(\d{1,3})[\s-]*day/i', $returns, $m)) {
+        $facts[] = array(__('Returns', 'vc-merchant'), sprintf(__('%s days', 'vc-merchant'), $m[1]));
+    }
+
+    $age = vc_section_meta($post_id, 'age_verification_required');
+    if ($age !== '' && stripos($age, 'not stated') === false) {
+        $facts[] = array(__('Age required', 'vc-merchant'), $age);
+    }
+
+    $ships_to = vc_section_meta($post_id, 'ships_to_terms');
+    if ($ships_to !== '') {
+        $names = array_filter(array_map('trim', explode('|', $ships_to)));
+        $states = array_filter($names, function ($n) { return $n !== 'United States'; });
+        if (!empty($states)) {
+            $facts[] = array(__('Ships to', 'vc-merchant'),
+                sprintf(_n('%d state', '%d states', count($states), 'vc-merchant'), count($states)));
+        }
+    }
+
+    $restricted = vc_section_meta($post_id, 'restricted_states');
+    if ($restricted !== '') {
+        $list = array_filter(array_map('trim', explode('|', $restricted)));
+        if (!empty($list)) {
+            $facts[] = array(__('Cannot ship to', 'vc-merchant'), implode(', ', $list));
+        }
+    }
+
+    if (empty($facts)) {
+        return '';
+    }
+
+    $out = '<ul class="vc-quickfacts">';
+    foreach ($facts as $fact) {
+        $out .= '<li class="vc-quickfact"><span class="vc-quickfact__label">'
+            . esc_html($fact[0]) . '</span><span class="vc-quickfact__value">'
+            . esc_html($fact[1]) . '</span></li>';
+    }
+    $out .= '</ul>';
+
+    return $out;
+}
+add_shortcode('merchant_quickfacts', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_quickfacts');
+    $post_id = vc_section_post_id($atts);
+
+    return $post_id ? vc_merchant_quick_facts($post_id) : '';
+});
