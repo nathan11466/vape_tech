@@ -76,8 +76,15 @@ function vc_register_merchant_post_type() {
         'show_in_rest' => true,
         'menu_icon'    => 'dashicons-store',
         'supports'     => array('title', 'editor', 'excerpt', 'thumbnail', 'custom-fields'),
+        // URL base for store pages: /stores/vape-street/.
+        //
+        // Deliberately NOT 'coupons' -- a coupon plugin very often already
+        // claims that base, and two post types sharing one rewrite slug give
+        // you 404s on one of them. Change it with:
+        //   add_filter('vc_merchant_post_type_slug', fn() => 'shops');
+        // and re-save Settings > Permalinks afterwards.
         'rewrite'      => array(
-            'slug' => apply_filters('vc_merchant_post_type_slug', 'coupons'),
+            'slug' => apply_filters('vc_merchant_post_type_slug', 'stores'),
         ),
     ));
 }
