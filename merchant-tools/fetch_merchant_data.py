@@ -280,22 +280,53 @@ def process(row, args, log):
     put("contact_email", find_email(html, urllib.parse.urlparse(base).netloc))
 
     if not args.skip_policies:
-        shipping_url = (row.get("shipping_policy_url") or "").strip()
-        if shipping_url:
-            policy = fetch(shipping_url)
-            if policy:
-                restricted = find_restrictions(policy)
-                if restricted:
-                    put("restricted_states", "|".join(restricted),
-                        f"restricted({len(restricted)})")
-                    # A named exclusion list implies nationwide coverage
-                    # otherwise -- phrase it the way derive_shipping reads.
-                    put("shipping_restrictions",
-                        "Ships nationwide except " + ", ".join(restricted))
-                if ADULT_SIG.search(policy):
-                    put("do_they_id_on_delivery", "Yes - adult signature required")
-                put("fact_source_url", shipping_url)
-                put("fact_last_verified", time.strftime("%Y-%m-%d"))
+        # Restrictions are not always on the shipping policy. Stores commonly
+        # put them on a dedicated page, or inside the returns or age policy.
+        candidates = [
+            (row.get("shipping_policy_url") or "").strip(),
+            (row.get("age_policy_url") or "").strip(),
+            (row.get("returns_policy_url") or "").strip(),
+        ]
+        for path in ("/pages/shipping-restrictions", "/pages/restricted-states",
+                     "/pages/pact-act", "/pages/shipping-information"):
+            candidates.append(urllib.parse.urljoin(base, path))
+
+        seen = set()
+        for url in candidates:
+            if not url or url in seen:
+                continue
+            seen.add(url)
+
+            policy = fetch(url)
+            if not policy:
+                continue
+
+            if args.debug:
+                plain = re.sub(r"<[^>]+>", " ", policy)
+                plain = re.sub(r"\s+", " ", plain)
+                named = [st for st in US_STATES if re.search(r"\b" + st + r"\b", plain)]
+                cues = len(EXCLUSION_CUE.findall(plain))
+                print(f"\n    [debug] {url}")
+                print(f"    [debug] {len(plain)} chars, {cues} exclusion cue(s), "
+                      f"states named: {named or 'none'}")
+                for m in list(EXCLUSION_CUE.finditer(plain))[:3]:
+                    lo, hi = max(0, m.start() - 90), min(len(plain), m.end() + 220)
+                    print(f"    [debug] ...{plain[lo:hi]}...")
+
+            restricted = find_restrictions(policy)
+            if restricted and not (row.get("restricted_states") or "").strip():
+                put("restricted_states", "|".join(restricted),
+                    f"restricted({len(restricted)})")
+                # A named exclusion list implies nationwide coverage otherwise
+                # -- phrase it the way derive_shipping reads.
+                put("shipping_restrictions",
+                    "Ships nationwide except " + ", ".join(restricted))
+
+            if ADULT_SIG.search(policy):
+                put("do_they_id_on_delivery", "Yes - adult signature required")
+
+            put("fact_source_url", url)
+            put("fact_last_verified", time.strftime("%Y-%m-%d"))
 
     log.append(f"{name}: {', '.join(filled) if filled else 'nothing new'}")
 
@@ -311,6 +342,9 @@ def main():
     parser.add_argument("--only", default="")
     parser.add_argument("--delay", type=float, default=1.5)
     parser.add_argument("--skip-policies", action="store_true")
+    parser.add_argument("--debug", action="store_true",
+                        help="print what each policy page actually contained, "
+                             "so a miss can be diagnosed rather than guessed at")
     args = parser.parse_args()
 
     with open(args.input, newline="", encoding="utf-8-sig") as fh:
