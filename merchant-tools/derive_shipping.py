@@ -122,8 +122,21 @@ def derive(row):
     """
     restrictions = (row.get("shipping_restrictions") or "").strip()
     declared = (row.get("ships_to_countries") or "").strip()
+    # A populated restricted_states column is the most reliable signal we have:
+    # it was either entered deliberately or extracted from the merchant's own
+    # shipping policy with a source recorded. Trust it over re-parsing prose,
+    # which may be an older, shorter summary of the same policy.
+    explicit_restricted = [
+        s.strip() for s in (row.get("restricted_states") or "").split("|") if s.strip()
+    ]
     free_ship = (row.get("free_shipping_info") or "").strip()
     summary = (row.get("brand_summary") or "").strip()
+
+    if explicit_restricted:
+        known = [s for s in explicit_restricted if s in US_STATES]
+        if known:
+            states = [s for s in US_STATES if s not in known]
+            return ["United States"] + states, known, "stated"
 
     # An explicit ships_to_countries value always wins -- it was entered
     # deliberately rather than parsed out of prose.
