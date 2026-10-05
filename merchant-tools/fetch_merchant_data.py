@@ -32,6 +32,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+VERSION = "1.2 (multi-page restriction scan, --debug)"
+
 BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -315,8 +317,9 @@ def process(row, args, log):
 
             restricted = find_restrictions(policy)
             if restricted and not (row.get("restricted_states") or "").strip():
+                page = urllib.parse.urlparse(url).path or url
                 put("restricted_states", "|".join(restricted),
-                    f"restricted({len(restricted)})")
+                    f"restricted({len(restricted)} from {page})")
                 # A named exclusion list implies nationwide coverage otherwise
                 # -- phrase it the way derive_shipping reads.
                 put("shipping_restrictions",
@@ -346,6 +349,9 @@ def main():
                         help="print what each policy page actually contained, "
                              "so a miss can be diagnosed rather than guessed at")
     args = parser.parse_args()
+
+    print(f"fetch_merchant_data {VERSION}")
+    print()
 
     with open(args.input, newline="", encoding="utf-8-sig") as fh:
         reader = csv.DictReader(fh)
