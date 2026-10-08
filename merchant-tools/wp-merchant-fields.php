@@ -456,6 +456,7 @@ function vc_merchant_info_panel($post_id = null) {
 
     $html .= '<p class="vc-disclaimer">'
         . esc_html__('Shipping, returns and payment details can change - confirm at checkout.', 'vc-merchant')
+        . ' ' . esc_html__('* Where this store publishes no state restrictions we show it as shipping nationwide; confirm your state at checkout.', 'vc-merchant')
         . '</p>';
 
     $html .= vc_merchant_aliases_line($post_id);

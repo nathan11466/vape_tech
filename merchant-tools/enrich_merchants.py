@@ -364,9 +364,8 @@ def main():
     parser.add_argument("--review", help="review-queue CSV for rows needing work")
     parser.add_argument("--strict-shipping", action="store_true",
                         help="only assign destinations a merchant has actually "
-                             "stated. Drops 'inferred' assignments, where states "
-                             "were derived from an exclusion list without the "
-                             "merchant claiming nationwide coverage.")
+                             "stated. Drops both the nationwide-by-default "
+                             "assumption and 'inferred' assignments.")
     parser.add_argument("--compose", action="store_true",
                         help="rebuild boilerplate sections from each merchant's own facts; "
                              "where there is nothing to build from, state that plainly")
@@ -416,11 +415,13 @@ def main():
             row["_disclosure_count"] = sum(1 for o in origins.values() if o == "disclosure")
 
         # Resolve shipping destinations into taxonomy terms.
-        ship_conf = derive_shipping.apply_to_row(row)
+        # House rule: a US merchant ships to every state unless it states
+        # otherwise. Restrictions a merchant DOES publish are always honoured.
+        ship_conf = derive_shipping.apply_to_row(
+            row, assume_nationwide=not args.strict_shipping)
 
-        # Strict mode: keep only what the merchant actually stated. An
-        # "inferred" result means we filled in the states they did NOT name,
-        # which is an assumption about their coverage rather than their words.
+        # Strict mode additionally drops "inferred", where states were filled
+        # in from an exclusion list without a nationwide claim.
         if args.strict_shipping and ship_conf == "inferred":
             row["ships_to_terms"] = ""
             row["shipping_confidence"] = "unstated"
@@ -498,11 +499,12 @@ def main():
 
     print()
     print("Shipping destinations:")
-    for conf in ("stated", "inferred", "unstated", "unknown"):
+    for conf in ("stated", "inferred", "assumed", "unstated", "unknown"):
         if shipping_tally[conf]:
             label = {
                 "stated": "explicitly stated",
                 "inferred": "inferred from named exclusions",
+                "assumed": "assumed nationwide - merchant states no restrictions",
                 "unstated": "dropped by --strict-shipping - merchant did not state coverage",
                 "unknown": "not determinable - no terms assigned",
             }[conf]

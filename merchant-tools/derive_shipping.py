@@ -73,6 +73,21 @@ _EXCLUSION_RES = [
     re.compile(r"\brestrict(?:ed|ions?)?\s+(?:in|for|to)\b(?P<list>[^.;]+)", re.I),
 ]
 
+# Signals that a merchant is NOT US-based. A UK or Australian retailer must
+# never be assumed onto US state pages.
+NON_US_RE = re.compile(
+    r"\b(united kingdom|\buk\b|britain|england|scotland|wales|"
+    r"australia|australian|new zealand|canada|canadian|"
+    r"european union|\beu\b|germany|france|netherlands|spain|italy|ireland)\b",
+    re.I,
+)
+
+US_RE = re.compile(
+    r"\b(united states|usa|u\.s\.|\bus\b|america|american|nationwide|"
+    r"50 states|domestic)\b",
+    re.I,
+)
+
 # Text that looks like a restriction statement but confirms nothing.
 _NON_STATEMENT_RE = re.compile(
     r"no\s+(?:explicit\s+)?(?:shipping\s+)?restrictions?\s+(?:listed|found|stated)|"
@@ -113,12 +128,38 @@ def _find_countries(text):
     return found
 
 
-def derive(row):
+def looks_us_based(row):
+    """
+    Whether to treat a merchant as shipping within the US.
+
+    Deliberately conservative: an explicit non-US signal with no US signal
+    anywhere means no assumption is made, so a UK retailer never lands on a
+    Texas page.
+    """
+    blob = " ".join([
+        row.get("brand_name", ""), row.get("brand_url", ""),
+        row.get("brand_summary", ""), row.get("ships_to_countries", ""),
+        row.get("primary_service_location", ""), row.get("shipping_restrictions", ""),
+        row.get("free_shipping_info", ""),
+    ])
+
+    if US_RE.search(blob):
+        return True
+
+    return not NON_US_RE.search(blob)
+
+
+def derive(row, assume_nationwide=True):
     """
     Work out shipping destinations for one merchant row.
 
-    Returns (ships_to_terms, restricted_states, confidence) where the first two
-    are lists of names and confidence is stated | inferred | unknown.
+    Returns (ships_to_terms, restricted_states, confidence). Confidence is
+    stated | inferred | assumed | unknown.
+
+    `assume_nationwide` is the house rule: a US merchant that says nothing
+    about restrictions is taken to ship to every state, because that is the
+    norm for an online retailer and the page carries a confirm-at-checkout
+    note. Restrictions a merchant DOES state are always honoured.
     """
     restrictions = (row.get("shipping_restrictions") or "").strip()
     declared = (row.get("ships_to_countries") or "").strip()
@@ -174,13 +215,19 @@ def derive(row):
     if countries and not is_non_statement:
         return countries, restricted, "inferred"
 
-    # Nothing we can stand behind.
+    # Nothing stated. House rule: a US merchant ships everywhere unless it
+    # says otherwise. Marked "assumed" so it is distinguishable from a claim
+    # the merchant actually made.
+    if assume_nationwide and looks_us_based(row):
+        return ["United States"] + list(US_STATES), restricted, "assumed"
+
+    # Non-US, or assumption disabled.
     return [], restricted, "unknown"
 
 
-def apply_to_row(row):
+def apply_to_row(row, assume_nationwide=True):
     """Write the derived columns onto the row and return the confidence."""
-    ships_to, restricted, confidence = derive(row)
+    ships_to, restricted, confidence = derive(row, assume_nationwide)
 
     row["ships_to_terms"] = "|".join(ships_to)
     row["restricted_states"] = "|".join(restricted)

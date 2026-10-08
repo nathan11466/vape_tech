@@ -510,12 +510,22 @@ function vc_merchant_quick_facts($post_id) {
     }
 
     $ships_to = vc_section_meta($post_id, 'ships_to_terms');
+    $ship_conf = vc_section_meta($post_id, 'shipping_confidence');
     if ($ships_to !== '') {
         $names = array_filter(array_map('trim', explode('|', $ships_to)));
         $states = array_filter($names, function ($n) { return $n !== 'United States'; });
         if (!empty($states)) {
-            $facts[] = array(__('Ships to', 'vc-merchant'),
-                sprintf(_n('%d state', '%d states', count($states), 'vc-merchant'), count($states)));
+            if ($ship_conf === 'assumed') {
+                // The merchant published no restrictions, so coverage is our
+                // working assumption rather than their claim. Saying "51
+                // states" here would put a number in their mouth.
+                $facts[] = array(__('Ships to', 'vc-merchant'),
+                    __('US nationwide*', 'vc-merchant'));
+            } else {
+                $facts[] = array(__('Ships to', 'vc-merchant'),
+                    sprintf(_n('%d state', '%d states', count($states), 'vc-merchant'),
+                        count($states)));
+            }
         }
     }
 
