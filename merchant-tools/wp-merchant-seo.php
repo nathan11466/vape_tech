@@ -155,8 +155,10 @@ function vc_merchant_schema_graph($post_id = null) {
     $graph = array();
 
     // --- Organization: the merchant itself ---
+    // OnlineStore is the accurate type for an internet retailer; plain
+    // Organization says nothing about what they do.
     $org = array(
-        '@type' => 'Organization',
+        '@type' => 'OnlineStore',
         '@id'   => $permalink . '#merchant',
         'name'  => $name,
     );
@@ -208,8 +210,29 @@ function vc_merchant_schema_graph($post_id = null) {
             '@id'   => $permalink . '#offer',
             'name'  => $offerText,
             'offeredBy' => array('@id' => $permalink . '#merchant'),
-            'availability' => 'https://schema.org/InStock',
         );
+
+        // Deliberately NO availability. We have no stock information, and
+        // asserting InStock would be a fabricated claim in structured data --
+        // the same thing the visible copy is careful never to do.
+
+        // The discount, only when the offer text actually contains a figure.
+        if (function_exists('vc_merchant_headline_discount')) {
+            list($figure, ) = vc_merchant_headline_discount($post_id);
+            if ($figure !== '') {
+                if (substr($figure, -1) === '%') {
+                    $offer['discount'] = (float) rtrim($figure, '%');
+                    $offer['discountCode'] = '';
+                } else {
+                    $offer['discount'] = (float) ltrim(str_replace(',', '', $figure), '$');
+                    $offer['discountCurrency'] = 'USD';
+                }
+                if ($offer['discountCode'] === '') {
+                    unset($offer['discountCode']);
+                }
+            }
+        }
+
         if ($url !== '') {
             $offer['url'] = $url;
         }
