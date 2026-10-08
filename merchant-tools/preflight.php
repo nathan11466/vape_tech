@@ -113,6 +113,10 @@ function get_option($k, $d = false) { return $d; }
 function delete_option($k) {}
 function update_option($k, $v) { return true; }
 function add_submenu_page() {}
+function add_meta_box() {}
+function esc_js($v) { return $v; }
+function esc_attr_e($v, $d = null) { echo $v; }
+function sanitize_textarea_field($v) { return trim((string) $v); }
 function selected($a, $b, $e = true) { return ''; }
 function sanitize_hex_color($c) { return $c; }
 function sanitize_text_field($v) { return trim(strip_tags((string) $v)); }
@@ -258,11 +262,34 @@ foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_o
     check("[$sc] is registered", isset($GLOBALS['registered_shortcodes'][$sc]));
 }
 
+echo "\nEditor panel\n";
+if (function_exists('vc_editor_field_groups')) {
+    $editor_keys = array();
+    foreach (vc_editor_field_groups() as $group => $fields) {
+        $editor_keys = array_merge($editor_keys, array_keys($fields));
+    }
+    check('editor panel exposes fields', count($editor_keys) > 30, count($editor_keys) . ' fields');
+
+    // Anything editable must be a column the importer round-trips, or a hand
+    // edit would be silently lost on the next import.
+    $importer = vc_merchant_import_meta_keys();
+    $orphans = array_diff($editor_keys, $importer);
+    check('every editable field is one the importer carries',
+        empty($orphans), 'orphans: ' . implode(', ', $orphans));
+
+    // And the shortcode allowlist must accept them, or [merchant_field] would
+    // warn "unknown key" for a field the panel offers.
+    $virtual = function_exists('vc_section_virtual_fields') ? vc_section_virtual_fields() : array();
+    $unreachable = array_diff($editor_keys, array_merge($importer, $virtual));
+    check('every editable field is reachable via [merchant_field]',
+        empty($unreachable), 'unreachable: ' . implode(', ', $unreachable));
+}
+
 echo "\nShipped files\n";
 $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
     'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
-    'wp-merchant-settings.php',
+    'wp-merchant-settings.php', 'wp-merchant-editor.php',
     'wp-merchant-import.php',
     'assets/merchant-pages.css',
 );
