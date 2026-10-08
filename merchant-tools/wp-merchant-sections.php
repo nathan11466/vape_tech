@@ -468,6 +468,49 @@ function vc_merchant_logo_mark($post_id) {
 }
 
 /**
+ * The headline number in an offer, pulled out for the hero.
+ *
+ * Only ever returns something the offer text already says. A percentage wins
+ * over a dollar amount because it is the convention for coupon pages, and the
+ * largest value wins when several appear ("up to 50% off" beats "10% off").
+ */
+function vc_merchant_headline_discount($post_id) {
+    $offer = vc_section_meta($post_id, 'best_offer_summary');
+    if ($offer === '') {
+        return array('', '');
+    }
+
+    $percents = array();
+    if (preg_match_all('/(\d{1,2})\s?%/', $offer, $m)) {
+        $percents = array_map('intval', $m[1]);
+    }
+    if (!empty($percents)) {
+        $best = max($percents);
+        $prefix = preg_match('/\bup to\b/i', $offer) ? __('up to', 'vc-merchant') : '';
+        return array($best . '%', $prefix);
+    }
+
+    $amounts = array();
+    if (preg_match_all('/\$\s?([\d,]+(?:\.\d{2})?)/', $offer, $m)) {
+        foreach ($m[1] as $raw) {
+            $amounts[$raw] = (float) str_replace(',', '', $raw);
+        }
+    }
+    if (!empty($amounts)) {
+        arsort($amounts);
+        $label = array_key_first($amounts);
+        // A threshold ("free shipping over $49") is not a discount.
+        if (!preg_match('/\b(over|above|minimum|orders? of)\b[^.]{0,24}\$\s?'
+            . preg_quote($label, '/') . '/i', $offer)) {
+            $prefix = preg_match('/\bup to\b/i', $offer) ? __('up to', 'vc-merchant') : '';
+            return array('$' . $label, $prefix);
+        }
+    }
+
+    return array('', '');
+}
+
+/**
  * [merchant_hero] -- logo, name, offer badge, headline deal, and the CTA.
  */
 function vc_merchant_hero($post_id) {
@@ -481,6 +524,19 @@ function vc_merchant_hero($post_id) {
 
     $out .= '<div class="vc-hero__body">';
     $out .= '<div class="vc-hero__meta">' . vc_merchant_offer_badge($post_id) . '</div>';
+
+    // The number, pulled out large. Only shown when the offer text contains
+    // one -- nothing is invented to fill the space.
+    list($figure, $prefix) = vc_merchant_headline_discount($post_id);
+    if ($figure !== '') {
+        $out .= '<p class="vc-hero__figure">';
+        if ($prefix !== '') {
+            $out .= '<span class="vc-hero__figure-prefix">' . esc_html($prefix) . '</span>';
+        }
+        $out .= '<span class="vc-hero__figure-value">' . esc_html($figure) . '</span>';
+        $out .= '<span class="vc-hero__figure-suffix">' . esc_html__('off', 'vc-merchant') . '</span>';
+        $out .= '</p>';
+    }
 
     if ($offer !== '') {
         $out .= '<p class="vc-hero__offer">' . esc_html($offer) . '</p>';

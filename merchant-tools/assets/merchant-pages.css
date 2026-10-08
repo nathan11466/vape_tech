@@ -612,3 +612,76 @@
   .vc-policy { grid-template-columns: 1fr; gap: 0.2rem; }
   .vc-policy dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
 }
+
+/* ---------- Two-column layout ---------- */
+
+.vc-merchant-page--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 2.5rem;
+  align-items: start;
+}
+
+.vc-col-main { min-width: 0; }
+
+.vc-col-side {
+  min-width: 0;
+  position: sticky;
+  top: 1.5rem;
+}
+
+/* The notice spans both columns when present. */
+.vc-merchant-page--split > .vc-editor-notice { grid-column: 1 / -1; }
+
+/* Sidebar blocks sit closer together than full-width ones. */
+.vc-col-side > * { margin-top: 0; margin-bottom: 1.25rem; }
+.vc-col-side > *:last-child { margin-bottom: 0; }
+.vc-col-side .vc-related-stores,
+.vc-col-side .vc-links { padding-top: 1.25rem; }
+
+@media (max-width: 960px) {
+  .vc-merchant-page--split { grid-template-columns: 1fr; gap: 1.5rem; }
+  .vc-col-side { position: static; }
+}
+
+/* ---------- Headline discount figure ---------- */
+
+.vc-hero__figure {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+  line-height: 1;
+}
+
+.vc-hero__figure-prefix {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--vc-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.vc-hero__figure-value {
+  font-size: 3.1rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--vc-accent);
+}
+
+.vc-hero__figure-suffix {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--vc-accent);
+}
+
+/* With a figure present the restated offer is supporting text, not the lead. */
+.vc-hero__figure + .vc-hero__offer {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--vc-text-soft);
+}
+
+@media (max-width: 640px) {
+  .vc-hero__figure-value { font-size: 2.5rem; }
+}

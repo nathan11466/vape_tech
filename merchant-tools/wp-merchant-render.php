@@ -26,7 +26,7 @@ function vc_merchant_section($heading, $value) {
 }
 
 function vc_merchant_render_page($atts = array()) {
-    $atts = shortcode_atts(array('id' => 0, 'related' => 'yes'), $atts, 'merchant_page');
+    $atts = shortcode_atts(array('id' => 0, 'related' => 'yes', 'sidebar' => 'yes'), $atts, 'merchant_page');
     $post_id = (int) $atts['id'] ?: get_the_ID();
 
     if (!$post_id) {
@@ -52,7 +52,13 @@ function vc_merchant_render_page($atts = array()) {
     };
 
     $name = vc_merchant_display_name($post_id);
-    $out  = '<div class="vc-merchant-page">' . $notice;
+    $sidebar = ($atts['sidebar'] ?? 'yes') !== 'no';
+
+    $out  = '<div class="vc-merchant-page' . ($sidebar ? ' vc-merchant-page--split' : '') . '">';
+    $out .= $notice;
+    if ($sidebar) {
+        $out .= '<div class="vc-col-main">';
+    }
 
     // Hero: logo, badge, headline deal, CTA. Gives the page a focal point
     // instead of opening on a wall of text sections.
@@ -98,12 +104,14 @@ function vc_merchant_render_page($atts = array()) {
             . esc_html(sprintf(__('%s FAQs', 'vc-merchant'), $name)) . '</h2>' . $faqs . '</section>';
     }
 
-    // Merchant info panel and trust block, both self-gating.
-    $out .= vc_merchant_info_panel($post_id);
+    // Everything from here is reference material. With a sidebar it moves to
+    // the aside, where it is visible beside the content instead of buried
+    // under it.
+    $aside = vc_merchant_info_panel($post_id);
 
     $trust = vc_merchant_trust_info($post_id);
     if ($trust !== '') {
-        $out .= '<section class="vc-trust-section"><h2>'
+        $aside .= '<section class="vc-trust-section"><h2>'
             . esc_html__('Company information', 'vc-merchant') . '</h2>' . $trust . '</section>';
     }
 
@@ -145,13 +153,19 @@ function vc_merchant_render_page($atts = array()) {
 
     // Store pages and social profiles.
     if (function_exists('vc_merchant_links')) {
-        $out .= vc_merchant_links($post_id);
+        $aside .= vc_merchant_links($post_id);
     }
 
     // Similar stores. Suppressed with [merchant_page related="no"] if you would
     // rather place [merchant_related] yourself.
     if (($atts['related'] ?? 'yes') !== 'no' && shortcode_exists('merchant_related')) {
-        $out .= do_shortcode('[merchant_related id="' . $post_id . '" limit="8"]');
+        $aside .= do_shortcode('[merchant_related id="' . $post_id . '" limit="6"]');
+    }
+
+    if ($sidebar) {
+        $out .= '</div><aside class="vc-col-side vc-sidebar">' . $aside . '</aside>';
+    } else {
+        $out .= $aside;
     }
 
     $out .= '</div>';
