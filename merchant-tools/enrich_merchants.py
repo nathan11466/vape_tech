@@ -362,6 +362,11 @@ def main():
     parser.add_argument("input", help="source merchant CSV")
     parser.add_argument("--out", required=True, help="enriched CSV to write")
     parser.add_argument("--review", help="review-queue CSV for rows needing work")
+    parser.add_argument("--strict-shipping", action="store_true",
+                        help="only assign destinations a merchant has actually "
+                             "stated. Drops 'inferred' assignments, where states "
+                             "were derived from an exclusion list without the "
+                             "merchant claiming nationwide coverage.")
     parser.add_argument("--compose", action="store_true",
                         help="rebuild boilerplate sections from each merchant's own facts; "
                              "where there is nothing to build from, state that plainly")
@@ -412,6 +417,15 @@ def main():
 
         # Resolve shipping destinations into taxonomy terms.
         ship_conf = derive_shipping.apply_to_row(row)
+
+        # Strict mode: keep only what the merchant actually stated. An
+        # "inferred" result means we filled in the states they did NOT name,
+        # which is an assumption about their coverage rather than their words.
+        if args.strict_shipping and ship_conf == "inferred":
+            row["ships_to_terms"] = ""
+            row["shipping_confidence"] = "unstated"
+            ship_conf = "unstated"
+
         shipping_tally[ship_conf] += 1
 
         confidence, status, low_fields, notes, score = grade_row(row, boilerplate)
@@ -484,11 +498,12 @@ def main():
 
     print()
     print("Shipping destinations:")
-    for conf in ("stated", "inferred", "unknown"):
+    for conf in ("stated", "inferred", "unstated", "unknown"):
         if shipping_tally[conf]:
             label = {
                 "stated": "explicitly stated",
                 "inferred": "inferred from named exclusions",
+                "unstated": "dropped by --strict-shipping - merchant did not state coverage",
                 "unknown": "not determinable - no terms assigned",
             }[conf]
             print(f"  {shipping_tally[conf]:>4}  {label}")
