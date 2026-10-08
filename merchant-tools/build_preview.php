@@ -61,14 +61,16 @@ class WP_Query {
     }
 }
 function do_shortcode($s) {
-    if (strpos($s, 'merchant_policies') !== false) {
-        preg_match('/id="(\\d+)"/', $s, $m);
-        return call_user_func($GLOBALS['vc_shortcodes']['merchant_policies'] ?? function () { return ''; },
-                              array('id' => $m[1] ?? 0));
-    }
-    if (strpos($s, 'merchant_related') !== false && function_exists('vc_merchant_related_shortcode')) {
-        preg_match('/id="(\\d+)"/', $s, $m);
-        return vc_merchant_related_shortcode(array('id' => $m[1] ?? 0, 'limit' => 8));
+    // Generic dispatch to whatever the plugin registered.
+    if (preg_match('/\[([a-z_]+)([^\]]*)\]/', $s, $m)) {
+        $tag = $m[1];
+        $atts = array();
+        if (preg_match_all('/(\w+)="([^"]*)"/', $m[2], $pairs, PREG_SET_ORDER)) {
+            foreach ($pairs as $pair) { $atts[$pair[1]] = $pair[2]; }
+        }
+        if (isset($GLOBALS['vc_shortcodes'][$tag])) {
+            return call_user_func($GLOBALS['vc_shortcodes'][$tag], $atts);
+        }
     }
     return '';
 }
@@ -106,6 +108,12 @@ function wp_update_post() { return 1; }
 function wp_set_object_terms() {}
 function plugins_url($p, $f = '') { return $p; }
 function wp_enqueue_style() {}
+function get_option($k, $d = false) { return $d; }
+function delete_option($k) {}
+function update_option($k, $v) { return true; }
+function add_submenu_page() {}
+function selected($a, $b, $e = true) { return ''; }
+function sanitize_hex_color($c) { return $c; }
 function esc_attr__($v, $d = null) { return htmlspecialchars((string) $v, ENT_QUOTES); }
 function is_main_query() { return true; }
 class WP_Error { public function get_error_message() { return ''; } }

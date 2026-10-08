@@ -109,6 +109,12 @@ function wp_insert_post() { return 1; }
 function wp_update_post() { return 1; }
 function plugins_url($p, $f = '') { return $p; }
 function wp_enqueue_style() {}
+function get_option($k, $d = false) { return $d; }
+function delete_option($k) {}
+function update_option($k, $v) { return true; }
+function add_submenu_page() {}
+function selected($a, $b, $e = true) { return ''; }
+function sanitize_hex_color($c) { return $c; }
 function do_shortcode($s) { return ''; }
 function shortcode_exists($t) { return isset($GLOBALS['registered_shortcodes'][$t]); }
 function wp_get_object_terms($id, $tax, $args = array()) { return array(); }
@@ -204,6 +210,7 @@ if (function_exists('vc_assign_ships_to')) {
 
 echo "\nCross-module functions\n";
 $required = array(
+    'vc_layout_get', 'vc_layout_blocks', 'vc_merchant_block',
     'vc_merchant_post_types', 'vc_merchant_display_name', 'vc_merchant_offer_badge',
     'vc_merchant_info_panel', 'vc_merchant_trust_info', 'vc_merchant_render_page',
     'vc_merchant_seo_title', 'vc_merchant_meta_description', 'vc_merchant_schema_graph',
@@ -227,6 +234,7 @@ echo "\nShipped files\n";
 $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
     'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
+    'wp-merchant-settings.php',
     'wp-merchant-import.php',
     'assets/merchant-pages.css',
 );

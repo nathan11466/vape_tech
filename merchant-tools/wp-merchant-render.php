@@ -33,143 +33,106 @@ function vc_merchant_render_page($atts = array()) {
         return '';
     }
 
-    // The page always renders. WordPress post status is the publish gate --
-    // a draft is not public, and a post you published is one you decided to
-    // publish. Grading is advisory only, surfaced to editors as a notice.
+    // Review notes, for editors only.
     $notice = '';
     if (current_user_can('edit_posts')) {
         $notes = trim((string) get_post_meta($post_id, 'review_notes', true));
         if ($notes !== '') {
-            $notice = '<div class="vc-editor-notice" style="background:#fff8e5;border-left:4px solid #dba617;'
-                . 'padding:10px;margin-bottom:15px;font-size:13px;">'
-                . '<strong>' . esc_html__('Review notes (visible to editors only):', 'vc-merchant') . '</strong> '
-                . esc_html($notes) . '</div>';
+            $notice = '<div class="vc-editor-notice"><strong>'
+                . esc_html__('Review notes (visible to editors only):', 'vc-merchant')
+                . '</strong> ' . esc_html($notes) . '</div>';
         }
     }
 
+    $main = '';
+    $side = '';
+    foreach (array('main' => &$main, 'side' => &$side) as $column => &$buffer) {
+        foreach (vc_layout_blocks($column) as $block) {
+            $buffer .= vc_merchant_block($block, $post_id, $atts);
+        }
+    }
+    unset($buffer);
+
+    $has_sidebar = ($atts['sidebar'] !== 'no') && trim($side) !== '';
+
+    $out = '<div class="vc-merchant-page' . ($has_sidebar ? ' vc-merchant-page--split' : '') . '">';
+    $out .= $notice;
+
+    if ($has_sidebar) {
+        $out .= '<div class="vc-col-main">' . $main . '</div>';
+        $out .= '<aside class="vc-col-side vc-sidebar">' . $side . '</aside>';
+    } else {
+        $out .= $main . $side;
+    }
+
+    return $out . '</div>';
+}
+
+/**
+ * Render one named block. Order and column come from the layout settings.
+ */
+function vc_merchant_block($block, $post_id, $atts = array()) {
     $m = function ($key) use ($post_id) {
         return trim((string) get_post_meta($post_id, $key, true));
     };
-
     $name = vc_merchant_display_name($post_id);
-    $sidebar = ($atts['sidebar'] ?? 'yes') !== 'no';
 
-    $out  = '<div class="vc-merchant-page' . ($sidebar ? ' vc-merchant-page--split' : '') . '">';
-    $out .= $notice;
-    if ($sidebar) {
-        $out .= '<div class="vc-col-main">';
+    switch ($block) {
+        case 'hero':
+            return function_exists('vc_merchant_hero')
+                ? vc_merchant_hero($post_id)
+                : '<div class="vc-offer-status">' . vc_merchant_offer_badge($post_id) . '</div>';
+
+        case 'coupon':
+            $shortcode = $m('coupon_plugin_shortcode');
+            return $shortcode === ''
+                ? ''
+                : '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';
+
+        case 'quickfacts':
+            return function_exists('vc_merchant_quick_facts')
+                ? vc_merchant_quick_facts($post_id) : '';
+
+        case 'about':
+            return vc_merchant_section(sprintf(__('About %s', 'vc-merchant'), $name),
+                $m('brand_summary'));
+
+        case 'save':
+            return vc_merchant_section(
+                sprintf(__('Best ways to save at %s', 'vc-merchant'), $name),
+                $m('best_ways_to_save'));
+
+        case 'policies':
+            return shortcode_exists('merchant_policies')
+                ? do_shortcode('[merchant_policies id="' . $post_id . '"]') : '';
+
+        case 'faqs':
+            return shortcode_exists('merchant_faqs')
+                ? do_shortcode('[merchant_faqs id="' . $post_id . '"]') : '';
+
+        case 'info':
+            return vc_merchant_info_panel($post_id);
+
+        case 'trust':
+            $trust = vc_merchant_trust_info($post_id);
+            return $trust === '' ? '' : '<section class="vc-trust-section"><h2>'
+                . esc_html__('Company information', 'vc-merchant') . '</h2>' . $trust . '</section>';
+
+        case 'links':
+            return function_exists('vc_merchant_links') ? vc_merchant_links($post_id) : '';
+
+        case 'related':
+            if (($atts['related'] ?? 'yes') === 'no' || !shortcode_exists('merchant_related')) {
+                return '';
+            }
+            return do_shortcode('[merchant_related id="' . $post_id . '" limit="6"]');
+
+        case 'editorial':
+            return shortcode_exists('merchant_editorial')
+                ? do_shortcode('[merchant_editorial id="' . $post_id . '"]') : '';
     }
 
-    // Hero: logo, badge, headline deal, CTA. Gives the page a focal point
-    // instead of opening on a wall of text sections.
-    if (function_exists('vc_merchant_hero')) {
-        $out .= vc_merchant_hero($post_id);
-    } else {
-        $out .= '<div class="vc-offer-status">' . vc_merchant_offer_badge($post_id) . '</div>';
-        $out .= vc_merchant_section(__('Best current deal', 'vc-merchant'), $m('best_offer_summary'));
-    }
-
-    // The coupon widget is the reason the page exists -- directly under the
-    // hero, above the prose, not three sections down.
-    $shortcode = $m('coupon_plugin_shortcode');
-    if ($shortcode !== '') {
-        $out .= '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';
-    }
-
-    // The facts a shopper scans for.
-    if (function_exists('vc_merchant_quick_facts')) {
-        $out .= vc_merchant_quick_facts($post_id);
-    }
-
-    $out .= vc_merchant_section(sprintf(__('About %s', 'vc-merchant'), $name), $m('brand_summary'));
-    $out .= vc_merchant_section(sprintf(__('Best ways to save at %s', 'vc-merchant'), $name), $m('best_ways_to_save'));
-
-    // Seven policy fields as one compact grid rather than seven identical
-    // bordered boxes, which read as a wall.
-    if (shortcode_exists('merchant_policies')) {
-        $out .= do_shortcode('[merchant_policies id="' . $post_id . '"]');
-    }
-
-    // FAQs -- these also feed the FAQPage schema.
-    $faqs = '';
-    for ($i = 1; $i <= 3; $i++) {
-        $q = $m("faq_{$i}_question");
-        $a = $m("faq_{$i}_answer");
-        if ($q !== '' && $a !== '') {
-            $faqs .= '<div class="vc-faq"><h3>' . esc_html($q) . '</h3>' . wpautop(esc_html($a)) . '</div>';
-        }
-    }
-    if ($faqs !== '') {
-        $out .= '<section class="vc-faqs"><h2>'
-            . esc_html(sprintf(__('%s FAQs', 'vc-merchant'), $name)) . '</h2>' . $faqs . '</section>';
-    }
-
-    // Everything from here is reference material. With a sidebar it moves to
-    // the aside, where it is visible beside the content instead of buried
-    // under it.
-    $aside = vc_merchant_info_panel($post_id);
-
-    $trust = vc_merchant_trust_info($post_id);
-    if ($trust !== '') {
-        $aside .= '<section class="vc-trust-section"><h2>'
-            . esc_html__('Company information', 'vc-merchant') . '</h2>' . $trust . '</section>';
-    }
-
-    // Editorial transparency.
-    $editor = $m('editor_name');
-    $method = $m('verification_method');
-    if ($editor !== '' || $method !== '') {
-        $out .= '<section class="vc-editorial">';
-        if ($editor !== '') {
-            $title = $m('editor_title');
-            $out .= '<p>' . esc_html__('Reviewed by', 'vc-merchant') . ' ' . esc_html($editor)
-                . ($title !== '' ? ', ' . esc_html($title) : '') . '</p>';
-        }
-        if ($method !== '') {
-            $out .= '<p>' . esc_html__('How we checked:', 'vc-merchant') . ' ' . esc_html($method) . '</p>';
-        }
-        $verified = $m('fact_last_verified');
-        if ($verified !== '') {
-            $out .= '<p>' . esc_html__('Last verified:', 'vc-merchant') . ' ' . esc_html($verified) . '</p>';
-        }
-        $out .= '</section>';
-    }
-
-    // Internal links.
-    $links = array(
-        __('Read our review', 'vc-merchant') => $m('brand_review_url'),
-        __('All deals', 'vc-merchant')       => $m('deals_hub_url'),
-        __('Seasonal deals', 'vc-merchant')  => $m('seasonal_deals_url'),
-    );
-    $items = '';
-    foreach ($links as $label => $href) {
-        if ($href !== '') {
-            $items .= '<li><a href="' . esc_url($href) . '">' . esc_html($label) . '</a></li>';
-        }
-    }
-    if ($items !== '') {
-        $out .= '<nav class="vc-related"><ul>' . $items . '</ul></nav>';
-    }
-
-    // Store pages and social profiles.
-    if (function_exists('vc_merchant_links')) {
-        $aside .= vc_merchant_links($post_id);
-    }
-
-    // Similar stores. Suppressed with [merchant_page related="no"] if you would
-    // rather place [merchant_related] yourself.
-    if (($atts['related'] ?? 'yes') !== 'no' && shortcode_exists('merchant_related')) {
-        $aside .= do_shortcode('[merchant_related id="' . $post_id . '" limit="6"]');
-    }
-
-    if ($sidebar) {
-        $out .= '</div><aside class="vc-col-side vc-sidebar">' . $aside . '</aside>';
-    } else {
-        $out .= $aside;
-    }
-
-    $out .= '</div>';
-
-    return $out;
+    return '';
 }
+
 add_shortcode('merchant_page', 'vc_merchant_render_page');

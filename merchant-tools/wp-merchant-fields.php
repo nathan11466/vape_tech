@@ -94,7 +94,7 @@ add_action('init', 'vc_register_merchant_post_type', 5);
  * Load the rest of the plugin. Each file is optional, so a partial upload
  * degrades rather than fataling the site.
  */
-foreach (array('wp-merchant-shipping.php', 'wp-merchant-render.php',
+foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
                'wp-merchant-seo.php', 'wp-merchant-archive.php',
                'wp-merchant-sections.php', 'wp-merchant-import.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
