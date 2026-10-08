@@ -45,6 +45,8 @@ NEW_COLUMNS = [
     "returns_policy_url",
     "age_policy_url",
     "do_they_id_on_delivery",
+    "trust_source_url",     # where a review score was read; NOT fact_source_url
+    "trust_verified_at",
     "service_locations",
     "primary_service_location",
     "ships_to_countries",

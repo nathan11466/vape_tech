@@ -252,6 +252,8 @@ function vc_merchant_meta_fields() {
         'contact_source_url'      => 'string',
         'fact_source_url'         => 'string',
         'fact_last_verified'      => 'string',
+        'trust_source_url'        => 'string',
+        'trust_verified_at'       => 'string',
         'content_confidence'      => 'string',
         'publish_status'          => 'string',
         'offer_display_mode'      => 'string',
@@ -383,8 +385,13 @@ function vc_merchant_display_name($post_id = null) {
 function vc_merchant_trust_info($post_id = null) {
     $post_id = $post_id ?: get_the_ID();
     $claim  = trim((string) get_post_meta($post_id, 'company_trust_info', true));
-    $source = trim((string) get_post_meta($post_id, 'fact_source_url', true));
-    $date   = trim((string) get_post_meta($post_id, 'fact_last_verified', true));
+
+    // Deliberately NOT fact_source_url. That is filled automatically with
+    // whichever policy page was read, so a Trustpilot rating would end up
+    // citing the store's shipping policy -- a citation pointing at the wrong
+    // page is worse than none. A reputation claim needs its own source.
+    $source = trim((string) get_post_meta($post_id, 'trust_source_url', true));
+    $date   = trim((string) get_post_meta($post_id, 'trust_verified_at', true));
 
     if ($claim === '' || $source === '' || $date === '') {
         return '';
