@@ -567,3 +567,162 @@ function vc_merchant_list_shortcode($atts) {
     return $out;
 }
 add_shortcode('merchant_list', 'vc_merchant_list_shortcode');
+
+/* -------------------------------------------------------------------------
+ * Keeping destination pages distinct
+ *
+ * With nationwide-by-default, nearly every merchant is assigned to every
+ * state, so 51 destination pages would otherwise carry the same list, the same
+ * count and the same sentence with one place name swapped. That is the thin-
+ * content problem the merchant pages were built to avoid, reappearing one
+ * level up.
+ *
+ * Two answers: surface the one thing that genuinely differs per state, and
+ * keep a page out of the index until it has something of its own to say.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Merchants that explicitly cannot ship to this destination.
+ *
+ * Genuinely state-specific -- it comes from merchants' own published exclusion
+ * lists, so it differs between California and Texas in a way the main listing
+ * does not.
+ */
+function vc_archive_excluded_merchants($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term) || $term->taxonomy !== 'ships_to') {
+        return array();
+    }
+
+    $query = new WP_Query(array(
+        'post_type'           => vc_merchant_post_types(),
+        'post_status'         => 'publish',
+        'posts_per_page'      => 50,
+        'fields'              => 'ids',
+        'no_found_rows'       => true,
+        'ignore_sticky_posts' => true,
+        'meta_query'          => array(array(
+            'key'     => 'restricted_states',
+            'value'   => $term->name,
+            'compare' => 'LIKE',
+        )),
+    ));
+
+    $out = array();
+    foreach ($query->posts as $id) {
+        // LIKE can match a substring ("Virginia" inside "West Virginia"), so
+        // confirm against the actual pipe-delimited list.
+        $listed = array_filter(array_map('trim',
+            explode('|', (string) get_post_meta($id, 'restricted_states', true))));
+        if (in_array($term->name, $listed, true)) {
+            $out[] = (int) $id;
+        }
+    }
+
+    return $out;
+}
+
+function vc_archive_excluded_html($term = null) {
+    $term = $term ?: get_queried_object();
+    $ids = vc_archive_excluded_merchants($term);
+    if (empty($ids)) {
+        return '';
+    }
+
+    $items = '';
+    foreach ($ids as $id) {
+        $name = function_exists('vc_merchant_display_name')
+            ? vc_merchant_display_name($id) : get_the_title($id);
+        $items .= '<li><a href="' . esc_url(get_permalink($id)) . '">'
+            . esc_html($name) . '</a></li>';
+    }
+
+    return '<section class="vc-archive-excluded"><h2>'
+        . esc_html(sprintf(
+            _n('%1$d store that does not ship to %2$s',
+               '%1$d stores that do not ship to %2$s',
+               count($ids), 'vc-merchant'),
+            count($ids), $term->name))
+        . '</h2><p>' . esc_html__('These retailers state they cannot deliver to this state.', 'vc-merchant')
+        . '</p><ul class="vc-related-links">' . $items . '</ul></section>';
+}
+
+/**
+ * Whether this destination page carries anything of its own.
+ *
+ * The generated intro and the shared merchant list are identical across every
+ * state bar the name, so they do not count. Editorial copy, a local-rules
+ * note, FAQs or a state-specific exclusion list do.
+ */
+function vc_archive_has_unique_content($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return false;
+    }
+
+    foreach (array('vc_intro', 'vc_legal_note', 'vc_faq_q1', 'vc_faq_q2') as $key) {
+        if (trim((string) get_term_meta($term->term_id, $key, true)) !== '') {
+            return true;
+        }
+    }
+
+    return !empty(vc_archive_excluded_merchants($term));
+}
+
+/**
+ * Keep an undifferentiated destination page out of the index.
+ *
+ * Fifty-one near-identical pages competing with each other is worse than a
+ * handful of good ones. A page earns indexing by having its own intro, local
+ * note, FAQs, or a state-specific exclusion list. Links are still followed, so
+ * the merchant pages behind it keep their equity.
+ */
+add_filter('rank_math/frontend/robots', function ($robots) {
+    if (!vc_is_merchant_archive() || vc_archive_has_unique_content()) {
+        return $robots;
+    }
+    $robots['index'] = 'noindex';
+    $robots['follow'] = 'follow';
+
+    return $robots;
+});
+
+add_action('wp_head', function () {
+    if (class_exists('RankMath') || !vc_is_merchant_archive()) {
+        return;
+    }
+    if (!vc_archive_has_unique_content()) {
+        echo "\n<meta name=\"robots\" content=\"noindex, follow\" />\n";
+    }
+}, 1);
+
+// Show the state-specific exclusions after the listing.
+add_action('loop_end', function ($query) {
+    if (!is_main_query() || !vc_is_merchant_archive()) {
+        return;
+    }
+    echo vc_archive_excluded_html();
+}, 5);
+
+/**
+ * Tell editors why a page is not indexed, on the term screen.
+ */
+add_action('admin_notices', function () {
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if (!$screen || $screen->base !== 'term' || $screen->taxonomy !== 'ships_to') {
+        return;
+    }
+    $term_id = isset($_GET['tag_ID']) ? (int) $_GET['tag_ID'] : 0;
+    if (!$term_id) {
+        return;
+    }
+    $term = get_term($term_id, 'ships_to');
+    if (!$term || is_wp_error($term) || vc_archive_has_unique_content($term)) {
+        return;
+    }
+    echo '<div class="notice notice-warning"><p><strong>'
+        . esc_html__('This destination page is set to noindex.', 'vc-merchant')
+        . '</strong> '
+        . esc_html__('Without its own intro, local rules note or FAQs it is near-identical to every other destination page. Fill in any one of the fields below and it becomes indexable.', 'vc-merchant')
+        . '</p></div>';
+});

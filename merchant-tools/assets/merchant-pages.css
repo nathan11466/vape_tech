@@ -701,3 +701,17 @@
 @media (max-width: 640px) {
   .vc-page-title { font-size: 1.6rem; }
 }
+
+/* ---------- Stores that cannot ship here ---------- */
+
+.vc-archive-excluded {
+  margin: 2rem 0 0;
+  padding: 1.25rem 1.4rem;
+  background: var(--vc-warn-bg);
+  border-left: 3px solid var(--vc-warn-border);
+  border-radius: var(--vc-radius);
+  max-width: var(--vc-max-width);
+}
+
+.vc-archive-excluded h2 { font-size: 1.05rem; margin: 0 0 0.35rem; }
+.vc-archive-excluded > p { margin: 0 0 0.8rem; font-size: 0.92rem; color: var(--vc-text-soft); }
