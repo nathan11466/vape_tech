@@ -63,30 +63,25 @@ function vc_merchant_render_page($atts = array()) {
         $out .= vc_merchant_section(__('Best current deal', 'vc-merchant'), $m('best_offer_summary'));
     }
 
-    // The facts a shopper scans for before reading anything.
-    if (function_exists('vc_merchant_quick_facts')) {
-        $out .= vc_merchant_quick_facts($post_id);
-    }
-
-    // The coupon plugin's own widget.
+    // The coupon widget is the reason the page exists -- directly under the
+    // hero, above the prose, not three sections down.
     $shortcode = $m('coupon_plugin_shortcode');
     if ($shortcode !== '') {
         $out .= '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';
     }
 
+    // The facts a shopper scans for.
+    if (function_exists('vc_merchant_quick_facts')) {
+        $out .= vc_merchant_quick_facts($post_id);
+    }
+
     $out .= vc_merchant_section(sprintf(__('About %s', 'vc-merchant'), $name), $m('brand_summary'));
     $out .= vc_merchant_section(sprintf(__('Best ways to save at %s', 'vc-merchant'), $name), $m('best_ways_to_save'));
-    $out .= vc_merchant_section(__('Shipping', 'vc-merchant'), $m('free_shipping_info'));
-    $out .= vc_merchant_section(__('Returns', 'vc-merchant'), $m('return_policy_summary'));
-    $out .= vc_merchant_section(__('Payment methods', 'vc-merchant'), $m('payment_methods'));
-    $out .= vc_merchant_section(__('Exclusions', 'vc-merchant'), $m('common_exclusions'));
-    $out .= vc_merchant_section(__('Stacking codes', 'vc-merchant'), $m('stacking_policy'));
-    $out .= vc_merchant_section(__('If your code will not work', 'vc-merchant'), $m('why_code_not_work'));
-    $out .= vc_merchant_section(__('Shipping restrictions', 'vc-merchant'), $m('shipping_restrictions'));
 
-    // Explicit "cannot ship to" list, when destinations were resolved.
-    if (function_exists('vc_merchant_restricted_line')) {
-        $out .= vc_merchant_restricted_line($post_id);
+    // Seven policy fields as one compact grid rather than seven identical
+    // bordered boxes, which read as a wall.
+    if (shortcode_exists('merchant_policies')) {
+        $out .= do_shortcode('[merchant_policies id="' . $post_id . '"]');
     }
 
     // FAQs -- these also feed the FAQPage schema.

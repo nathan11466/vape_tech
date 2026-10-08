@@ -229,25 +229,52 @@ add_shortcode('merchant_about', function ($atts) {
  * troubleshooting and restrictions.
  */
 add_shortcode('merchant_policies', function ($atts) {
-    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_policies');
+    $atts = shortcode_atts(array('id' => 0, 'title' => ''), $atts, 'merchant_policies');
     $post_id = vc_section_post_id($atts);
     if (!$post_id) {
         return '';
     }
 
-    $out  = vc_merchant_section(__('Shipping', 'vc-merchant'), vc_section_meta($post_id, 'free_shipping_info'));
-    $out .= vc_merchant_section(__('Returns', 'vc-merchant'), vc_section_meta($post_id, 'return_policy_summary'));
-    $out .= vc_merchant_section(__('Payment methods', 'vc-merchant'), vc_section_meta($post_id, 'payment_methods'));
-    $out .= vc_merchant_section(__('Exclusions', 'vc-merchant'), vc_section_meta($post_id, 'common_exclusions'));
-    $out .= vc_merchant_section(__('Stacking codes', 'vc-merchant'), vc_section_meta($post_id, 'stacking_policy'));
-    $out .= vc_merchant_section(__('If your code will not work', 'vc-merchant'), vc_section_meta($post_id, 'why_code_not_work'));
-    $out .= vc_merchant_section(__('Shipping restrictions', 'vc-merchant'), vc_section_meta($post_id, 'shipping_restrictions'));
+    // One compact label/value grid rather than seven identical stacked cards.
+    // These are reference details people scan for, not prose they read in
+    // order, so a table beats a stack of boxes.
+    $rows = array(
+        __('Shipping', 'vc-merchant')        => vc_section_meta($post_id, 'free_shipping_info'),
+        __('Returns', 'vc-merchant')         => vc_section_meta($post_id, 'return_policy_summary'),
+        __('Payment', 'vc-merchant')         => vc_section_meta($post_id, 'payment_methods'),
+        __('Exclusions', 'vc-merchant')      => vc_section_meta($post_id, 'common_exclusions'),
+        __('Stacking codes', 'vc-merchant')  => vc_section_meta($post_id, 'stacking_policy'),
+        __('Restrictions', 'vc-merchant')    => vc_section_meta($post_id, 'shipping_restrictions'),
+        __('If a code fails', 'vc-merchant') => vc_section_meta($post_id, 'why_code_not_work'),
+    );
+
+    $items = '';
+    foreach ($rows as $label => $value) {
+        if (trim((string) $value) === '') {
+            continue;
+        }
+        $items .= '<div class="vc-policy"><dt>' . esc_html($label) . '</dt><dd>'
+            . esc_html($value) . '</dd></div>';
+    }
+
+    if ($items === '') {
+        return '';
+    }
+
+    $heading = trim((string) $atts['title']);
+    if ($heading === '') {
+        $heading = sprintf(__('%s shipping, returns & terms', 'vc-merchant'),
+            vc_merchant_display_name($post_id));
+    }
+
+    $out = '<section class="vc-policies"><h2>' . esc_html($heading) . '</h2>'
+        . '<dl class="vc-policies__grid">' . $items . '</dl>';
 
     if (function_exists('vc_merchant_restricted_line')) {
         $out .= vc_merchant_restricted_line($post_id);
     }
 
-    return $out;
+    return $out . '</section>';
 });
 
 /**

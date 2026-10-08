@@ -566,3 +566,49 @@
   background: var(--vc-deal-soft);
   text-decoration: none;
 }
+
+/* ---------- Policies as one compact grid ---------- */
+
+.vc-policies {
+  margin: 1.75rem 0;
+  padding: 1.35rem 1.5rem;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+  max-width: var(--vc-max-width);
+}
+
+.vc-policies > h2 {
+  font-size: 1.15rem;
+  margin: 0 0 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.vc-policies__grid { margin: 0; display: grid; gap: 0; }
+
+.vc-policy {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr;
+  gap: 0 1.5rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-policy:first-child { border-top: 0; padding-top: 0; }
+
+.vc-policy dt {
+  font-weight: 650;
+  font-size: 0.88rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-policy dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--vc-text);
+}
+
+@media (max-width: 640px) {
+  .vc-policy { grid-template-columns: 1fr; gap: 0.2rem; }
+  .vc-policy dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+}

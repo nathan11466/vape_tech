@@ -37,8 +37,8 @@ function get_terms($a = array()) { return $GLOBALS['siblings'] ?? array(); }
 function apply_filters($tag, $value) { return $value; }
 function add_action() {}
 function add_filter() {}
-function add_shortcode() {}
-function shortcode_exists($t) { return $t === 'merchant_related'; }
+function add_shortcode($tag, $cb) { $GLOBALS['vc_shortcodes'][$tag] = $cb; }
+function shortcode_exists($t) { return isset($GLOBALS['vc_shortcodes'][$t]); }
 function wp_get_object_terms($id, $tax, $args = array()) {
     // Derive categories from the row so related-by-category has something real.
     if ($tax !== 'merchant_category') { return array(); }
@@ -61,6 +61,11 @@ class WP_Query {
     }
 }
 function do_shortcode($s) {
+    if (strpos($s, 'merchant_policies') !== false) {
+        preg_match('/id="(\\d+)"/', $s, $m);
+        return call_user_func($GLOBALS['vc_shortcodes']['merchant_policies'] ?? function () { return ''; },
+                              array('id' => $m[1] ?? 0));
+    }
     if (strpos($s, 'merchant_related') !== false && function_exists('vc_merchant_related_shortcode')) {
         preg_match('/id="(\\d+)"/', $s, $m);
         return vc_merchant_related_shortcode(array('id' => $m[1] ?? 0, 'limit' => 8));
