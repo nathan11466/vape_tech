@@ -114,6 +114,7 @@ function update_option($k, $v) { return true; }
 function add_submenu_page() {}
 function selected($a, $b, $e = true) { return ''; }
 function sanitize_hex_color($c) { return $c; }
+function sanitize_text_field($v) { return trim(strip_tags((string) $v)); }
 function esc_attr__($v, $d = null) { return htmlspecialchars((string) $v, ENT_QUOTES); }
 function is_main_query() { return true; }
 class WP_Error { public function get_error_message() { return ''; } }

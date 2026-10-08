@@ -22,6 +22,7 @@ const VC_LAYOUT_OPTION = 'vc_merchant_layout';
  */
 function vc_layout_defaults() {
     return array(
+        'title'      => array('label' => 'Page title (H1)',             'where' => 'main'),
         'hero'       => array('label' => 'Hero (logo, discount, CTA)', 'where' => 'main'),
         'coupon'     => array('label' => 'Coupon widget',              'where' => 'main'),
         'quickfacts' => array('label' => 'Quick facts strip',          'where' => 'main'),
@@ -33,6 +34,7 @@ function vc_layout_defaults() {
         'trust'      => array('label' => 'Company information',        'where' => 'side'),
         'links'      => array('label' => 'Store pages & social',       'where' => 'side'),
         'related'    => array('label' => 'Similar stores',             'where' => 'side'),
+        'internal'   => array('label' => 'Our review / deals / seasonal links', 'where' => 'main'),
         'editorial'  => array('label' => 'Reviewed by / how we checked', 'where' => 'main'),
     );
 }
@@ -43,6 +45,7 @@ function vc_layout_visual_defaults() {
         'sidebar_width' => 320,
         'accent'        => '#137a4e',
         'figure_size'   => 3.1,
+        'h1_suffix'     => 'Coupon Codes',
     );
 }
 
@@ -185,6 +188,7 @@ function vc_layout_screen() {
                 'sidebar_width' => max(200, min(600, (int) ($_POST['sidebar_width'] ?? $vd['sidebar_width']))),
                 'accent'        => sanitize_hex_color($_POST['accent'] ?? '') ?: $vd['accent'],
                 'figure_size'   => max(1.5, min(6.0, (float) ($_POST['figure_size'] ?? $vd['figure_size']))),
+                'h1_suffix'     => sanitize_text_field($_POST['h1_suffix'] ?? $vd['h1_suffix']),
             );
 
             update_option(VC_LAYOUT_OPTION, array(
@@ -246,6 +250,15 @@ function vc_layout_screen() {
 
             <h2><?php esc_html_e('Appearance', 'vc-merchant'); ?></h2>
             <table class="form-table" style="max-width:760px;">
+                <tr>
+                    <th scope="row"><label for="h1_suffix"><?php esc_html_e('H1 wording', 'vc-merchant'); ?></label></th>
+                    <td>
+                        <code><?php esc_html_e('[store name]', 'vc-merchant'); ?></code>
+                        <input type="text" id="h1_suffix" name="h1_suffix"
+                               value="<?php echo esc_attr($visual['h1_suffix']); ?>" class="regular-text" />
+                        <p class="description"><?php esc_html_e('The H1 is the store\'s display name followed by this. Leave empty for the name alone.', 'vc-merchant'); ?></p>
+                    </td>
+                </tr>
                 <tr>
                     <th scope="row"><label for="max_width"><?php esc_html_e('Content width', 'vc-merchant'); ?></label></th>
                     <td>

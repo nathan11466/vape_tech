@@ -115,6 +115,7 @@ function update_option($k, $v) { return true; }
 function add_submenu_page() {}
 function selected($a, $b, $e = true) { return ''; }
 function sanitize_hex_color($c) { return $c; }
+function sanitize_text_field($v) { return trim(strip_tags((string) $v)); }
 function do_shortcode($s) { return ''; }
 function shortcode_exists($t) { return isset($GLOBALS['registered_shortcodes'][$t]); }
 function wp_get_object_terms($id, $tax, $args = array()) { return array(); }
@@ -221,6 +222,33 @@ $required = array(
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
 }
+
+echo "\nLayout blocks\n";
+$blocks = array_keys(vc_layout_defaults());
+foreach (array('title', 'hero', 'coupon', 'quickfacts', 'about', 'save', 'policies',
+               'faqs', 'info', 'trust', 'links', 'related', 'internal', 'editorial') as $b) {
+    check("block '$b' is registered", in_array($b, $blocks, true));
+}
+// Every registered block must actually render something or return a string.
+$GLOBALS['meta'][1] = array(
+    'display_brand_name' => 'Test Store', 'brand_review_url' => '/review/',
+    'deals_hub_url' => '/deals/', 'seasonal_deals_url' => '/seasonal/',
+    'best_offer_summary' => '20% off', 'brand_url' => 'https://example.com',
+);
+$GLOBALS['current_id'] = 1;
+foreach ($blocks as $b) {
+    $out = vc_merchant_block($b, 1, array());
+    check("block '$b' returns a string", is_string($out));
+}
+check('title block emits an H1 using the display name',
+    strpos(vc_merchant_block('title', 1, array()), '<h1') !== false
+    && strpos(vc_merchant_block('title', 1, array()), 'Test Store') !== false,
+    vc_merchant_block('title', 1, array()));
+check('internal block renders review/deals/seasonal links',
+    substr_count(vc_merchant_block('internal', 1, array()), '<li>') === 3,
+    vc_merchant_block('internal', 1, array()));
+check('internal links are NOT nofollow (they are ours)',
+    strpos(vc_merchant_block('internal', 1, array()), 'nofollow') === false);
 
 echo "\nShortcodes\n";
 foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_offer',

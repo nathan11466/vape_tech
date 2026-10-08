@@ -78,6 +78,35 @@ function vc_merchant_block($block, $post_id, $atts = array()) {
     $name = vc_merchant_display_name($post_id);
 
     switch ($block) {
+        case 'title':
+            // The H1. Uses display_brand_name, which is the canonical public
+            // name -- the post title may be the raw CSV brand_name.
+            $suffix = '';
+            if (function_exists('vc_layout_get')) {
+                $suffix = trim((string) (vc_layout_get()['visual']['h1_suffix'] ?? ''));
+            }
+            $heading = $suffix === '' ? $name : $name . ' ' . $suffix;
+
+            return '<h1 class="vc-page-title">' . esc_html($heading) . '</h1>';
+
+        case 'internal':
+            // Links to our own pages. Deliberately NOT nofollow -- these are
+            // internal links and should pass equity, unlike the merchant's
+            // outbound links.
+            $links = array(
+                sprintf(__('Read our %s review', 'vc-merchant'), $name) => $m('brand_review_url'),
+                __('All deals', 'vc-merchant')      => $m('deals_hub_url'),
+                __('Seasonal sales', 'vc-merchant') => $m('seasonal_deals_url'),
+            );
+            $items = '';
+            foreach ($links as $label => $href) {
+                if (trim((string) $href) !== '') {
+                    $items .= '<li><a href="' . esc_url($href) . '">' . esc_html($label) . '</a></li>';
+                }
+            }
+
+            return $items === '' ? '' : '<nav class="vc-related"><ul>' . $items . '</ul></nav>';
+
         case 'hero':
             return function_exists('vc_merchant_hero')
                 ? vc_merchant_hero($post_id)
