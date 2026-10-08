@@ -106,13 +106,27 @@ function vc_merchant_import_row(array $row, $dry_run = false, $publish = false, 
     // body blank for a theme or page-builder template that places the section
     // shortcodes itself -- otherwise the template and the post content would
     // both render, and the whole page would appear twice.
+    $default_content = ($content_mode === 'empty') ? '' : '[merchant_page]';
+
     $postarr = array(
-        'post_type'    => $post_type,
-        'post_title'   => $brand,
-        'post_name'    => sanitize_title($brand),
-        'post_status'  => $post_status,
-        'post_content' => ($content_mode === 'empty') ? '' : '[merchant_page]',
+        'post_type'   => $post_type,
+        'post_title'  => $brand,
+        'post_name'   => sanitize_title($brand),
+        'post_status' => $post_status,
     );
+
+    // Never overwrite a body someone has written. On an update the content is
+    // only reset when it is still untouched -- empty, or exactly the default
+    // shortcode. Anything else means custom copy or a hand-built block layout,
+    // and silently replacing that on the next import would destroy real work.
+    if (!$post_id) {
+        $postarr['post_content'] = $default_content;
+    } else {
+        $existing = trim((string) get_post_field('post_content', $post_id));
+        if ($existing === '' || $existing === '[merchant_page]') {
+            $postarr['post_content'] = $default_content;
+        }
+    }
 
     if ($post_id) {
         $postarr['ID'] = $post_id;
