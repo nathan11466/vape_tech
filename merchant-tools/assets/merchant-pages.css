@@ -715,3 +715,53 @@
 
 .vc-archive-excluded h2 { font-size: 1.05rem; margin: 0 0 0.35rem; }
 .vc-archive-excluded > p { margin: 0 0 0.8rem; font-size: 0.92rem; color: var(--vc-text-soft); }
+
+/* ---------- Coupon cards inside the merchant page ----------
+ *
+ * WP Coupon & Deals sets --wcd-columns as an inline style on .wcd-grid, and
+ * its own breakpoints respond to the VIEWPORT. Inside the main column of a
+ * two-column page that is the wrong measurement: on a wide screen it still
+ * renders three cards into roughly 740px.
+ *
+ * Container queries measure the space the grid is actually in. !important is
+ * required because the inline style would otherwise win.
+ */
+
+.vc-coupon-widget {
+  container-type: inline-size;
+  container-name: vc-coupons;
+}
+
+/* Fallback for browsers without container queries: a two-column page never
+   has room for three cards, so cap it there. */
+.vc-merchant-page--split .vc-coupon-widget .wcd-grid {
+  --wcd-columns: 2 !important;
+}
+
+@supports (container-type: inline-size) {
+  /* Let the container decide in every layout, split or not. */
+  .vc-merchant-page--split .vc-coupon-widget .wcd-grid {
+    --wcd-columns: 3 !important;
+  }
+
+  @container vc-coupons (max-width: 900px) {
+    .wcd-grid { --wcd-columns: 2 !important; }
+  }
+
+  @container vc-coupons (max-width: 560px) {
+    .wcd-grid { --wcd-columns: 1 !important; }
+  }
+}
+
+/* The sidebar is far too narrow for a multi-column grid, whatever the
+   viewport says. */
+.vc-col-side .vc-coupon-widget .wcd-grid,
+.vc-sidebar .vc-coupon-widget .wcd-grid,
+.widget .vc-coupon-widget .wcd-grid {
+  --wcd-columns: 1 !important;
+}
+
+/* Cards should not spill out of the column on long unbroken strings such as
+   a URL in a coupon description. */
+.vc-coupon-widget .wcd-card { min-width: 0; }
+.vc-coupon-widget .wcd-card * { overflow-wrap: anywhere; }

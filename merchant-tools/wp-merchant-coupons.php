@@ -294,28 +294,118 @@ function vc_merchant_coupons_meta_box($post) {
     $live = vc_merchant_live_coupons($post->ID);
     $status = vc_merchant_coupon_status($post->ID);
 
+    // Say what the page will actually claim, in words. "verified_code" is an
+    // internal key and tells an editor nothing about what readers will see.
+    $labels = array(
+        'verified_code'     => __('Shows a verified code', 'vc-merchant'),
+        'best_deal'         => __('Shows the best deal (no code)', 'vc-merchant'),
+        'no_code_confirmed' => __('No code claimed', 'vc-merchant'),
+    );
+    $label = $labels[$status] ?? __('Set by the store data', 'vc-merchant');
+
+    echo '<p class="vc-coupon-status"><span class="vc-coupon-status__badge vc-coupon-status--'
+        . esc_attr($status ? str_replace('_', '-', $status) : 'none') . '">'
+        . esc_html($label) . '</span></p>';
+
     echo '<p class="description">' . esc_html(sprintf(
-        _n('%d live coupon', '%d live coupons', count($live), 'vc-merchant'), count($live)))
-        . ' &middot; <code>' . esc_html($status) . '</code></p>';
+        _n('%d live coupon linked.', '%d live coupons linked.', count($live), 'vc-merchant'),
+        count($live))) . '</p>';
 
     if (!empty($live)) {
-        echo '<ul style="margin:0;font-size:12px;">';
-        foreach (array_slice($live, 0, 8) as $coupon) {
+        $shown = array_slice($live, 0, 8);
+
+        echo '<ul class="vc-coupon-list">';
+        foreach ($shown as $coupon) {
             $code = trim((string) get_post_meta($coupon->ID, '_wcd_code', true));
             $ok   = (int) get_post_meta($coupon->ID, '_wcd_success_count', true);
             $bad  = (int) get_post_meta($coupon->ID, '_wcd_fail_count', true);
-            echo '<li>' . esc_html(get_the_title($coupon->ID));
+            $edit = function_exists('get_edit_post_link') ? get_edit_post_link($coupon->ID) : '';
+
+            echo '<li class="vc-coupon-list__item">';
+
+            $title = get_the_title($coupon->ID);
+            if ($edit) {
+                printf('<a class="vc-coupon-list__title" href="%s">%s</a>',
+                    esc_url($edit), esc_html($title));
+            } else {
+                echo '<span class="vc-coupon-list__title">' . esc_html($title) . '</span>';
+            }
+
+            echo '<span class="vc-coupon-list__meta">';
             if ($code !== '') {
-                echo ' <code>' . esc_html($code) . '</code>';
+                echo '<code class="vc-coupon-list__code">' . esc_html($code) . '</code>';
             }
             if ($ok || $bad) {
-                echo ' <span style="color:#646970;">' . esc_html("{$ok}\u{2713} {$bad}\u{2717}") . '</span>';
+                // Readers' own reports. This is what decides whether the page
+                // is allowed to call a code verified, so show the split.
+                printf(
+                    '<span class="vc-coupon-list__votes" title="%s">%s / %s</span>',
+                    esc_attr__('Reader reports: worked / did not work', 'vc-merchant'),
+                    esc_html(sprintf(__('%d ok', 'vc-merchant'), $ok)),
+                    esc_html(sprintf(__('%d bad', 'vc-merchant'), $bad))
+                );
             }
+            echo '</span>';
+
             echo '</li>';
         }
         echo '</ul>';
+
+        $extra = count($live) - count($shown);
+        if ($extra > 0) {
+            echo '<p class="description">' . esc_html(sprintf(
+                _n('%d more not shown.', '%d more not shown.', $extra, 'vc-merchant'),
+                $extra)) . '</p>';
+        }
+    }
+
+    if (function_exists('admin_url')) {
+        // The admin list filters by slug. If a term somehow has none, link to
+        // the unfiltered list rather than emitting a broken filter.
+        $slug = isset($term->slug) ? (string) $term->slug : '';
+        $target = 'edit.php?post_type=wcd_coupon';
+        if ($slug !== '') {
+            $target .= '&wcd_brand=' . urlencode($slug);
+        }
+        printf(
+            '<p class="vc-coupon-manage"><a href="%s">%s</a></p>',
+            esc_url(admin_url($target)),
+            esc_html__('Manage this brand\'s coupons', 'vc-merchant')
+        );
     }
 }
+
+/**
+ * Styles for the "Linked coupons" box.
+ *
+ * Inline so there is no extra request for a handful of rules, and printed only
+ * on the merchant editor screen.
+ */
+add_action('admin_head', function () {
+    if (!vc_coupons_active() || !function_exists('get_current_screen')) {
+        return;
+    }
+    $screen = get_current_screen();
+    if (!$screen || !in_array($screen->post_type, vc_merchant_post_types(), true)) {
+        return;
+    }
+    echo '<style>
+    .vc-coupon-status { margin: 0 0 8px; }
+    .vc-coupon-status__badge { display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: 600; background: #f0f0f1; color: #3c434a; }
+    .vc-coupon-status--verified-code { background: #e3f3e8; color: #0a5c33; }
+    .vc-coupon-status--best-deal { background: #fdf3e0; color: #76520c; }
+    .vc-coupon-list { margin: 8px 0 4px; padding: 0; list-style: none; }
+    .vc-coupon-list__item { display: flex; flex-direction: column; gap: 2px;
+        padding: 6px 0; border-top: 1px solid #f0f0f1; }
+    .vc-coupon-list__item:first-child { border-top: 0; }
+    .vc-coupon-list__title { font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+    .vc-coupon-list__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .vc-coupon-list__code { font-size: 11px; padding: 1px 5px; background: #f6f7f7; }
+    .vc-coupon-list__votes { font-size: 11px; color: #646970; cursor: help; }
+    .vc-coupon-manage { margin: 8px 0 0; font-size: 12px; }
+    </style>';
+});
 
 add_action('save_post', function ($post_id) {
     if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
