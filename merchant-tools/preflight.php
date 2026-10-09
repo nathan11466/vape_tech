@@ -251,6 +251,7 @@ $required = array(
     'vc_merchant_restricted_line', 'vc_merchant_import_csv', 'vc_seed_ships_to',
     'vc_merchant_offer_mode', 'vc_coupons_active', 'vc_merchant_brand_term',
     'vc_merchant_coupon_status', 'vc_merchant_live_coupons',
+    'vc_logo_sideload', 'vc_logo_sideload_batch', 'vc_logo_is_local',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -320,7 +321,7 @@ $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
     'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
     'wp-merchant-settings.php', 'wp-merchant-editor.php', 'wp-merchant-coupons.php',
-    'wp-merchant-import.php',
+    'wp-merchant-logos.php', 'wp-merchant-import.php',
     'assets/merchant-pages.css',
 );
 foreach ($files as $f) {

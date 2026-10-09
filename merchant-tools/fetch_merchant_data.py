@@ -368,7 +368,55 @@ def _logo_from_markup(html):
     return ""
 
 
-def find_logo(html, base_url):
+def _logo_from_alt(html, brand_name):
+    """
+    An <img> whose alt or title is the store's own name.
+
+    Most themes label the header logo with the store name rather than the word
+    "logo". The comparison is deliberately near-exact: a product shot with
+    alt="Juice Head Mango 100ml" contains the brand name too, and matching on
+    containment would pick up the first product on the page.
+    """
+    wanted = re.sub(r"[^a-z0-9]+", "", (brand_name or "").lower())
+    if len(wanted) < 3:
+        return ""
+
+    head = re.split(r"</header>", html, maxsplit=1, flags=re.I)[0]
+
+    for region in (head, html):
+        for tag in re.finditer(r"<img\b[^>]*>", region, re.I):
+            attrs = tag.group(0)
+
+            label = ""
+            for attr in ("alt", "title"):
+                found = re.search(attr + r'=["\']([^"\']*)', attrs, re.I)
+                if found:
+                    label = found.group(1)
+                    break
+            if not label:
+                continue
+
+            # Allow a trailing "logo" and the usual separators, nothing more.
+            normalized = re.sub(r"[^a-z0-9]+", "",
+                                re.sub(r"\blogos?\b", "", label.lower()))
+            if normalized != wanted:
+                continue
+
+            size = re.search(r'\b(?:width|height)=["\']?(\d+)', attrs, re.I)
+            if size and int(size.group(1)) < 32:
+                continue
+
+            for attr in ("data-src", "data-original", "data-lazy-src", "src"):
+                found = re.search(attr + r'=["\']([^"\']+)', attrs, re.I)
+                if not found:
+                    continue
+                url = found.group(1).split()[0].strip().rstrip(",")
+                if _logo_candidate_ok(url):
+                    return url
+    return ""
+
+
+def find_logo(html, base_url, brand_name=""):
     """
     The store's logo, with the source that supplied it.
 
@@ -380,9 +428,13 @@ def find_logo(html, base_url):
     brand_logo_url would publish a picture that is not the logo -- and feed it
     to Google as Organization.logo.
     """
-    for source, finder in (("schema", _logo_from_jsonld),
-                           ("head", _logo_from_head),
-                           ("markup", _logo_from_markup)):
+    finders = (
+        ("schema", lambda h: _logo_from_jsonld(h)),
+        ("head", lambda h: _logo_from_head(h)),
+        ("markup", lambda h: _logo_from_markup(h)),
+        ("alt", lambda h: _logo_from_alt(h, brand_name)),
+    )
+    for source, finder in finders:
         url = finder(html)
         if url:
             absolute = urllib.parse.urljoin(base_url, url)
@@ -455,7 +507,7 @@ def process(row, args, log):
     put("contact_email", find_email(html, urllib.parse.urlparse(base).netloc))
 
     if not args.skip_logos and not (row.get("brand_logo_url") or "").strip():
-        logo, logo_source = find_logo(html, base)
+        logo, logo_source = find_logo(html, base, name)
         if logo:
             put("brand_logo_url", logo, f"logo({logo_source})")
             if LOGO_LIGHT_VARIANT.search(logo):
@@ -463,6 +515,12 @@ def process(row, args, log):
                 # say so rather than leaving it to be noticed on the page.
                 log.append(f"{name}: CHECK logo looks like a white/light "
                            f"variant - {logo}")
+        else:
+            # Name the page that was actually read. A miss is usually a
+            # brand_url pointing somewhere other than the storefront, and
+            # without the URL there is no way to tell that from a site that
+            # genuinely does not label its logo.
+            log.append(f"{name}: no logo found on {base}")
 
     if not args.skip_policies:
         # Restrictions are not always on the shipping policy. Stores commonly

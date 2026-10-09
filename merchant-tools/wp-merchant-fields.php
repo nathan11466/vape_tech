@@ -97,7 +97,7 @@ add_action('init', 'vc_register_merchant_post_type', 5);
 foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
                'wp-merchant-seo.php', 'wp-merchant-archive.php',
                'wp-merchant-sections.php', 'wp-merchant-editor.php',
-               'wp-merchant-coupons.php',
+               'wp-merchant-coupons.php', 'wp-merchant-logos.php',
                'wp-merchant-import.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
     if (file_exists($vc_path)) {
