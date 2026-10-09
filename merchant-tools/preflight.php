@@ -252,6 +252,8 @@ $required = array(
     'vc_merchant_offer_mode', 'vc_coupons_active', 'vc_merchant_brand_term',
     'vc_merchant_coupon_status', 'vc_merchant_live_coupons',
     'vc_logo_sideload', 'vc_logo_sideload_batch', 'vc_logo_is_local',
+    'vc_merchant_coupon_shortcode', 'vc_coupons_registered_shortcodes',
+    'vc_coupons_meta_probe', 'vc_coupons_link_report',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));

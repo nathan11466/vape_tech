@@ -113,7 +113,9 @@ function vc_merchant_block($block, $post_id, $atts = array()) {
                 : '<div class="vc-offer-status">' . vc_merchant_offer_badge($post_id) . '</div>';
 
         case 'coupon':
-            $shortcode = $m('coupon_plugin_shortcode');
+            $shortcode = function_exists('vc_merchant_coupon_shortcode')
+                ? vc_merchant_coupon_shortcode($post_id)
+                : $m('coupon_plugin_shortcode');
             return $shortcode === ''
                 ? ''
                 : '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';

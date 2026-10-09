@@ -425,3 +425,349 @@ add_action('save_post', function ($post_id) {
         delete_post_meta($post_id, 'wcd_brand_term_id');
     }
 });
+
+/**
+ * The shortcode the coupon block should render for one store.
+ *
+ * Resolution order:
+ *   1. the store's own "Coupon widget shortcode" field, which always wins
+ *   2. a site-wide template with {brand} / {brand_id} placeholders
+ *
+ * The template exists because the per-store field is blank on every row the
+ * importer creates -- nothing in the CSV pipeline fills it -- so a store could
+ * be correctly matched to a brand, have live coupons, and still render an
+ * empty coupon section. One template setting wires every store at once.
+ *
+ * The coupon plugin's own tag and attribute names are not hard-coded here:
+ * they differ between versions, and guessing wrong would silently render
+ * nothing, which is the failure this is meant to remove.
+ */
+function vc_merchant_coupon_shortcode($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+
+    $explicit = trim((string) get_post_meta($post_id, 'coupon_plugin_shortcode', true));
+    if ($explicit !== '') {
+        return $explicit;
+    }
+
+    $template = trim((string) get_option('vc_coupon_shortcode_template', ''));
+    $template = (string) apply_filters('vc_merchant_coupon_shortcode_template', $template, $post_id);
+    if ($template === '') {
+        return '';
+    }
+
+    // Without a brand there is nothing to scope the shortcode to, and an
+    // unscoped one would list every coupon on the site on every store page.
+    $term = vc_merchant_brand_term($post_id);
+    if (!$term) {
+        return '';
+    }
+
+    return str_replace(
+        array('{brand}', '{brand_id}', '{brand_name}'),
+        array(
+            isset($term->slug) ? (string) $term->slug : '',
+            (string) $term->term_id,
+            (string) $term->name,
+        ),
+        $template
+    );
+}
+
+/* -------------------------------------------------------------------------
+ * Integration status
+ *
+ * This module talks to another plugin through its post type, taxonomy, meta
+ * keys and shortcode. Every one of those is an assumption about someone
+ * else's code, and when one is wrong the integration does not error -- it
+ * quietly does nothing, which is far harder to notice. This screen checks
+ * each assumption against what is actually installed.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Shortcode tags the coupon plugin has registered.
+ *
+ * Discovered rather than hard-coded, so a renamed or versioned tag shows up
+ * here instead of silently rendering an empty block.
+ */
+function vc_coupons_registered_shortcodes() {
+    $found = array();
+    foreach (array_keys($GLOBALS['shortcode_tags'] ?? array()) as $tag) {
+        if (strpos($tag, 'wcd') === 0 || strpos($tag, 'coupon') !== false) {
+            $found[] = $tag;
+        }
+    }
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * Which of the coupon meta keys this module reads actually exist on a real
+ * coupon, sampled from the newest few.
+ *
+ * @return array key => number of sampled coupons carrying it
+ */
+function vc_coupons_meta_probe($sample = 5) {
+    $keys = array('_wcd_type', '_wcd_code', '_wcd_success_count',
+                  '_wcd_fail_count', '_wcd_expiration');
+    $seen = array_fill_keys($keys, 0);
+
+    if (!post_type_exists('wcd_coupon')) {
+        return array('total' => 0, 'keys' => $seen);
+    }
+
+    $coupons = get_posts(array(
+        'post_type'      => 'wcd_coupon',
+        'post_status'    => 'any',
+        'posts_per_page' => $sample,
+        'fields'         => 'ids',
+    ));
+
+    foreach ($coupons as $id) {
+        foreach ($keys as $key) {
+            // Distinguish "absent" from "present but empty" -- a code with no
+            // expiry legitimately stores ''.
+            if (metadata_exists('post', $id, $key)) {
+                $seen[$key]++;
+            }
+        }
+    }
+
+    return array('total' => count($coupons), 'keys' => $seen);
+}
+
+/**
+ * Per-merchant wiring tally.
+ */
+function vc_coupons_link_report() {
+    $ids = get_posts(array(
+        'post_type'      => vc_merchant_post_types(),
+        'post_status'    => 'any',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+    ));
+
+    $report = array(
+        'merchants'      => count($ids),
+        'linked'         => 0,
+        'with_coupons'   => 0,
+        'has_shortcode'  => 0,
+        'renders_empty'  => array(),
+    );
+
+    foreach ($ids as $id) {
+        $term = vc_merchant_brand_term($id);
+        if ($term) {
+            $report['linked']++;
+        }
+
+        $live = $term ? vc_merchant_live_coupons($id) : array();
+        if (!empty($live)) {
+            $report['with_coupons']++;
+        }
+
+        $shortcode = trim((string) get_post_meta($id, 'coupon_plugin_shortcode', true));
+        if ($shortcode !== '') {
+            $report['has_shortcode']++;
+        }
+
+        // The case that matters: real coupons exist and the page shows none,
+        // because the coupon block renders the shortcode column and that
+        // column is blank.
+        if (!empty($live) && $shortcode === '') {
+            $report['renders_empty'][] = $id;
+        }
+    }
+
+    return $report;
+}
+
+add_action('admin_menu', function () {
+    if (!vc_coupons_active()) {
+        return;
+    }
+    foreach (vc_merchant_post_types() as $post_type) {
+        add_submenu_page(
+            'edit.php?post_type=' . $post_type,
+            __('Coupon Integration', 'vc-merchant'),
+            __('Coupon Integration', 'vc-merchant'),
+            'manage_options',
+            'vc-coupon-status',
+            'vc_coupons_status_screen'
+        );
+        break;
+    }
+}, 22);
+
+function vc_coupons_status_screen() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    $saved = false;
+    if (!empty($_POST['vc_coupon_tpl_nonce'])
+        && wp_verify_nonce($_POST['vc_coupon_tpl_nonce'], 'vc_coupon_tpl')) {
+        // Not sanitize_text_field: that would strip the square brackets a
+        // shortcode is made of.
+        $template = trim(wp_unslash((string) ($_POST['vc_coupon_shortcode_template'] ?? '')));
+        update_option('vc_coupon_shortcode_template', $template);
+        $saved = true;
+    }
+
+    $probe = vc_coupons_meta_probe();
+    $tags  = vc_coupons_registered_shortcodes();
+    $report = vc_coupons_link_report();
+    $template = (string) get_option('vc_coupon_shortcode_template', '');
+
+    $rows = array(
+        array(
+            __('Coupon post type (wcd_coupon)', 'vc-merchant'),
+            post_type_exists('wcd_coupon'),
+            __('Not found -- the coupon plugin is inactive or renamed its post type.', 'vc-merchant'),
+        ),
+        array(
+            __('Brand taxonomy (wcd_brand)', 'vc-merchant'),
+            taxonomy_exists('wcd_brand'),
+            __('Not found -- stores cannot be matched to coupon brands.', 'vc-merchant'),
+        ),
+        array(
+            __('Coupon shortcode registered', 'vc-merchant'),
+            !empty($tags),
+            __('No coupon shortcode found, so the coupon block has nothing to render.', 'vc-merchant'),
+        ),
+    );
+    ?>
+    <div class="wrap">
+        <h1><?php esc_html_e('Coupon Integration', 'vc-merchant'); ?></h1>
+        <p class="description" style="max-width:680px;">
+            <?php esc_html_e('This plugin reads the coupon plugin\'s post type, brand taxonomy and vote counts. When one of those does not match, nothing errors -- the coupon section just comes out empty. This page checks each one against what is installed right now.', 'vc-merchant'); ?>
+        </p>
+
+        <h2><?php esc_html_e('Contract', 'vc-merchant'); ?></h2>
+        <table class="widefat striped" style="max-width:860px;">
+            <tbody>
+            <?php foreach ($rows as $row) : ?>
+                <tr>
+                    <td style="width:280px;"><strong><?php echo esc_html($row[0]); ?></strong></td>
+                    <td style="width:90px;">
+                        <?php if ($row[1]) : ?>
+                            <span style="color:#0a5c33;font-weight:600;">&#10003; <?php esc_html_e('OK', 'vc-merchant'); ?></span>
+                        <?php else : ?>
+                            <span style="color:#8a2424;font-weight:600;">&#10007; <?php esc_html_e('Missing', 'vc-merchant'); ?></span>
+                        <?php endif; ?>
+                    </td>
+                    <td><?php echo $row[1] ? '' : esc_html($row[2]); ?></td>
+                </tr>
+            <?php endforeach; ?>
+                <tr>
+                    <td><strong><?php esc_html_e('Shortcodes found', 'vc-merchant'); ?></strong></td>
+                    <td colspan="2">
+                        <?php echo $tags
+                            ? '<code>[' . implode(']</code>, <code>[', array_map('esc_html', $tags)) . ']</code>'
+                            : esc_html__('none', 'vc-merchant'); ?>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2><?php esc_html_e('Coupon fields', 'vc-merchant'); ?></h2>
+        <?php if ($probe['total'] < 1) : ?>
+            <p><?php esc_html_e('No coupons exist yet, so the field names cannot be checked. Add one coupon and reload this page.', 'vc-merchant'); ?></p>
+        <?php else : ?>
+            <p class="description">
+                <?php echo esc_html(sprintf(
+                    __('Sampled %d coupon(s). A field missing from all of them means this plugin is reading a name the coupon plugin does not use.', 'vc-merchant'),
+                    $probe['total'])); ?>
+            </p>
+            <table class="widefat striped" style="max-width:860px;">
+                <tbody>
+                <?php foreach ($probe['keys'] as $key => $count) : ?>
+                    <tr>
+                        <td style="width:280px;"><code><?php echo esc_html($key); ?></code></td>
+                        <td style="width:90px;">
+                            <?php if ($count > 0) : ?>
+                                <span style="color:#0a5c33;font-weight:600;">&#10003;</span>
+                            <?php else : ?>
+                                <span style="color:#8a2424;font-weight:600;">&#10007;</span>
+                            <?php endif; ?>
+                        </td>
+                        <td><?php echo esc_html(sprintf(
+                            __('present on %1$d of %2$d', 'vc-merchant'), $count, $probe['total'])); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+
+        <h2><?php esc_html_e('Coupon section shortcode', 'vc-merchant'); ?></h2>
+        <?php if ($saved) : ?>
+            <div class="notice notice-success"><p><?php esc_html_e('Saved.', 'vc-merchant'); ?></p></div>
+        <?php endif; ?>
+        <p class="description" style="max-width:680px;">
+            <?php esc_html_e('The coupon section renders this shortcode, with {brand} replaced by the store\'s linked coupon brand. Set it once here instead of filling the field on all 112 stores. A store\'s own "Coupon widget shortcode" field still overrides it.', 'vc-merchant'); ?>
+        </p>
+        <form method="post">
+            <?php wp_nonce_field('vc_coupon_tpl', 'vc_coupon_tpl_nonce'); ?>
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row">
+                        <label for="vc_coupon_shortcode_template"><?php esc_html_e('Template', 'vc-merchant'); ?></label>
+                    </th>
+                    <td>
+                        <input type="text" class="large-text code"
+                               id="vc_coupon_shortcode_template"
+                               name="vc_coupon_shortcode_template"
+                               value="<?php echo esc_attr($template); ?>"
+                               placeholder="[wcd_coupons brand=&quot;{brand}&quot;]" />
+                        <p class="description">
+                            <?php esc_html_e('Placeholders: {brand} (slug), {brand_id}, {brand_name}.', 'vc-merchant'); ?>
+                            <?php if ($tags) : ?>
+                                <br /><?php esc_html_e('Tags this site has registered:', 'vc-merchant'); ?>
+                                <?php echo '<code>[' . implode(']</code> <code>[', array_map('esc_html', $tags)) . ']</code>'; ?>
+                                <br /><?php esc_html_e('Check that plugin\'s documentation for the attribute name it expects for a brand.', 'vc-merchant'); ?>
+                            <?php endif; ?>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button(__('Save template', 'vc-merchant')); ?>
+        </form>
+
+        <h2><?php esc_html_e('Store wiring', 'vc-merchant'); ?></h2>
+        <table class="widefat striped" style="max-width:860px;">
+            <tbody>
+                <tr><td style="width:280px;"><?php esc_html_e('Stores', 'vc-merchant'); ?></td>
+                    <td><?php echo (int) $report['merchants']; ?></td></tr>
+                <tr><td><?php esc_html_e('Matched to a coupon brand', 'vc-merchant'); ?></td>
+                    <td><?php echo (int) $report['linked']; ?></td></tr>
+                <tr><td><?php esc_html_e('With at least one live coupon', 'vc-merchant'); ?></td>
+                    <td><?php echo (int) $report['with_coupons']; ?></td></tr>
+                <tr><td><?php esc_html_e('With a coupon widget shortcode set', 'vc-merchant'); ?></td>
+                    <td><?php echo (int) $report['has_shortcode']; ?></td></tr>
+            </tbody>
+        </table>
+
+        <?php if (!empty($report['renders_empty'])) : ?>
+            <div class="notice notice-warning" style="max-width:860px;">
+                <p>
+                    <strong><?php echo esc_html(sprintf(
+                        _n('%d store has live coupons but shows none.',
+                           '%d stores have live coupons but show none.',
+                           count($report['renders_empty']), 'vc-merchant'),
+                        count($report['renders_empty']))); ?></strong>
+                </p>
+                <p>
+                    <?php esc_html_e('The coupon section renders whatever is in the store\'s "Coupon widget shortcode" field, and that field is empty. Fill it on each store, or set a site-wide default below.', 'vc-merchant'); ?>
+                </p>
+                <ul style="list-style:disc;margin-left:20px;">
+                    <?php foreach (array_slice($report['renders_empty'], 0, 10) as $id) : ?>
+                        <li><a href="<?php echo esc_url(get_edit_post_link($id)); ?>">
+                            <?php echo esc_html(vc_merchant_display_name($id)); ?></a></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php
+}

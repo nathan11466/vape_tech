@@ -199,7 +199,9 @@ add_shortcode('merchant_offer', function ($atts) {
     $out .= vc_merchant_section(__('Best current deal', 'vc-merchant'),
         vc_section_meta($post_id, 'best_offer_summary'));
 
-    $shortcode = vc_section_meta($post_id, 'coupon_plugin_shortcode');
+    $shortcode = function_exists('vc_merchant_coupon_shortcode')
+        ? vc_merchant_coupon_shortcode($post_id)
+        : vc_section_meta($post_id, 'coupon_plugin_shortcode');
     if ($shortcode !== '') {
         $out .= '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';
     }

@@ -21,6 +21,8 @@ $GLOBALS['coupons'] = array();    // list of post objects
 $GLOBALS['current_id'] = 1;
 $GLOBALS['filters'] = array();
 $GLOBALS['has_coupon_plugin'] = true;
+$GLOBALS['options'] = array();
+$GLOBALS['shortcode_tags'] = array('wcd_coupons' => 'x', 'merchant_page' => 'y');
 
 class FakeCoupon {
     public $ID, $post_modified_gmt, $post_date_gmt;
@@ -65,8 +67,11 @@ function get_term_by($field, $value, $tax = '') {
 }
 function get_term_link($t) { return 'https://vapingcheap.com/brand/voopoo/'; }
 function get_terms($a = array()) { return array(); }
+function get_posts($a = array()) {
+    return ($a['post_type'] ?? '') === 'wcd_coupon' ? ($GLOBALS['probe_ids'] ?? array()) : array();
+}
 function current_time($f) { return date($f); }
-function get_option($k, $d = false) { return $d; }
+function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
 function is_wp_error($t) { return false; }
 function apply_filters($tag, $value) {
     foreach ($GLOBALS['filters'][$tag] ?? array() as $fn) {
@@ -95,6 +100,11 @@ function get_edit_post_link($id) {
 }
 function admin_url($p = '') { return 'https://site.test/wp-admin/' . $p; }
 function get_current_screen() { return null; }
+function metadata_exists($t, $id, $k) { return array_key_exists($k, $GLOBALS['meta'][$id] ?? array()); }
+function wp_unslash($v) { return $v; }
+function add_submenu_page() {}
+function submit_button() {}
+function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
 function vc_merchant_post_types() { return array('merchant'); }
 function vc_merchant_display_name($id = null) {
     $id = $id ?: $GLOBALS['current_id'];
@@ -300,6 +310,77 @@ check('the narrow sidebar is forced to a single column',
     (bool) preg_match('/\.vc-col-side[^{]*\.wcd-grid\s*\{\s*--wcd-columns:\s*1\s*!important/s', $css));
 check('cards cannot be pushed wider than their column',
     strpos($css, '.vc-coupon-widget .wcd-card { min-width: 0; }') !== false);
+
+/* -------------------------------------------------------------------------
+ * Which shortcode the coupon section renders
+ *
+ * Nothing in the CSV pipeline fills coupon_plugin_shortcode, so before the
+ * template existed a store could be correctly matched to a brand, hold live
+ * coupons, and still render an empty coupon section.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['titles'][5] = 'VooPoo';
+$GLOBALS['meta'][5] = array();
+$GLOBALS['options'] = array();
+check('with no field and no template, nothing is rendered',
+    vc_merchant_coupon_shortcode(5) === '', vc_merchant_coupon_shortcode(5));
+
+$GLOBALS['options']['vc_coupon_shortcode_template'] = '[wcd_coupons brand="{brand}"]';
+check('the template is filled in from the linked brand slug',
+    vc_merchant_coupon_shortcode(5) === '[wcd_coupons brand="voopoo"]',
+    vc_merchant_coupon_shortcode(5));
+
+$GLOBALS['titles'][6] = 'VooPoo';
+$GLOBALS['meta'][6] = array();
+$GLOBALS['options']['vc_coupon_shortcode_template'] = '[wcd_coupons id="{brand_id}" title="{brand_name}"]';
+check('{brand_id} and {brand_name} are substituted too',
+    vc_merchant_coupon_shortcode(6) === '[wcd_coupons id="50" title="VooPoo"]',
+    vc_merchant_coupon_shortcode(6));
+
+// A store's own field is a deliberate override and must win.
+$GLOBALS['titles'][7] = 'VooPoo';
+$GLOBALS['meta'][7] = array('coupon_plugin_shortcode' => '[wcd_coupons brand="hand-picked" columns="1"]');
+$GLOBALS['options']['vc_coupon_shortcode_template'] = '[wcd_coupons brand="{brand}"]';
+check('a store\'s own shortcode field overrides the template',
+    vc_merchant_coupon_shortcode(7) === '[wcd_coupons brand="hand-picked" columns="1"]',
+    vc_merchant_coupon_shortcode(7));
+
+// An unmatched store must render nothing rather than an unscoped shortcode,
+// which would list every coupon on the site on every store page.
+$GLOBALS['titles'][8] = 'Not A Known Brand';
+$GLOBALS['meta'][8] = array();
+check('an unmatched store renders nothing, not an unscoped shortcode',
+    vc_merchant_coupon_shortcode(8) === '', vc_merchant_coupon_shortcode(8));
+
+$GLOBALS['filters']['vc_merchant_coupon_shortcode_template'][] =
+    function ($tpl, $id = null) { return '[filtered brand="{brand}"]'; };
+$GLOBALS['titles'][9] = 'VooPoo';
+$GLOBALS['meta'][9] = array();
+check('a filter can replace the template',
+    vc_merchant_coupon_shortcode(9) === '[filtered brand="voopoo"]',
+    vc_merchant_coupon_shortcode(9));
+$GLOBALS['filters']['vc_merchant_coupon_shortcode_template'] = array();
+
+/* -------------------------------------------------------------------------
+ * The integration contract is discovered, not assumed
+ * ---------------------------------------------------------------------- */
+
+$tags = vc_coupons_registered_shortcodes();
+check('the coupon plugin\'s shortcode tags are discovered',
+    in_array('wcd_coupons', $tags, true), json_encode($tags));
+check('and unrelated shortcodes are not reported as the coupon plugin\'s',
+    !in_array('merchant_page', $tags, true), json_encode($tags));
+
+$GLOBALS['meta'][701] = array(
+    '_wcd_type' => 'code', '_wcd_code' => 'X',
+    '_wcd_success_count' => 1, '_wcd_fail_count' => 0,
+);
+$GLOBALS['probe_ids'] = array(701);
+$probe = vc_coupons_meta_probe();
+check('the meta probe reports a field the coupons do carry',
+    ($probe['keys']['_wcd_code'] ?? 0) === 1, json_encode($probe));
+check('and flags one they do not',
+    ($probe['keys']['_wcd_expiration'] ?? null) === 0, json_encode($probe));
 
 /* -------------------------------------------------------------------------
  * Degrade cleanly without the coupon plugin
