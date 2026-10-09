@@ -806,3 +806,220 @@ function vc_coupons_status_screen() {
     </div>
     <?php
 }
+
+/* -------------------------------------------------------------------------
+ * Brand-level figures used in titles and descriptions
+ *
+ * Cached on the brand term rather than recomputed per request, because the
+ * SEO title runs on every page load and this would otherwise be two extra
+ * queries each time.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Coupons for this store whose expiry has passed, newest first.
+ *
+ * The coupon plugin renders expired cards inline with the live ones. Having
+ * them separately lets the page group them under their own heading instead.
+ */
+function vc_merchant_expired_coupons($post_id = null, $limit = 6) {
+    $term = vc_merchant_brand_term($post_id);
+    if (!$term) {
+        return array();
+    }
+
+    $query = new WP_Query(array(
+        'post_type'           => 'wcd_coupon',
+        'post_status'         => 'publish',
+        'posts_per_page'      => 30,
+        'no_found_rows'       => true,
+        'ignore_sticky_posts' => true,
+        'tax_query'           => array(array(
+            'taxonomy' => 'wcd_brand',
+            'field'    => 'term_id',
+            'terms'    => $term->term_id,
+        )),
+    ));
+
+    $today = current_time('Y-m-d');
+    $expired = array();
+
+    foreach ($query->posts as $post) {
+        $expires = trim((string) get_post_meta($post->ID, '_wcd_expiration', true));
+        if ($expires === '') {
+            continue;
+        }
+        $stamp = strtotime($expires);
+        if (!$stamp || date('Y-m-d', $stamp) >= $today) {
+            continue;
+        }
+        $expired[$post->ID] = $stamp;
+    }
+
+    // Most recently expired first -- a code that died last week is more
+    // plausible to a reader than one from two years ago.
+    arsort($expired);
+
+    return array_slice(array_keys($expired), 0, max(0, (int) $limit));
+}
+
+/**
+ * The largest percentage discount among this store's live coupons.
+ *
+ * Percentages only, and deliberately so. A threshold ("free shipping over
+ * $75") and a flat amount ("$10 off") are not percentages, and rendering
+ * either as "Up to X% Off" in a title would state something no coupon says.
+ * Returns '' when nothing qualifies, which drops the clause from the title.
+ *
+ * Coupons readers report as broken more often than working are excluded:
+ * the headline claim should not rest on a code that has stopped working.
+ */
+function vc_merchant_max_discount($post_id = null) {
+    $best = 0;
+
+    foreach (vc_merchant_live_coupons($post_id) as $post) {
+        $ok  = (int) get_post_meta($post->ID, '_wcd_success_count', true);
+        $bad = (int) get_post_meta($post->ID, '_wcd_fail_count', true);
+        if ($ok < $bad) {
+            continue;
+        }
+
+        // The plugin stores the human-entered figure, so read a percentage
+        // out of it rather than assuming a number.
+        $haystack = trim((string) get_post_meta($post->ID, '_wcd_discount', true))
+            . ' ' . get_the_title($post->ID);
+
+        if (preg_match_all('/(\d{1,2}(?:\.\d+)?)\s*%/', $haystack, $matches)) {
+            foreach ($matches[1] as $figure) {
+                $value = (float) $figure;
+                // A "100% off" claim is almost always a typo or a giveaway,
+                // not a sitewide discount worth putting in a title.
+                if ($value > 0 && $value < 100 && $value > $best) {
+                    $best = $value;
+                }
+            }
+        }
+    }
+
+    return $best > 0 ? (string) (int) round($best) : '';
+}
+
+/**
+ * Recompute and store the brand figures.
+ *
+ * @return array{active_count:int,max_discount:string}
+ */
+function vc_merchant_refresh_brand_figures($post_id) {
+    $figures = array(
+        'active_count' => count(vc_merchant_live_coupons($post_id)),
+        'max_discount' => vc_merchant_max_discount($post_id),
+    );
+
+    $term = vc_merchant_brand_term($post_id);
+    if ($term) {
+        update_term_meta($term->term_id, '_vc_active_count', $figures['active_count']);
+        update_term_meta($term->term_id, '_vc_max_discount', $figures['max_discount']);
+        update_term_meta($term->term_id, '_vc_figures_updated', current_time('mysql'));
+    }
+
+    return $figures;
+}
+
+/**
+ * The cached figures, recomputed when absent.
+ */
+function vc_merchant_brand_figures($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $term = vc_merchant_brand_term($post_id);
+    if (!$term) {
+        return array('active_count' => 0, 'max_discount' => '');
+    }
+
+    $stamp = get_term_meta($term->term_id, '_vc_figures_updated', true);
+    if ($stamp === '') {
+        return vc_merchant_refresh_brand_figures($post_id);
+    }
+
+    return array(
+        'active_count' => (int) get_term_meta($term->term_id, '_vc_active_count', true),
+        'max_discount' => (string) get_term_meta($term->term_id, '_vc_max_discount', true),
+    );
+}
+
+/**
+ * Drop the cache when the coupons behind it change.
+ *
+ * Stored against the brand term, so every store page sharing that brand
+ * picks up the new figures.
+ */
+function vc_merchant_invalidate_brand_figures($coupon_id) {
+    if (get_post_type($coupon_id) !== 'wcd_coupon') {
+        return;
+    }
+    $terms = wp_get_post_terms($coupon_id, 'wcd_brand', array('fields' => 'ids'));
+    if (is_wp_error($terms)) {
+        return;
+    }
+    foreach ($terms as $term_id) {
+        delete_term_meta($term_id, '_vc_figures_updated');
+    }
+}
+add_action('save_post_wcd_coupon', 'vc_merchant_invalidate_brand_figures', 20);
+add_action('deleted_post', 'vc_merchant_invalidate_brand_figures', 20);
+add_action('trashed_post', 'vc_merchant_invalidate_brand_figures', 20);
+
+/**
+ * The coupon section: live coupons, then recently expired under their own
+ * heading.
+ *
+ * The coupon plugin renders expired cards inline with the live ones, which
+ * buries a working code among dead ones. Splitting it keeps the expired
+ * cards on the page -- they are evidence the page is maintained, and readers
+ * do look for them -- without letting them compete with the live offers.
+ *
+ * Built from the plugin's own [coupon_deals ids="..."] so the cards, the
+ * reveal behaviour and the schema stay entirely its own.
+ */
+function vc_merchant_coupon_section($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+
+    $shortcode = vc_merchant_coupon_shortcode($post_id);
+    if ($shortcode === '') {
+        return '';
+    }
+
+    // Without the plugin's own post type there is nothing to split, so render
+    // whatever the shortcode gives and leave it at that.
+    if (!vc_coupons_active() || !apply_filters('vc_merchant_split_expired', true, $post_id)) {
+        return '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';
+    }
+
+    $expired = vc_merchant_expired_coupons($post_id);
+
+    // A store whose only coupons are expired still shows them, rather than an
+    // empty section that reads as broken.
+    $live = vc_merchant_live_coupons($post_id);
+    if (empty($expired)) {
+        return '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';
+    }
+
+    $out = '';
+
+    if (!empty($live)) {
+        $live_ids = implode(',', array_map(function ($post) { return (int) $post->ID; }, $live));
+        $out .= '<div class="vc-coupon-widget">'
+            . do_shortcode('[coupon_deals ids="' . esc_attr($live_ids) . '" count="30"]')
+            . '</div>';
+    }
+
+    $out .= '<section class="vc-coupon-widget vc-coupon-expired">'
+        . '<h2 class="vc-coupon-expired__heading">'
+        . esc_html__('Recently expired', 'vc-merchant')
+        . '</h2>'
+        . '<p class="vc-coupon-expired__note">'
+        . esc_html__('These codes have stopped working. They are listed so you can see what has run out rather than wonder whether it was ever here.', 'vc-merchant')
+        . '</p>'
+        . do_shortcode('[coupon_deals ids="' . esc_attr(implode(',', $expired)) . '" count="' . count($expired) . '"]')
+        . '</section>';
+
+    return $out;
+}

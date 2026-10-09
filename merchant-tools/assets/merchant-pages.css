@@ -803,3 +803,34 @@
   background: #fafafa;
   font-size: .9rem;
 }
+
+/* ---------- Recently expired coupons ----------
+ *
+ * Visually subordinate to the live ones: present as evidence the page is
+ * maintained, but never competing with an offer that still works.
+ */
+
+.vc-coupon-expired {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e5e7eb;
+}
+.vc-coupon-expired__heading {
+  font-size: 1.05rem;
+  margin: 0 0 .35rem;
+  color: #555;
+}
+.vc-coupon-expired__note {
+  margin: 0 0 .75rem;
+  font-size: .85rem;
+  color: #6b7280;
+}
+/* The plugin already marks expired cards; this just damps them further so
+   the live grid above stays the obvious place to look. */
+.vc-coupon-expired .wcd-card { opacity: .72; }
+.vc-coupon-expired .wcd-card:hover { opacity: 1; }
+.vc-coupon-expired .wcd-card .wcd-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(0, 0, 0, .35);
+}

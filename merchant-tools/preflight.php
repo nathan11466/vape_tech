@@ -17,6 +17,8 @@
 
 error_reporting(E_ALL & ~E_DEPRECATED);
 define('ABSPATH', __DIR__ . '/');
+define('HOUR_IN_SECONDS', 3600);
+define('DAY_IN_SECONDS', 86400);
 
 $GLOBALS['registered_taxonomies'] = array();
 $GLOBALS['registered_shortcodes'] = array();
@@ -40,6 +42,13 @@ function register_taxonomy($name, $types, $args = array()) {
 }
 function add_shortcode($tag, $cb) { $GLOBALS['registered_shortcodes'][$tag] = true; }
 function register_activation_hook($file, $cb) { $GLOBALS['activation_hooks'][] = array($file, $cb); }
+function register_deactivation_hook($file, $cb) { $GLOBALS['deactivation_hooks'][] = array($file, $cb); }
+function wp_next_scheduled($h) { return $GLOBALS['scheduled'][$h] ?? false; }
+function wp_schedule_event($t, $r, $h) { $GLOBALS['scheduled'][$h] = $t; return true; }
+function wp_unschedule_event($t, $h) { unset($GLOBALS['scheduled'][$h]); return true; }
+function has_action($t, $f = false) { return false; }
+function do_action() {}
+function wp_get_post_terms($i, $t, $a = array()) { return array(); }
 function add_action($tag, $cb = null, $p = 10, $a = 1) { $GLOBALS['actions'][$tag][] = $cb; }
 function add_filter($tag, $cb = null, $p = 10, $a = 1) { $GLOBALS['actions'][$tag][] = $cb; }
 function apply_filters($tag, $value) { return $value; }
@@ -254,6 +263,10 @@ $required = array(
     'vc_logo_sideload', 'vc_logo_sideload_batch', 'vc_logo_is_local',
     'vc_merchant_coupon_shortcode', 'vc_coupons_registered_shortcodes',
     'vc_coupons_meta_probe', 'vc_coupons_link_report',
+    'vc_merchant_coupon_section', 'vc_merchant_expired_coupons',
+    'vc_merchant_max_discount', 'vc_merchant_brand_figures',
+    'vc_merchant_render_tokens', 'vc_merchant_seo_tokens',
+    'vc_freshness_check', 'vc_freshness_purge_caches', 'vc_freshness_unschedule',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -318,12 +331,17 @@ if (function_exists('vc_editor_field_groups')) {
         empty($unreachable), 'unreachable: ' . implode(', ', $unreachable));
 }
 
+check('a deactivation hook is registered',
+    !empty($GLOBALS['deactivation_hooks']),
+    'nothing would unschedule the freshness check');
+
 echo "\nShipped files\n";
 $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
     'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
     'wp-merchant-settings.php', 'wp-merchant-editor.php', 'wp-merchant-coupons.php',
-    'wp-merchant-logos.php', 'wp-merchant-import.php',
+    'wp-merchant-logos.php', 'wp-merchant-freshness.php',
+    'wp-merchant-import.php',
     'assets/merchant-pages.css',
 );
 foreach ($files as $f) {

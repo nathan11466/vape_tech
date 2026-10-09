@@ -98,6 +98,7 @@ foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merch
                'wp-merchant-seo.php', 'wp-merchant-archive.php',
                'wp-merchant-sections.php', 'wp-merchant-editor.php',
                'wp-merchant-coupons.php', 'wp-merchant-logos.php',
+               'wp-merchant-freshness.php',
                'wp-merchant-import.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
     if (file_exists($vc_path)) {
@@ -239,6 +240,15 @@ function vc_merchant_activate() {
     flush_rewrite_rules();
 }
 register_activation_hook(__FILE__, 'vc_merchant_activate');
+
+/**
+ * Leave nothing scheduled behind on deactivation.
+ */
+register_deactivation_hook(__FILE__, function () {
+    if (function_exists('vc_freshness_unschedule')) {
+        vc_freshness_unschedule();
+    }
+});
 
 /* -------------------------------------------------------------------------
  * Merchant meta fields

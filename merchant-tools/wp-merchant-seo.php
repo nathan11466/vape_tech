@@ -21,6 +21,82 @@ function vc_merchant_freshness_stamp() {
     return date_i18n('F Y');
 }
 
+/* -------------------------------------------------------------------------
+ * Token templates
+ *
+ * Titles and descriptions are written as templates so the wording can be
+ * changed without editing code, and the figures in them stay current.
+ *
+ * [[ ... ]] marks an optional segment: if any token inside it resolves
+ * empty, the whole segment is dropped. That is what stops a store with no
+ * percentage discount rendering "Up to % Off", which is the failure mode of
+ * plain substitution.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Token values for one merchant.
+ */
+function vc_merchant_seo_tokens($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+
+    $figures = function_exists('vc_merchant_brand_figures')
+        ? vc_merchant_brand_figures($post_id)
+        : array('active_count' => 0, 'max_discount' => '');
+
+    return apply_filters('vc_merchant_seo_tokens', array(
+        'brand_name'    => vc_merchant_display_name($post_id),
+        'current_month' => date_i18n('F'),
+        'current_year'  => date_i18n('Y'),
+        'max_discount'  => (string) $figures['max_discount'],
+        // Zero reads as empty so "0 active promo codes" is never rendered --
+        // the segment holding it drops instead.
+        'active_count'  => $figures['active_count'] > 0 ? (string) $figures['active_count'] : '',
+    ), $post_id);
+}
+
+/**
+ * Substitute tokens, dropping optional segments whose tokens are empty.
+ */
+function vc_merchant_render_tokens($template, array $tokens) {
+    $template = (string) $template;
+
+    // Optional segments first, so a dropped one never leaves its tokens behind.
+    $template = preg_replace_callback('/\[\[(.*?)\]\]/s', function ($match) use ($tokens) {
+        $segment = $match[1];
+
+        if (preg_match_all('/\{([a-z_]+)\}/', $segment, $found)) {
+            foreach ($found[1] as $name) {
+                if (!isset($tokens[$name]) || trim((string) $tokens[$name]) === '') {
+                    return '';
+                }
+            }
+        }
+
+        return $segment;
+    }, $template);
+
+    foreach ($tokens as $name => $value) {
+        $template = str_replace('{' . $name . '}', (string) $value, $template);
+    }
+
+    // Any token with no value left over, plus the whitespace it leaves.
+    $template = preg_replace('/\{[a-z_]+\}/', '', $template);
+
+    return trim(preg_replace('/\s{2,}/', ' ', $template));
+}
+
+/**
+ * The title template. Filterable and overridable via option.
+ */
+function vc_merchant_title_template() {
+    $stored = trim((string) get_option('vc_merchant_title_template', ''));
+    if ($stored === '') {
+        $stored = __('{brand_name} Coupon Codes & Promo Codes - {current_month} {current_year}[[ - Up to {max_discount}% Off]]', 'vc-merchant');
+    }
+
+    return apply_filters('vc_merchant_title_template', $stored);
+}
+
 /**
  * SEO title. Query-aligned for coupon intent, with a freshness marker.
  *
@@ -31,12 +107,21 @@ function vc_merchant_seo_title($post_id = null) {
     $post_id = $post_id ?: get_the_ID();
     $name = vc_merchant_display_name($post_id);
 
-    return sprintf(
-        /* translators: 1: brand name, 2: month and year */
-        __('%1$s Coupon Codes & Promo Codes - %2$s', 'vc-merchant'),
-        $name,
-        vc_merchant_freshness_stamp()
-    );
+    $title = vc_merchant_render_tokens(
+        vc_merchant_title_template(), vc_merchant_seo_tokens($post_id));
+
+    // A template an editor emptied, or one that resolved to nothing, must
+    // not produce a blank <title>.
+    if ($title === '') {
+        $title = sprintf(
+            /* translators: 1: brand name, 2: month and year */
+            __('%1$s Coupon Codes & Promo Codes - %2$s', 'vc-merchant'),
+            $name,
+            vc_merchant_freshness_stamp()
+        );
+    }
+
+    return $title;
 }
 
 /**
@@ -55,6 +140,21 @@ function vc_merchant_meta_description($post_id = null) {
     $offer = trim((string) get_post_meta($post_id, 'best_offer_summary', true));
     $stamp = vc_merchant_freshness_stamp();
 
+    $tokens = vc_merchant_seo_tokens($post_id);
+
+    // An explicit template is the editor's call, and overrides everything
+    // below. Left empty by default, because the built-in wording below
+    // mirrors the offer gate and a hand-written template cannot be checked
+    // against it.
+    $custom = trim((string) get_option('vc_merchant_description_template', ''));
+    $custom = (string) apply_filters('vc_merchant_description_template', $custom, $post_id);
+    if ($custom !== '') {
+        $rendered = vc_merchant_render_tokens($custom, $tokens);
+        if ($rendered !== '') {
+            return vc_merchant_trim_snippet($rendered);
+        }
+    }
+
     if ($mode === 'verified_code' && $offer !== '') {
         $text = sprintf(__('Verified %1$s coupon codes for %2$s. %3$s', 'vc-merchant'), $name, $stamp, $offer);
     } elseif ($mode === 'best_deal' && $offer !== '') {
@@ -67,7 +167,21 @@ function vc_merchant_meta_description($post_id = null) {
         );
     }
 
-    // Trim on a word boundary to keep it under the ~155 char snippet limit.
+    // The figures, where they exist. Additive, so the offer gate above still
+    // decides what the description is allowed to claim.
+    if ($tokens['max_discount'] !== '') {
+        $text .= ' ' . sprintf(__('Up to %s%% off.', 'vc-merchant'), $tokens['max_discount']);
+    }
+
+    return vc_merchant_trim_snippet($text);
+}
+
+/**
+ * Trim to the ~155 character snippet limit on a word boundary.
+ */
+function vc_merchant_trim_snippet($text) {
+    $text = trim((string) $text);
+
     if (function_exists('mb_strlen') && mb_strlen($text) > 155) {
         $text = rtrim(mb_substr($text, 0, 152));
         $cut = mb_strrpos($text, ' ');

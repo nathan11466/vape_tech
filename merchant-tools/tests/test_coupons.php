@@ -93,7 +93,6 @@ function date_i18n($f, $ts = null) { return date($f, $ts ?: time()); }
 function esc_html($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
 function esc_attr($v) { return $v; }
 function esc_url($v) { return (string) $v; }
-function esc_html__($v, $d = null) { return $v; }
 function esc_attr__($v, $d = null) { return $v; }
 function __($v, $d = null) { return $v; }
 function _n($s, $p, $n, $d = null) { return $n === 1 ? $s : $p; }
@@ -107,6 +106,12 @@ function wp_unslash($v) { return $v; }
 function add_submenu_page() {}
 function submit_button() {}
 function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
+function update_term_meta($id, $k, $v) { $GLOBALS['term_meta'][$id][$k] = $v; return true; }
+function delete_term_meta($id, $k) { unset($GLOBALS['term_meta'][$id][$k]); return true; }
+function wp_get_post_terms($id, $tax, $a = array()) { return array(50); }
+function get_post_type($id = null) { return 'wcd_coupon'; }
+function do_shortcode($s) { return '<!--rendered:' . $s . '-->'; }
+function esc_html__($v, $d = null) { return $v; }
 function vc_merchant_post_types() { return array('merchant'); }
 function vc_merchant_display_name($id = null) {
     $id = $id ?: $GLOBALS['current_id'];
@@ -426,6 +431,142 @@ check('but merchant data always wins over it',
 $GLOBALS['term_meta'][50] = array();
 check('and nothing is invented when neither has one',
     apply_filters('vc_merchant_logo_url', '', 12) === '');
+
+/* -------------------------------------------------------------------------
+ * Max discount: percentages only, from live non-failing coupons
+ *
+ * This figure goes in the page title, so anything it reports is a public
+ * claim about the store.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['titles'][20] = 'VooPoo';
+$GLOBALS['meta'][20] = array();
+
+function coupon_with($id, $discount, $title, $ok = 5, $bad = 0, $expires = '') {
+    $GLOBALS['meta'][$id] = array(
+        '_wcd_type' => 'code', '_wcd_code' => 'C' . $id,
+        '_wcd_discount' => $discount,
+        '_wcd_success_count' => $ok, '_wcd_fail_count' => $bad,
+        '_wcd_expiration' => $expires,
+    );
+    $GLOBALS['titles'][$id] = $title;
+    return new FakeCoupon($id);
+}
+
+$GLOBALS['coupons'] = array(
+    coupon_with(901, '15%', '15% off devices'),
+    coupon_with(902, '25%', '25% off clearance'),
+    coupon_with(903, '10%', '10% off everything'),
+);
+check('the largest live percentage is reported',
+    vc_merchant_max_discount(20) === '25', vc_merchant_max_discount(20));
+
+// A threshold and a flat amount are not percentages.
+$GLOBALS['coupons'] = array(
+    coupon_with(910, 'Free shipping over $75', 'Free shipping over $75'),
+    coupon_with(911, '$10 off', '$10 off your order'),
+);
+check('a shipping threshold is not reported as a percentage',
+    vc_merchant_max_discount(20) === '', vc_merchant_max_discount(20));
+
+// A code readers say is broken must not set the headline claim.
+$GLOBALS['coupons'] = array(
+    coupon_with(920, '50%', '50% off', 1, 9),
+    coupon_with(921, '10%', '10% off', 8, 0),
+);
+check('a failing code does not set the headline discount',
+    vc_merchant_max_discount(20) === '10', vc_merchant_max_discount(20));
+
+// An expired one is already out of live_coupons, so it cannot contribute.
+$GLOBALS['coupons'] = array(
+    coupon_with(930, '70%', '70% off', 9, 0, '2020-01-01'),
+    coupon_with(931, '20%', '20% off', 9, 0),
+);
+check('an expired code does not set the headline discount',
+    vc_merchant_max_discount(20) === '20', vc_merchant_max_discount(20));
+
+$GLOBALS['coupons'] = array(coupon_with(940, '100%', '100% off everything'));
+check('an implausible 100% claim is ignored',
+    vc_merchant_max_discount(20) === '', vc_merchant_max_discount(20));
+
+$GLOBALS['coupons'] = array();
+check('no coupons means no discount figure',
+    vc_merchant_max_discount(20) === '');
+
+/* -------------------------------------------------------------------------
+ * Cached figures
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['term_meta'][50] = array();
+$GLOBALS['coupons'] = array(
+    coupon_with(950, '30%', '30% off'),
+    coupon_with(951, '', 'Free gift'),
+);
+$figures = vc_merchant_brand_figures(20);
+check('figures count the live coupons', $figures['active_count'] === 2, json_encode($figures));
+check('figures carry the max discount', $figures['max_discount'] === '30', json_encode($figures));
+check('and are cached on the brand term',
+    (string) ($GLOBALS['term_meta'][50]['_vc_active_count'] ?? '') === '2',
+    json_encode($GLOBALS['term_meta'][50] ?? array()));
+
+// A changed coupon must drop the cache, not serve a stale figure.
+$GLOBALS['coupons'] = array(coupon_with(950, '45%', '45% off'));
+check('a stale cache is served until something invalidates it',
+    vc_merchant_brand_figures(20)['max_discount'] === '30');
+vc_merchant_invalidate_brand_figures(950);
+check('saving a coupon invalidates the cache',
+    vc_merchant_brand_figures(20)['max_discount'] === '45',
+    vc_merchant_brand_figures(20)['max_discount']);
+
+/* -------------------------------------------------------------------------
+ * Live and expired are rendered as separate sections
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['titles'][21] = 'VooPoo';
+$GLOBALS['meta'][21] = array();
+$GLOBALS['coupons'] = array(
+    coupon_with(960, '20%', 'Live one'),
+    coupon_with(961, '15%', 'Dead one', 5, 0, '2020-05-01'),
+    coupon_with(962, '10%', 'Older dead one', 5, 0, '2019-01-01'),
+);
+
+$expired = vc_merchant_expired_coupons(21);
+check('expired coupons are identified', count($expired) === 2, json_encode($expired));
+check('and ordered most-recently-expired first',
+    $expired[0] === 961, json_encode($expired));
+
+$section = vc_merchant_coupon_section(21);
+check('the live coupons render in their own grid',
+    strpos($section, 'ids="960"') !== false, $section);
+check('the expired ones render in a separate section',
+    strpos($section, 'vc-coupon-expired') !== false
+    && strpos($section, 'ids="961,962"') !== false, $section);
+check('the expired section is labelled for readers',
+    strpos($section, 'Recently expired') !== false, $section);
+check('and comes after the live grid',
+    strpos($section, 'ids="960"') < strpos($section, 'vc-coupon-expired'), $section);
+
+// Nothing expired: one plain grid, no empty "Recently expired" heading.
+$GLOBALS['coupons'] = array(coupon_with(970, '20%', 'Only live one'));
+$plain = vc_merchant_coupon_section(21);
+check('no expired coupons means no expired section',
+    strpos($plain, 'vc-coupon-expired') === false, $plain);
+
+// A store with no linked brand still renders nothing rather than an
+// unscoped grid.
+$GLOBALS['titles'][22] = 'Unlinked Store';
+$GLOBALS['meta'][22] = array();
+check('an unlinked store renders no coupon section',
+    vc_merchant_coupon_section(22) === '', vc_merchant_coupon_section(22));
+
+$GLOBALS['filters']['vc_merchant_split_expired'][] = function ($on, $id = null) { return false; };
+$GLOBALS['coupons'] = array(
+    coupon_with(980, '20%', 'Live'),
+    coupon_with(981, '15%', 'Dead', 5, 0, '2020-05-01'),
+);
+check('turning the split off renders a single grid',
+    strpos(vc_merchant_coupon_section(21), 'vc-coupon-expired') === false);
+$GLOBALS['filters']['vc_merchant_split_expired'] = array();
 
 /* -------------------------------------------------------------------------
  * Degrade cleanly without the coupon plugin

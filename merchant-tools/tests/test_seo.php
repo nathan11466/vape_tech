@@ -27,7 +27,12 @@ function get_post_type($id = null) { return 'merchant'; }
 function is_singular() { return true; }
 function is_tax($t = '') { return false; }
 function get_queried_object() { return null; }
-function apply_filters($tag, $value) { return $value; }
+function apply_filters($tag, $value) {
+    foreach ($GLOBALS['filters'][$tag] ?? array() as $fn) {
+        $value = $fn($value, func_num_args() > 2 ? func_get_arg(2) : null);
+    }
+    return $value;
+}
 function add_action() {}
 function add_filter($tag, $fn, $p = 10, $a = 1) { $GLOBALS['filters'][$tag][] = $fn; }
 function add_shortcode() {}
@@ -36,6 +41,16 @@ function shortcode_exists($t) { return false; }
 function shortcode_atts($pairs, $atts, $sc = '') { return array_merge($pairs, (array) $atts); }
 function wpautop($s) { return "<p>$s</p>"; }
 function register_activation_hook() {}
+function register_deactivation_hook() {}
+function wp_next_scheduled($h) { return $GLOBALS['scheduled'][$h] ?? false; }
+function wp_schedule_event($t, $r, $h) { $GLOBALS['scheduled'][$h] = $t; return true; }
+function wp_unschedule_event($t, $h) { unset($GLOBALS['scheduled'][$h]); return true; }
+function has_action($t, $f = false) { return false; }
+function do_action() {}
+function wp_get_post_terms($i, $t, $a = array()) { return array(); }
+function delete_term_meta($i, $k) { return true; }
+function update_term_meta($i, $k, $v) { return true; }
+
 function register_taxonomy() {}
 function register_post_meta() {}
 function register_post_type() {}
@@ -264,6 +279,71 @@ $GLOBALS['meta'][43] = array(
 );
 check('a sourced but undated review score renders nothing',
     vc_merchant_trust_info(43) === '');
+
+/* -------------------------------------------------------------------------
+ * Token templates
+ *
+ * Plain substitution would leave "Up to % Off" on every store with no
+ * percentage discount, which is most of them. Optional [[ ]] segments are
+ * what prevent that.
+ * ---------------------------------------------------------------------- */
+
+$tokens = array(
+    'brand_name'    => 'VooPoo',
+    'current_month' => 'October',
+    'current_year'  => '2026',
+    'max_discount'  => '25',
+    'active_count'  => '4',
+);
+
+check('tokens are substituted',
+    vc_merchant_render_tokens('{brand_name} - {current_month} {current_year}', $tokens)
+        === 'VooPoo - October 2026');
+
+check('an optional segment is kept when its tokens resolve',
+    vc_merchant_render_tokens('{brand_name}[[ - Up to {max_discount}% Off]]', $tokens)
+        === 'VooPoo - Up to 25% Off');
+
+$empty = array_merge($tokens, array('max_discount' => ''));
+check('an optional segment is dropped when its token is empty',
+    vc_merchant_render_tokens('{brand_name}[[ - Up to {max_discount}% Off]]', $empty)
+        === 'VooPoo',
+    vc_merchant_render_tokens('{brand_name}[[ - Up to {max_discount}% Off]]', $empty));
+
+check('a dropped segment leaves no stray punctuation or token',
+    strpos(vc_merchant_render_tokens('{brand_name}[[ - Up to {max_discount}% Off]]', $empty), '%') === false);
+
+$none = array_merge($tokens, array('active_count' => ''));
+check('each optional segment is judged on its own tokens',
+    vc_merchant_render_tokens('A[[ {active_count} codes]][[ at {max_discount}% off]]', $none)
+        === 'A at 25% off',
+    vc_merchant_render_tokens('A[[ {active_count} codes]][[ at {max_discount}% off]]', $none));
+
+check('an unknown token is removed rather than printed',
+    vc_merchant_render_tokens('{brand_name} {not_a_token}', $tokens) === 'VooPoo');
+
+check('whitespace left by removals is collapsed',
+    vc_merchant_render_tokens('{brand_name}   {not_a_token}   codes', $tokens) === 'VooPoo codes',
+    vc_merchant_render_tokens('{brand_name}   {not_a_token}   codes', $tokens));
+
+// A store with no coupon plugin has no figures, so the title must still be
+// a complete sentence.
+$GLOBALS['current_id'] = 1;
+$title_no_figures = vc_merchant_seo_title(1);
+check('a store with no discount figure still gets a clean title',
+    strpos($title_no_figures, '%') === false
+    && strpos($title_no_figures, '[[') === false
+    && strpos($title_no_figures, 'Vape Street') !== false,
+    $title_no_figures);
+
+check('and it still carries the freshness stamp',
+    strpos($title_no_figures, date('F Y')) !== false, $title_no_figures);
+
+// An emptied template must not produce a blank <title>.
+$GLOBALS['filters']['vc_merchant_title_template'][] = function ($t) { return ''; };
+check('an emptied template falls back rather than blanking the title',
+    trim(vc_merchant_seo_title(1)) !== '', vc_merchant_seo_title(1));
+$GLOBALS['filters']['vc_merchant_title_template'] = array();
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

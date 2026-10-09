@@ -37,6 +37,16 @@ function shortcode_exists($t) { return isset($GLOBALS['shortcodes'][$t]); }
 function shortcode_atts($pairs, $atts, $sc = '') { return array_merge($pairs, (array) $atts); }
 function wpautop($s) { return "<p>$s</p>"; }
 function register_activation_hook() {}
+function register_deactivation_hook() {}
+function wp_next_scheduled($h) { return $GLOBALS['scheduled'][$h] ?? false; }
+function wp_schedule_event($t, $r, $h) { $GLOBALS['scheduled'][$h] = $t; return true; }
+function wp_unschedule_event($t, $h) { unset($GLOBALS['scheduled'][$h]); return true; }
+function has_action($t, $f = false) { return false; }
+function do_action() {}
+function wp_get_post_terms($i, $t, $a = array()) { return array(); }
+function delete_term_meta($i, $k) { return true; }
+function update_term_meta($i, $k, $v) { return true; }
+
 function register_taxonomy() {}
 function register_post_meta() {}
 function register_post_type() {}
