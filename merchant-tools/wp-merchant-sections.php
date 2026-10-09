@@ -455,7 +455,8 @@ add_shortcode('merchant_field', function ($atts) {
  * every page would open with a blank space.
  */
 function vc_merchant_logo_mark($post_id) {
-    $logo = vc_section_meta($post_id, 'brand_logo_url');
+    $logo = (string) apply_filters('vc_merchant_logo_url',
+        vc_section_meta($post_id, 'brand_logo_url'), $post_id);
     $name = vc_merchant_display_name($post_id);
 
     if ($logo !== '') {

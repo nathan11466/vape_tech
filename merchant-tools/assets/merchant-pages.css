@@ -744,12 +744,20 @@
     --wcd-columns: 3 !important;
   }
 
+  /* The plugin's own breakpoints set grid-template-columns directly, which
+     would beat a change to --wcd-columns alone, so set both. */
   @container vc-coupons (max-width: 900px) {
-    .wcd-grid { --wcd-columns: 2 !important; }
+    .wcd-grid {
+      --wcd-columns: 2 !important;
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
   }
 
   @container vc-coupons (max-width: 560px) {
-    .wcd-grid { --wcd-columns: 1 !important; }
+    .wcd-grid {
+      --wcd-columns: 1 !important;
+      grid-template-columns: 1fr !important;
+    }
   }
 }
 
@@ -759,6 +767,7 @@
 .vc-sidebar .vc-coupon-widget .wcd-grid,
 .widget .vc-coupon-widget .wcd-grid {
   --wcd-columns: 1 !important;
+  grid-template-columns: 1fr !important;
 }
 
 /* Cards should not spill out of the column on long unbroken strings such as
@@ -783,3 +792,14 @@
 .vc-destination-index__item a { text-decoration: none; }
 .vc-destination-index__item a:hover { text-decoration: underline; }
 .vc-destination-index__count { color: #666; font-size: .82rem; }
+
+/* The coupon plugin's empty state, toned down so a store with no live
+   coupons does not look like a rendering failure. */
+.vc-coupon-widget .wcd-empty {
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed #ddd;
+  border-radius: 6px;
+  background: #fafafa;
+  font-size: .9rem;
+}

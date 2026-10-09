@@ -151,7 +151,8 @@ function vc_merchant_schema_graph($post_id = null) {
 
     $name = vc_merchant_display_name($post_id);
     $url  = trim((string) get_post_meta($post_id, 'brand_url', true));
-    $logo = trim((string) get_post_meta($post_id, 'brand_logo_url', true));
+    $logo = trim((string) apply_filters('vc_merchant_logo_url',
+        trim((string) get_post_meta($post_id, 'brand_logo_url', true)), $post_id));
     $permalink = get_permalink($post_id);
 
     $graph = array();

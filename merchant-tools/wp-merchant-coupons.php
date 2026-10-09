@@ -427,6 +427,39 @@ add_action('save_post', function ($post_id) {
 });
 
 /**
+ * A logo the coupon plugin holds for this store's brand.
+ *
+ * It keeps _wcd_brand_logo_url on each wcd_brand term, so a logo entered
+ * there once serves both plugins instead of being typed into two places.
+ * Only consulted when brand_logo_url is empty, so merchant data always wins.
+ */
+function vc_merchant_brand_logo_from_coupons($post_id = null) {
+    if (!vc_coupons_active()) {
+        return '';
+    }
+    $term = vc_merchant_brand_term($post_id ?: get_the_ID());
+    if (!$term) {
+        return '';
+    }
+
+    return trim((string) get_term_meta($term->term_id, '_wcd_brand_logo_url', true));
+}
+
+add_filter('vc_merchant_logo_url', function ($url, $post_id) {
+    return $url !== '' ? $url : vc_merchant_brand_logo_from_coupons($post_id);
+}, 10, 2);
+
+/**
+ * Default coupon shortcode.
+ *
+ * WP Coupon & Deals registers [coupon_deals] and filters wcd_brand by term
+ * SLUG, so this works unchanged on a standard install. It is only a default:
+ * the option and the filter both override it, and the status screen shows
+ * which tags the site has actually registered.
+ */
+const VC_COUPON_SHORTCODE_DEFAULT = '[coupon_deals brand="{brand}"]';
+
+/**
  * The shortcode the coupon block should render for one store.
  *
  * Resolution order:
@@ -450,7 +483,7 @@ function vc_merchant_coupon_shortcode($post_id = null) {
         return $explicit;
     }
 
-    $template = trim((string) get_option('vc_coupon_shortcode_template', ''));
+    $template = trim((string) get_option('vc_coupon_shortcode_template', VC_COUPON_SHORTCODE_DEFAULT));
     $template = (string) apply_filters('vc_merchant_coupon_shortcode_template', $template, $post_id);
     if ($template === '') {
         return '';
@@ -719,9 +752,11 @@ function vc_coupons_status_screen() {
                                id="vc_coupon_shortcode_template"
                                name="vc_coupon_shortcode_template"
                                value="<?php echo esc_attr($template); ?>"
-                               placeholder="[wcd_coupons brand=&quot;{brand}&quot;]" />
+                               placeholder="<?php echo esc_attr(VC_COUPON_SHORTCODE_DEFAULT); ?>" />
                         <p class="description">
-                            <?php esc_html_e('Placeholders: {brand} (slug), {brand_id}, {brand_name}.', 'vc-merchant'); ?>
+                            <?php esc_html_e('Leave blank to use the default:', 'vc-merchant'); ?>
+                            <code><?php echo esc_html(VC_COUPON_SHORTCODE_DEFAULT); ?></code>
+                            <br /><?php esc_html_e('Placeholders: {brand} (slug), {brand_id}, {brand_name}.', 'vc-merchant'); ?>
                             <?php if ($tags) : ?>
                                 <br /><?php esc_html_e('Tags this site has registered:', 'vc-merchant'); ?>
                                 <?php echo '<code>[' . implode(']</code> <code>[', array_map('esc_html', $tags)) . ']</code>'; ?>

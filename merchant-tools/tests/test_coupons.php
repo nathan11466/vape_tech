@@ -22,7 +22,8 @@ $GLOBALS['current_id'] = 1;
 $GLOBALS['filters'] = array();
 $GLOBALS['has_coupon_plugin'] = true;
 $GLOBALS['options'] = array();
-$GLOBALS['shortcode_tags'] = array('wcd_coupons' => 'x', 'merchant_page' => 'y');
+$GLOBALS['term_meta'] = array();
+$GLOBALS['shortcode_tags'] = array('coupon_deals' => 'x', 'coupon_reveal' => 'x', 'merchant_page' => 'y');
 
 class FakeCoupon {
     public $ID, $post_modified_gmt, $post_date_gmt;
@@ -67,6 +68,7 @@ function get_term_by($field, $value, $tax = '') {
 }
 function get_term_link($t) { return 'https://vapingcheap.com/brand/voopoo/'; }
 function get_terms($a = array()) { return array(); }
+function get_term_meta($id, $k, $single = false) { return $GLOBALS['term_meta'][$id][$k] ?? ''; }
 function get_posts($a = array()) {
     return ($a['post_type'] ?? '') === 'wcd_coupon' ? ($GLOBALS['probe_ids'] ?? array()) : array();
 }
@@ -321,28 +323,31 @@ check('cards cannot be pushed wider than their column',
 
 $GLOBALS['titles'][5] = 'VooPoo';
 $GLOBALS['meta'][5] = array();
-$GLOBALS['options'] = array();
-check('with no field and no template, nothing is rendered',
+// Explicitly blanking the template must switch the section off -- the
+// default only applies when the option was never set.
+$GLOBALS['options'] = array('vc_coupon_shortcode_template' => '');
+check('an explicitly emptied template renders nothing',
     vc_merchant_coupon_shortcode(5) === '', vc_merchant_coupon_shortcode(5));
+$GLOBALS['options'] = array();
 
-$GLOBALS['options']['vc_coupon_shortcode_template'] = '[wcd_coupons brand="{brand}"]';
+$GLOBALS['options']['vc_coupon_shortcode_template'] = '[coupon_deals brand="{brand}"]';
 check('the template is filled in from the linked brand slug',
-    vc_merchant_coupon_shortcode(5) === '[wcd_coupons brand="voopoo"]',
+    vc_merchant_coupon_shortcode(5) === '[coupon_deals brand="voopoo"]',
     vc_merchant_coupon_shortcode(5));
 
 $GLOBALS['titles'][6] = 'VooPoo';
 $GLOBALS['meta'][6] = array();
-$GLOBALS['options']['vc_coupon_shortcode_template'] = '[wcd_coupons id="{brand_id}" title="{brand_name}"]';
+$GLOBALS['options']['vc_coupon_shortcode_template'] = '[coupon_deals id="{brand_id}" title="{brand_name}"]';
 check('{brand_id} and {brand_name} are substituted too',
-    vc_merchant_coupon_shortcode(6) === '[wcd_coupons id="50" title="VooPoo"]',
+    vc_merchant_coupon_shortcode(6) === '[coupon_deals id="50" title="VooPoo"]',
     vc_merchant_coupon_shortcode(6));
 
 // A store's own field is a deliberate override and must win.
 $GLOBALS['titles'][7] = 'VooPoo';
-$GLOBALS['meta'][7] = array('coupon_plugin_shortcode' => '[wcd_coupons brand="hand-picked" columns="1"]');
-$GLOBALS['options']['vc_coupon_shortcode_template'] = '[wcd_coupons brand="{brand}"]';
+$GLOBALS['meta'][7] = array('coupon_plugin_shortcode' => '[coupon_deals brand="hand-picked" columns="1"]');
+$GLOBALS['options']['vc_coupon_shortcode_template'] = '[coupon_deals brand="{brand}"]';
 check('a store\'s own shortcode field overrides the template',
-    vc_merchant_coupon_shortcode(7) === '[wcd_coupons brand="hand-picked" columns="1"]',
+    vc_merchant_coupon_shortcode(7) === '[coupon_deals brand="hand-picked" columns="1"]',
     vc_merchant_coupon_shortcode(7));
 
 // An unmatched store must render nothing rather than an unscoped shortcode,
@@ -367,7 +372,8 @@ $GLOBALS['filters']['vc_merchant_coupon_shortcode_template'] = array();
 
 $tags = vc_coupons_registered_shortcodes();
 check('the coupon plugin\'s shortcode tags are discovered',
-    in_array('wcd_coupons', $tags, true), json_encode($tags));
+    in_array('coupon_deals', $tags, true) && in_array('coupon_reveal', $tags, true),
+    json_encode($tags));
 check('and unrelated shortcodes are not reported as the coupon plugin\'s',
     !in_array('merchant_page', $tags, true), json_encode($tags));
 
@@ -381,6 +387,45 @@ check('the meta probe reports a field the coupons do carry',
     ($probe['keys']['_wcd_code'] ?? 0) === 1, json_encode($probe));
 check('and flags one they do not',
     ($probe['keys']['_wcd_expiration'] ?? null) === 0, json_encode($probe));
+
+/* -------------------------------------------------------------------------
+ * The contract, as verified against the coupon plugin's source
+ *
+ * [coupon_deals] filters wcd_brand by term SLUG, so the default template has
+ * to pass a slug and not an id or a name.
+ * ---------------------------------------------------------------------- */
+
+check('the shipped default uses the tag the coupon plugin registers',
+    strpos(VC_COUPON_SHORTCODE_DEFAULT, '[coupon_deals') === 0,
+    VC_COUPON_SHORTCODE_DEFAULT);
+check('and passes the brand as a slug, which is the field it matches on',
+    strpos(VC_COUPON_SHORTCODE_DEFAULT, 'brand="{brand}"') !== false,
+    VC_COUPON_SHORTCODE_DEFAULT);
+
+// With no option set at all, a linked store must still render coupons.
+$GLOBALS['options'] = array();
+$GLOBALS['titles'][11] = 'VooPoo';
+$GLOBALS['meta'][11] = array();
+check('a linked store renders coupons with no configuration at all',
+    vc_merchant_coupon_shortcode(11) === '[coupon_deals brand="voopoo"]',
+    vc_merchant_coupon_shortcode(11));
+
+/* -------------------------------------------------------------------------
+ * A logo entered once in the coupon plugin serves both
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['titles'][12] = 'VooPoo';
+$GLOBALS['meta'][12] = array();
+$GLOBALS['term_meta'][50] = array('_wcd_brand_logo_url' => 'https://cdn.x.com/voopoo-logo.png');
+check('the coupon brand logo is used when the store has none',
+    apply_filters('vc_merchant_logo_url', '', 12) === 'https://cdn.x.com/voopoo-logo.png',
+    apply_filters('vc_merchant_logo_url', '', 12));
+check('but merchant data always wins over it',
+    apply_filters('vc_merchant_logo_url', 'https://own.example/logo.png', 12)
+        === 'https://own.example/logo.png');
+$GLOBALS['term_meta'][50] = array();
+check('and nothing is invented when neither has one',
+    apply_filters('vc_merchant_logo_url', '', 12) === '');
 
 /* -------------------------------------------------------------------------
  * Degrade cleanly without the coupon plugin
