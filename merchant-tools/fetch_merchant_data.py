@@ -19,12 +19,14 @@ alone, so it is safe to re-run as your data improves.
     --only "VooPoo"     a single merchant by name
     --delay 2.0         seconds between merchants (default 1.5)
     --skip-policies     homepage only; much faster, finds links but no states
+    --skip-logos        do not look for brand_logo_url
 """
 
 import argparse
 import csv
 import gzip
 import io
+import json
 import re
 import sys
 import time
@@ -32,7 +34,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "1.2 (multi-page restriction scan, --debug)"
+VERSION = "1.3 (logo discovery)"
 
 BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -218,6 +220,177 @@ def find_email(html, site_host=""):
     return generic[0] if generic else ""
 
 
+# Images that sit in headers and footers but are never the brand's logo,
+# however they are declared. Payment marks, review-platform badges, trust
+# seals and social icons are the usual false positives.
+LOGO_REJECT_ALWAYS = re.compile(
+    r"(sprite|placeholder|spinner|loader|blank|pixel|1x1|transparent|lazy|"
+    r"visa|mastercard|maestro|amex|american-?express|discover|paypal|klarna|"
+    r"afterpay|affirm|sezzle|applepay|apple-?pay|googlepay|google-?pay|"
+    r"shop-?pay|venmo|diners|jcb|unionpay|bitcoin|crypto|"
+    r"trustpilot|yotpo|judge\.?me|stamped|reviews?\.io|okendo|loox|"
+    r"norton|mcafee|geotrust|verisign|bbb-|"
+    r"facebook|instagram|twitter|x-logo|tiktok|youtube|pinterest|snapchat|"
+    r"linkedin|reddit|whatsapp|telegram|discord)",
+    re.I)
+
+# Generic interface-icon naming. Only applied when the logo is being INFERRED
+# from markup -- an apple-touch-icon is literally named "...-icon" and is a
+# legitimate brand mark, so this must not be used against a source that
+# declares itself.
+LOGO_REJECT_INFERRED = re.compile(
+    r"(flag|/icons?/|icon-|-icon|badge|star|rating|avatar|arrow|chevron|"
+    r"cart|search|menu|hamburger|close|burger)",
+    re.I)
+
+IMAGE_EXT = re.compile(r"\.(png|jpe?g|svg|webp|avif)(\?|#|$)", re.I)
+
+# Stores with a dark header ship a white logo for it. On a merchant page, which
+# has a light background, that renders invisible -- so a full-colour variant is
+# preferred whenever the markup offers both.
+LOGO_LIGHT_VARIANT = re.compile(
+    r"(white|inverse|inverted|-light|_light|mono|negative|reverse)", re.I)
+
+
+def _logo_candidate_ok(url, inferred=True):
+    """
+    A URL that could plausibly be a logo image.
+
+    `inferred` is False when the page declared this image as its logo
+    (structured data, itemprop, apple-touch-icon). Declared sources skip the
+    interface-icon filter, which would otherwise reject apple-touch-icon.png
+    on the "-icon" in its own conventional filename.
+    """
+    if not url or url.startswith("data:"):
+        return False
+    if LOGO_REJECT_ALWAYS.search(url):
+        return False
+    if inferred and LOGO_REJECT_INFERRED.search(url):
+        return False
+    # Shopify and friends serve logos through resizing params, so an extension
+    # is not always at the end -- accept a CDN path that mentions the logo.
+    return bool(IMAGE_EXT.search(url)) or "logo" in url.lower()
+
+
+def _logo_from_jsonld(html):
+    """
+    The logo the store declares in its own structured data.
+
+    This is the only source that says "this image is our logo" outright, so it
+    is trusted ahead of anything inferred from markup.
+    """
+    for match in re.finditer(
+            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+            html, re.I | re.S):
+        try:
+            data = json.loads(match.group(1).strip())
+        except (ValueError, TypeError):
+            continue
+
+        stack = [data]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, list):
+                stack.extend(node)
+                continue
+            if not isinstance(node, dict):
+                continue
+            stack.extend(v for v in node.values() if isinstance(v, (dict, list)))
+
+            logo = node.get("logo")
+            if isinstance(logo, dict):
+                logo = logo.get("url") or logo.get("contentUrl")
+            if isinstance(logo, str) and _logo_candidate_ok(logo.strip(), inferred=False):
+                return logo.strip()
+    return ""
+
+
+def _logo_from_head(html):
+    """A logo declared in the document head."""
+    patterns = [
+        # itemprop="logo" is an explicit declaration, like the JSON-LD one.
+        r'<[^>]+itemprop=["\']logo["\'][^>]+(?:content|src|href)=["\']([^"\']+)',
+        r'<meta[^>]+property=["\']og:logo["\'][^>]+content=["\']([^"\']+)',
+        # An apple-touch-icon is a square brand mark by convention -- a usable
+        # logo, unlike a favicon, which is too small to publish.
+        r'<link[^>]+rel=["\'][^"\']*apple-touch-icon[^"\']*["\'][^>]+href=["\']([^"\']+)',
+    ]
+    for pattern in patterns:
+        found = re.search(pattern, html, re.I)
+        if found:
+            url = found.group(1).strip()
+            if _logo_candidate_ok(url, inferred=False):
+                return url
+    return ""
+
+
+def _logo_from_markup(html):
+    """
+    An <img> the markup itself calls a logo.
+
+    Restricted to images whose class, id, alt or filename says "logo", so a
+    hero banner or product shot is never picked up.
+    """
+    # The header holds the real logo; a footer copy is often a mono variant.
+    head = re.split(r"</header>", html, maxsplit=1, flags=re.I)[0]
+
+    for region in (head, html):
+        candidates = []
+        for tag in re.finditer(r"<img\b[^>]*>", region, re.I):
+            attrs = tag.group(0)
+            if not re.search(r"logo", attrs, re.I):
+                continue
+
+            # Reject anything declared smaller than a favicon.
+            size = re.search(r'\b(?:width|height)=["\']?(\d+)', attrs, re.I)
+            if size and int(size.group(1)) < 32:
+                continue
+
+            # Lazy-loaded images keep the real file in a data-* attribute.
+            for attr in ("data-src", "data-original", "data-lazy-src", "src", "srcset"):
+                found = re.search(attr + r'=["\']([^"\']+)', attrs, re.I)
+                if not found:
+                    continue
+                url = found.group(1).split()[0].strip().rstrip(",")
+                if _logo_candidate_ok(url):
+                    candidates.append(url)
+                    break
+
+        if not candidates:
+            continue
+        for url in candidates:
+            if not LOGO_LIGHT_VARIANT.search(url):
+                return url
+        # Only light variants on offer. Better than nothing, and process()
+        # flags it for review.
+        return candidates[0]
+
+    return ""
+
+
+def find_logo(html, base_url):
+    """
+    The store's logo, with the source that supplied it.
+
+    Returns (absolute_url, source). Ordered by how explicit the claim is:
+    structured data, then the head, then markup that names an image "logo".
+
+    og:image is deliberately NOT consulted. On a store it is usually a product
+    photo or a seasonal promo banner, and writing one of those into
+    brand_logo_url would publish a picture that is not the logo -- and feed it
+    to Google as Organization.logo.
+    """
+    for source, finder in (("schema", _logo_from_jsonld),
+                           ("head", _logo_from_head),
+                           ("markup", _logo_from_markup)):
+        url = finder(html)
+        if url:
+            absolute = urllib.parse.urljoin(base_url, url)
+            if absolute.startswith(("http://", "https://")):
+                return absolute, source
+    return "", ""
+
+
 def find_restrictions(text):
     """States named in a sentence that reads like an exclusion."""
     plain = re.sub(r"<[^>]+>", " ", text)
@@ -280,6 +453,16 @@ def process(row, args, log):
                 break
 
     put("contact_email", find_email(html, urllib.parse.urlparse(base).netloc))
+
+    if not args.skip_logos and not (row.get("brand_logo_url") or "").strip():
+        logo, logo_source = find_logo(html, base)
+        if logo:
+            put("brand_logo_url", logo, f"logo({logo_source})")
+            if LOGO_LIGHT_VARIANT.search(logo):
+                # Worth a look: a white logo disappears on a light page, so
+                # say so rather than leaving it to be noticed on the page.
+                log.append(f"{name}: CHECK logo looks like a white/light "
+                           f"variant - {logo}")
 
     if not args.skip_policies:
         # Restrictions are not always on the shipping policy. Stores commonly
@@ -345,6 +528,7 @@ def main():
     parser.add_argument("--only", default="")
     parser.add_argument("--delay", type=float, default=1.5)
     parser.add_argument("--skip-policies", action="store_true")
+    parser.add_argument("--skip-logos", action="store_true")
     parser.add_argument("--debug", action="store_true",
                         help="print what each policy page actually contained, "
                              "so a miss can be diagnosed rather than guessed at")
