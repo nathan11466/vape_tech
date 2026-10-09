@@ -227,6 +227,12 @@ function vc_merchant_activate() {
         vc_seed_ships_to();
     }
 
+    // Move destinations seeded by an earlier version onto the clean slugs.
+    // Old URLs are recorded and redirected, so this is safe to re-run.
+    if (function_exists('vc_shipping_migrate_slugs')) {
+        vc_shipping_migrate_slugs();
+    }
+
     // Permalinks for the new post type and taxonomy archives.
     vc_register_merchant_post_type();
     vc_register_merchant_category_taxonomy();

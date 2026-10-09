@@ -77,7 +77,11 @@ function vc_register_ships_to_taxonomy() {
         'show_admin_column' => true,
         'show_in_rest'      => true,
         'query_var'         => true,
-        'rewrite'           => array('slug' => 'ships-to', 'hierarchical' => true),
+        // Deliberately NOT a hierarchical rewrite. With ancestors in the path
+        // the Texas page sits at /ships-to/united-states/texas/, burying the
+        // one word anybody searches for ("ships to texas") three levels deep.
+        // Flat gives /ships-to/texas/.
+        'rewrite'           => array('slug' => 'ships-to', 'hierarchical' => false),
     ));
 }
 add_action('init', 'vc_register_ships_to_taxonomy');
@@ -99,10 +103,7 @@ function vc_seed_ships_to() {
         $parent_id = is_array($parent) ? (int) $parent['term_id'] : (int) $parent;
 
         foreach ($children as $child) {
-            // Slug is namespaced by parent, since some state and country names
-            // collide (Georgia the state vs Georgia the country, and several
-            // US/Canadian province names).
-            $slug = sanitize_title($parent_name . '-' . $child);
+            $slug = vc_shipping_preferred_slug($parent_name, $child);
             if (!term_exists($slug, 'ships_to')) {
                 wp_insert_term($child, 'ships_to', array(
                     'parent' => $parent_id,
@@ -238,3 +239,132 @@ function vc_merchant_restricted_line($post_id = null) {
         . esc_html__('Cannot ship to:', 'vc-merchant') . '</strong> '
         . esc_html(implode(', ', $names)) . '</p>';
 }
+
+/* -------------------------------------------------------------------------
+ * Destination slugs
+ *
+ * The destination pages exist to rank for "<niche> shops that ship to X", so
+ * X needs to be the memorable part of the URL. Earlier versions namespaced
+ * every child by its parent, producing /ships-to/united-states-texas/ -- the
+ * country name twice once the parent was in the path too, and the state name
+ * pushed to the end.
+ *
+ * Nothing in the shipped destination tree actually collides, so children take
+ * their own name. The namespaced form is kept as a fallback for destinations
+ * added later that genuinely would clash (Georgia the country alongside
+ * Georgia the state, say).
+ * ---------------------------------------------------------------------- */
+
+/**
+ * The slug a destination should have.
+ *
+ * @param string $parent_name Parent destination name, for the fallback.
+ * @param string $child       This destination's name.
+ * @param int    $exclude     Term being renamed, so it does not collide with itself.
+ */
+function vc_shipping_preferred_slug($parent_name, $child, $exclude = 0) {
+    $bare = sanitize_title($child);
+
+    $existing = get_term_by('slug', $bare, 'ships_to');
+    if (!$existing || is_wp_error($existing) || (int) $existing->term_id === (int) $exclude) {
+        return $bare;
+    }
+
+    // Taken by a different destination -- fall back to the namespaced form.
+    return sanitize_title($parent_name . '-' . $child);
+}
+
+/**
+ * Rename existing destination terms onto the clean slugs.
+ *
+ * Idempotent. Every slug it changes is recorded so the old URL can be
+ * redirected rather than left to 404.
+ *
+ * @return int Number of destinations renamed.
+ */
+function vc_shipping_migrate_slugs() {
+    vc_register_ships_to_taxonomy();
+
+    $terms = get_terms(array('taxonomy' => 'ships_to', 'hide_empty' => false));
+    if (is_wp_error($terms) || empty($terms)) {
+        return 0;
+    }
+
+    $map = get_option('vc_ships_to_slug_map', array());
+    if (!is_array($map)) {
+        $map = array();
+    }
+    $changed = 0;
+
+    foreach ($terms as $term) {
+        // Top-level destinations are already named after themselves.
+        if ((int) $term->parent === 0) {
+            continue;
+        }
+
+        $parent = get_term((int) $term->parent, 'ships_to');
+        $parent_name = ($parent && !is_wp_error($parent)) ? $parent->name : '';
+
+        $want = vc_shipping_preferred_slug($parent_name, $term->name, $term->term_id);
+        if ($want === $term->slug) {
+            continue;
+        }
+
+        $old = $term->slug;
+        $result = wp_update_term($term->term_id, 'ships_to', array('slug' => $want));
+        if (is_wp_error($result)) {
+            continue;
+        }
+
+        $map[$old] = (int) $term->term_id;
+        $changed++;
+    }
+
+    if ($changed) {
+        update_option('vc_ships_to_slug_map', $map);
+        flush_rewrite_rules();
+    }
+
+    return $changed;
+}
+
+/**
+ * Send old destination URLs to the renamed term with a 301.
+ *
+ * Covers both halves of the change: the slug itself, and the loss of the
+ * country segment from the path.
+ */
+add_action('template_redirect', function () {
+    if (!is_404()) {
+        return;
+    }
+
+    $map = get_option('vc_ships_to_slug_map', array());
+    if (empty($map) || !is_array($map)) {
+        return;
+    }
+
+    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    $segments = array_values(array_filter(explode('/', (string) $path), 'strlen'));
+    if (empty($segments)) {
+        return;
+    }
+
+    // Only claim 404s that were destination URLs. Other plugins own theirs.
+    if (!in_array('ships-to', $segments, true)) {
+        return;
+    }
+
+    $last = end($segments);
+    if (!isset($map[$last])) {
+        return;
+    }
+
+    $link = get_term_link((int) $map[$last], 'ships_to');
+    if (is_wp_error($link)) {
+        return;
+    }
+
+    wp_safe_redirect($link, 301);
+    exit;
+});

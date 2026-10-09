@@ -63,7 +63,8 @@ function term_exists($name, $tax = '') { return false; }
 function wp_insert_term($name, $tax, $args = array()) {
     static $next = 100;
     $id = $next++;
-    $GLOBALS['inserted_terms'][] = array('name' => $name, 'tax' => $tax, 'id' => $id);
+    $GLOBALS['inserted_terms'][] = array('name' => $name, 'tax' => $tax, 'id' => $id,
+        'slug' => $args['slug'] ?? '');
     return array('term_id' => $id);
 }
 function get_term($id, $tax = '') {
@@ -201,6 +202,29 @@ if (function_exists('vc_merchant_activate')) {
         'no destination terms created - every import would assign nothing');
     check('ships_to includes all 50 states + DC',
         ($byTax['ships_to'] ?? 0) >= 51, ($byTax['ships_to'] ?? 0) . ' terms');
+
+    // The destination pages exist to rank for "ships to <state>", so the
+    // state has to be the memorable part of the URL. A regression back to
+    // parent-namespaced slugs would bury it.
+    $prefixed = array();
+    foreach ($GLOBALS['inserted_terms'] as $t) {
+        if ($t['tax'] === 'ships_to' && $t['slug'] !== ''
+            && strpos($t['slug'], 'united-states-') === 0) {
+            $prefixed[] = $t['slug'];
+        }
+    }
+    check('state slugs are not prefixed with the country',
+        empty($prefixed), implode(', ', array_slice($prefixed, 0, 3)));
+
+    $texas = '';
+    foreach ($GLOBALS['inserted_terms'] as $t) {
+        if ($t['tax'] === 'ships_to' && $t['name'] === 'Texas') { $texas = $t['slug']; }
+    }
+    check('a state seeds at its own slug', $texas === 'texas', "got '$texas'");
+
+    check('old destination URLs can be migrated and redirected',
+        function_exists('vc_shipping_migrate_slugs')
+        && function_exists('vc_shipping_preferred_slug'));
 }
 
 echo "\nShipping assignment\n";
