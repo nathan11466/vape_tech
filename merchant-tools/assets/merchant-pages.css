@@ -765,3 +765,21 @@
    a URL in a coupon description. */
 .vc-coupon-widget .wcd-card { min-width: 0; }
 .vc-coupon-widget .wcd-card * { overflow-wrap: anywhere; }
+
+/* ---------- Destination index hub ---------- */
+
+.vc-destination-index__group { margin: 0 0 2rem; }
+.vc-destination-index__heading { font-size: 1.3rem; margin: 0 0 .75rem; }
+.vc-destination-index__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Fits the container it is dropped into, whatever the theme's width. */
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: .4rem 1rem;
+}
+.vc-destination-index__item { font-size: .95rem; line-height: 1.5; }
+.vc-destination-index__item a { text-decoration: none; }
+.vc-destination-index__item a:hover { text-decoration: underline; }
+.vc-destination-index__count { color: #666; font-size: .82rem; }

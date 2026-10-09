@@ -726,3 +726,165 @@ add_action('admin_notices', function () {
         . esc_html__('Without its own intro, local rules note or FAQs it is near-identical to every other destination page. Fill in any one of the fields below and it becomes indexable.', 'vc-merchant')
         . '</p></div>';
 });
+
+/* -------------------------------------------------------------------------
+ * Admin: which destination pages are actually indexable
+ *
+ * The per-term notice only appears once you open a term. With 51 states that
+ * means 51 clicks to discover which of your pages Google is not allowed to
+ * index. This puts it in the list table instead.
+ * ---------------------------------------------------------------------- */
+
+add_action('admin_init', function () {
+    foreach (vc_archive_taxonomies() as $tax) {
+        add_filter("manage_edit-{$tax}_columns", 'vc_archive_index_column');
+        add_filter("manage_{$tax}_custom_column", 'vc_archive_index_column_value', 10, 3);
+    }
+});
+
+function vc_archive_index_column($columns) {
+    // Drop WordPress's description column, which we do not use, and put the
+    // indexing state where it is read first.
+    unset($columns['description']);
+    $columns['vc_index'] = __('Search indexing', 'vc-merchant');
+
+    return $columns;
+}
+
+function vc_archive_index_column_value($content, $column, $term_id) {
+    if ($column !== 'vc_index') {
+        return $content;
+    }
+
+    $term = get_term($term_id);
+    if (!$term || is_wp_error($term)) {
+        return $content;
+    }
+
+    if (vc_archive_has_unique_content($term)) {
+        return '<span class="vc-index vc-index--yes">' . esc_html__('Indexable', 'vc-merchant') . '</span>';
+    }
+
+    // Say what is missing, so the fix is one click and not a hunt.
+    return '<span class="vc-index vc-index--no">' . esc_html__('Noindex', 'vc-merchant') . '</span>'
+        . '<span class="vc-index__why">' . esc_html__('needs an intro, local rules note or FAQ', 'vc-merchant') . '</span>';
+}
+
+add_action('admin_head', function () {
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if (!$screen || $screen->base !== 'edit-tags'
+        || !in_array($screen->taxonomy, vc_archive_taxonomies(), true)) {
+        return;
+    }
+    echo '<style>
+    .column-vc_index { width: 220px; }
+    .vc-index { display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: 600; }
+    .vc-index--yes { background: #e3f3e8; color: #0a5c33; }
+    .vc-index--no { background: #fcf0f1; color: #8a2424; }
+    .vc-index__why { display: block; margin-top: 3px; font-size: 11px; color: #646970; }
+    </style>';
+});
+
+/* -------------------------------------------------------------------------
+ * Destination index
+ *
+ * Every destination page links to a handful of siblings, which is not enough
+ * for 51 of them. One hub listing all destinations gives each a reliable
+ * internal link and gives readers the "does anyone ship to my state" entry
+ * point directly.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * [destination_index] -- all destination pages, grouped under their country.
+ *
+ * Attributes:
+ *   parent     restrict to one country by slug, e.g. parent="united-states"
+ *   show_count "yes" (default) prints the number of stores per destination
+ *   hide_empty "yes" (default) omits destinations with no stores yet
+ */
+function vc_destination_index_shortcode($atts) {
+    $atts = shortcode_atts(array(
+        'parent'     => '',
+        'show_count' => 'yes',
+        'hide_empty' => 'yes',
+    ), $atts, 'destination_index');
+
+    if (!taxonomy_exists('ships_to')) {
+        return '';
+    }
+
+    $hide_empty = $atts['hide_empty'] !== 'no';
+    $show_count = $atts['show_count'] !== 'no';
+
+    $terms = get_terms(array(
+        'taxonomy'   => 'ships_to',
+        'hide_empty' => false,
+        'orderby'    => 'name',
+    ));
+    if (is_wp_error($terms) || empty($terms)) {
+        return '';
+    }
+
+    // Group children under their parent country.
+    $parents = array();
+    $children = array();
+    foreach ($terms as $term) {
+        if ((int) $term->parent === 0) {
+            $parents[$term->term_id] = $term;
+        } else {
+            $children[(int) $term->parent][] = $term;
+        }
+    }
+
+    $only = trim((string) $atts['parent']);
+
+    $out = '<div class="vc-destination-index">';
+    $rendered = 0;
+
+    foreach ($parents as $parent_id => $parent) {
+        if ($only !== '' && $parent->slug !== $only) {
+            continue;
+        }
+        $group = $children[$parent_id] ?? array();
+        if (empty($group)) {
+            continue;
+        }
+
+        $items = '';
+        foreach ($group as $child) {
+            $count = vc_archive_merchant_count($child);
+            if ($hide_empty && $count < 1) {
+                continue;
+            }
+            $link = get_term_link($child);
+            if (is_wp_error($link)) {
+                continue;
+            }
+            $items .= '<li class="vc-destination-index__item">'
+                . '<a href="' . esc_url($link) . '">' . esc_html($child->name) . '</a>';
+            if ($show_count) {
+                $items .= ' <span class="vc-destination-index__count">'
+                    . esc_html(sprintf(
+                        _n('%d store', '%d stores', $count, 'vc-merchant'), $count))
+                    . '</span>';
+            }
+            $items .= '</li>';
+        }
+
+        if ($items === '') {
+            continue;
+        }
+
+        $out .= '<section class="vc-destination-index__group">';
+        $out .= '<h2 class="vc-destination-index__heading">' . esc_html($parent->name) . '</h2>';
+        $out .= '<ul class="vc-destination-index__list">' . $items . '</ul>';
+        $out .= '</section>';
+        $rendered++;
+    }
+
+    $out .= '</div>';
+
+    return $rendered ? $out : '';
+}
+add_shortcode('destination_index', 'vc_destination_index_shortcode');
