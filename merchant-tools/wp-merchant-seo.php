@@ -49,7 +49,9 @@ function vc_merchant_seo_title($post_id = null) {
 function vc_merchant_meta_description($post_id = null) {
     $post_id = $post_id ?: get_the_ID();
     $name  = vc_merchant_display_name($post_id);
-    $mode  = trim((string) get_post_meta($post_id, 'offer_display_mode', true));
+    $mode  = function_exists('vc_merchant_offer_mode')
+        ? vc_merchant_offer_mode($post_id)
+        : trim((string) get_post_meta($post_id, 'offer_display_mode', true));
     $offer = trim((string) get_post_meta($post_id, 'best_offer_summary', true));
     $stamp = vc_merchant_freshness_stamp();
 
@@ -157,9 +159,14 @@ function vc_merchant_schema_graph($post_id = null) {
     // --- Organization: the merchant itself ---
     // OnlineStore is the accurate type for an internet retailer; plain
     // Organization says nothing about what they do.
+    // Filterable so another plugin describing the same shop can share the
+    // @id. Matching ids merge the nodes; differing ids read as two separate
+    // businesses.
+    $org_id = apply_filters('vc_merchant_org_id', $permalink . '#merchant', $post_id);
+
     $org = array(
         '@type' => 'OnlineStore',
-        '@id'   => $permalink . '#merchant',
+        '@id'   => $org_id,
         'name'  => $name,
     );
     if ($url !== '') {
@@ -202,14 +209,22 @@ function vc_merchant_schema_graph($post_id = null) {
     $graph[] = $org;
 
     // --- Offer: only when something concrete is confirmed ---
-    $mode = trim((string) get_post_meta($post_id, 'offer_display_mode', true));
+    $mode = function_exists('vc_merchant_offer_mode')
+        ? vc_merchant_offer_mode($post_id)
+        : trim((string) get_post_meta($post_id, 'offer_display_mode', true));
     $offerText = trim((string) get_post_meta($post_id, 'best_offer_summary', true));
-    if (($mode === 'verified_code' || $mode === 'best_deal') && $offerText !== '') {
+
+    // Suppressible, so a plugin emitting real per-coupon Offers (with codes
+    // and validThrough dates) is not shadowed by our vaguer summary of the
+    // same deal.
+    $emit_offer = apply_filters('vc_merchant_emit_offer', true, $post_id);
+
+    if ($emit_offer && ($mode === 'verified_code' || $mode === 'best_deal') && $offerText !== '') {
         $offer = array(
             '@type' => 'Offer',
             '@id'   => $permalink . '#offer',
             'name'  => $offerText,
-            'offeredBy' => array('@id' => $permalink . '#merchant'),
+            'offeredBy' => array('@id' => $org_id),
         );
 
         // Deliberately NO availability. We have no stock information, and
@@ -268,7 +283,7 @@ function vc_merchant_schema_graph($post_id = null) {
         'url'   => $permalink,
         'name'  => vc_merchant_seo_title($post_id),
         'description' => vc_merchant_meta_description($post_id),
-        'about' => array('@id' => $permalink . '#merchant'),
+        'about' => array('@id' => $org_id),
     );
     if ($verified !== '') {
         $page['dateModified'] = $verified;

@@ -97,6 +97,7 @@ add_action('init', 'vc_register_merchant_post_type', 5);
 foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
                'wp-merchant-seo.php', 'wp-merchant-archive.php',
                'wp-merchant-sections.php', 'wp-merchant-editor.php',
+               'wp-merchant-coupons.php',
                'wp-merchant-import.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
     if (file_exists($vc_path)) {
@@ -304,6 +305,20 @@ function vc_merchant_is_publishable($post_id = null) {
 }
 
 /**
+ * The offer claim for a merchant.
+ *
+ * Stored value by default, but filterable so a source with real records --
+ * live coupons with codes, expiry dates and reader votes -- can override text
+ * that was parsed out of a summary sentence and goes stale on expiry.
+ */
+function vc_merchant_offer_mode($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $mode = trim((string) get_post_meta($post_id, 'offer_display_mode', true));
+
+    return apply_filters('vc_merchant_offer_display_mode', $mode, $post_id);
+}
+
+/**
  * Offer badge. The ONLY sanctioned way to state what a page is claiming.
  *
  * Never asserts that a code exists unless offer_display_mode says so, which the
@@ -312,8 +327,16 @@ function vc_merchant_is_publishable($post_id = null) {
  */
 function vc_merchant_offer_badge($post_id = null) {
     $post_id = $post_id ?: get_the_ID();
-    $mode = trim((string) get_post_meta($post_id, 'offer_display_mode', true));
+    $mode = vc_merchant_offer_mode($post_id);
     $checked = trim((string) get_post_meta($post_id, 'last_checked_text', true));
+
+    // A live coupon's own timestamp beats a hand-typed date.
+    if (function_exists('vc_merchant_coupon_checked')) {
+        $live = vc_merchant_coupon_checked($post_id);
+        if ($live !== '') {
+            $checked = $live;
+        }
+    }
 
     switch ($mode) {
         case 'verified_code':

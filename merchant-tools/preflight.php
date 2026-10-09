@@ -32,6 +32,9 @@ $GLOBALS['queried'] = null;
 $GLOBALS['registered_post_types'] = array();
 function register_post_type($name, $args = array()) { $GLOBALS['registered_post_types'][$name] = $args; }
 function post_type_exists($name) { return isset($GLOBALS['registered_post_types'][$name]); }
+function taxonomy_exists($name) { return isset($GLOBALS['registered_taxonomies'][$name]); }
+function delete_post_meta($i, $k) { return true; }
+function current_time($f) { return date($f); }
 function register_taxonomy($name, $types, $args = array()) {
     $GLOBALS['registered_taxonomies'][$name] = $args;
 }
@@ -222,6 +225,8 @@ $required = array(
     'vc_merchant_freshness_stamp', 'vc_archive_title', 'vc_archive_intro',
     'vc_archive_schema_graph', 'vc_archive_merchant_card', 'vc_assign_ships_to',
     'vc_merchant_restricted_line', 'vc_merchant_import_csv', 'vc_seed_ships_to',
+    'vc_merchant_offer_mode', 'vc_coupons_active', 'vc_merchant_brand_term',
+    'vc_merchant_coupon_status', 'vc_merchant_live_coupons',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -289,7 +294,7 @@ echo "\nShipped files\n";
 $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
     'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
-    'wp-merchant-settings.php', 'wp-merchant-editor.php',
+    'wp-merchant-settings.php', 'wp-merchant-editor.php', 'wp-merchant-coupons.php',
     'wp-merchant-import.php',
     'assets/merchant-pages.css',
 );
