@@ -158,6 +158,64 @@ function vc_editor_meta_box($post) {
         </table>
     <?php endforeach; ?>
 
+    <?php
+    /*
+     * Derived values. These are not fields -- they are computed when the page
+     * renders (a threshold pulled out of prose, a state count, the discount
+     * figure), so they have no box to type into and were previously only
+     * visible inside the quick-facts table.
+     */
+    $facts = function_exists('vc_merchant_fact_keys') ? vc_merchant_fact_keys() : array();
+    $live  = function_exists('vc_merchant_fact_rows') ? vc_merchant_fact_rows($post->ID) : array();
+    ?>
+    <h2 class="vc-editor-group"><?php esc_html_e('Derived values (read-only)', 'vc-merchant'); ?></h2>
+    <p class="description" style="max-width:640px;">
+        <?php esc_html_e('Computed from the fields above when the page renders, so there is nothing to type here. Copy a shortcode to drop the same text into your own sentence. A value shown as "-" means this store has no data for it yet, and the shortcode will output nothing.', 'vc-merchant'); ?>
+    </p>
+    <table class="form-table" role="presentation">
+        <?php foreach ($facts as $key => $label) : ?>
+            <tr>
+                <th scope="row"><?php echo esc_html($label); ?></th>
+                <td>
+                    <code><?php echo esc_html(isset($live[$key]) ? $live[$key]['value'] : '-'); ?></code>
+                    <button type="button" class="button-link vc-copy"
+                            data-shortcode="<?php echo esc_attr('[merchant_fact key="' . $key . '"]'); ?>"
+                            style="margin-left:8px;"><?php esc_html_e('copy shortcode', 'vc-merchant'); ?></button>
+                    <p class="description"><code><?php echo esc_html('[merchant_fact key="' . $key . '"]'); ?></code></p>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        <tr>
+            <th scope="row"><?php esc_html_e('Headline discount', 'vc-merchant'); ?></th>
+            <td>
+                <?php
+                $figure = '';
+                if (function_exists('vc_merchant_headline_discount')) {
+                    list($figure, ) = vc_merchant_headline_discount($post->ID);
+                }
+                ?>
+                <code><?php echo esc_html($figure !== '' ? $figure : '-'); ?></code>
+                <button type="button" class="button-link vc-copy"
+                        data-shortcode="[merchant_discount]"
+                        style="margin-left:8px;"><?php esc_html_e('copy shortcode', 'vc-merchant'); ?></button>
+                <p class="description"><code>[merchant_discount]</code></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php esc_html_e('Offer label', 'vc-merchant'); ?></th>
+            <td>
+                <code><?php
+                    echo esc_html(function_exists('vc_merchant_offer_mode')
+                        ? vc_merchant_offer_mode($post->ID) : '-');
+                ?></code>
+                <button type="button" class="button-link vc-copy"
+                        data-shortcode="[merchant_offer_label]"
+                        style="margin-left:8px;"><?php esc_html_e('copy shortcode', 'vc-merchant'); ?></button>
+                <p class="description"><code>[merchant_offer_label]</code></p>
+            </td>
+        </tr>
+    </table>
+
     <script>
     (function () {
         document.querySelectorAll('.vc-copy').forEach(function (btn) {

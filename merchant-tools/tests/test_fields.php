@@ -281,6 +281,108 @@ foreach ($all_keys as $key) {
 check('every importer column is reachable by [merchant_field]',
     empty($unreachable), implode(', ', array_slice($unreachable, 0, 5)));
 
+/* -------------------------------------------------------------------------
+ * Derived values, as shortcodes
+ *
+ * Several quick-facts cells are computed when the page renders -- a threshold
+ * pulled out of prose, a state count, the nationwide wording -- so they were
+ * only ever visible inside the table and could not be put into a sentence.
+ * ---------------------------------------------------------------------- */
+
+function fact($atts) {
+    return call_user_func($GLOBALS['shortcodes']['merchant_fact'], $atts);
+}
+
+$GLOBALS['meta'][1] = array(
+    'display_brand_name'        => 'VooPoo',
+    'free_shipping_info'        => 'Free shipping on orders over $75 within the US.',
+    'return_policy_summary'     => 'Returns accepted within 30 days of delivery.',
+    'age_verification_required' => '21+',
+    'ships_to_terms'            => 'United States|Texas|Utah',
+    'shipping_confidence'       => 'stated',
+    'restricted_states'         => 'Utah|Vermont',
+    'do_they_id_on_delivery'    => 'Yes, signature required',
+);
+
+check('[merchant_fact] is registered', isset($GLOBALS['shortcodes']['merchant_fact']));
+
+check('a threshold pulled out of prose is reachable',
+    fact(array('key' => 'free_shipping_over')) === '$75',
+    fact(array('key' => 'free_shipping_over')));
+check('a returns window pulled out of prose is reachable',
+    fact(array('key' => 'returns')) === '30 days', fact(array('key' => 'returns')));
+check('the ships-to summary is reachable',
+    fact(array('key' => 'ships_to')) === '2 states', fact(array('key' => 'ships_to')));
+check('the exclusion list is reachable, comma-joined',
+    fact(array('key' => 'cannot_ship_to')) === 'Utah, Vermont',
+    fact(array('key' => 'cannot_ship_to')));
+
+check('show="label" gives the cell label',
+    fact(array('key' => 'ships_to', 'show' => 'label')) === 'Ships to',
+    fact(array('key' => 'ships_to', 'show' => 'label')));
+check('show="both" gives label and value',
+    fact(array('key' => 'returns', 'show' => 'both')) === 'Returns: 30 days',
+    fact(array('key' => 'returns', 'show' => 'both')));
+check('before and after wrap it',
+    fact(array('key' => 'returns', 'before' => 'You get ', 'after' => ' to change your mind.'))
+        === 'You get 30 days to change your mind.',
+    fact(array('key' => 'returns', 'before' => 'You get ', 'after' => ' to change your mind.')));
+
+// The assumed-coverage wording must carry through to the shortcode, not just
+// the table -- a sentence must not state a number the merchant never gave.
+$GLOBALS['meta'][1]['shipping_confidence'] = 'assumed';
+check('assumed coverage renders the nationwide wording, not a count',
+    fact(array('key' => 'ships_to')) === 'US nationwide*',
+    fact(array('key' => 'ships_to')));
+$GLOBALS['meta'][1]['shipping_confidence'] = 'stated';
+
+// A fact this store has no data for renders nothing, silently.
+$GLOBALS['meta'][1]['age_verification_required'] = 'not stated';
+check('a fact with no data renders nothing, even for an editor',
+    fact(array('key' => 'age_required')) === '', fact(array('key' => 'age_required')));
+
+// A typo must be visible, like the field shortcode.
+$GLOBALS['can_edit'] = true;
+check('an unknown fact key warns an editor',
+    strpos(fact(array('key' => 'shipz_to')), 'unknown key') !== false,
+    fact(array('key' => 'shipz_to')));
+$GLOBALS['can_edit'] = false;
+check('but a visitor never sees that warning',
+    fact(array('key' => 'shipz_to')) === '');
+$GLOBALS['can_edit'] = true;
+
+check('no key renders nothing', fact(array()) === '');
+
+// Every key the editor panel advertises must actually resolve when the data
+// is there, or the panel offers shortcodes that do nothing.
+$advertised = array_keys(vc_merchant_fact_keys());
+check('the editor panel advertises the keys the rows actually produce',
+    count(array_diff(array_keys(vc_merchant_fact_rows(1)), $advertised)) === 0,
+    json_encode(array_diff(array_keys(vc_merchant_fact_rows(1)), $advertised)));
+
+/* --- The derived offer figures ---------------------------------------- */
+
+check('[merchant_discount] is registered', isset($GLOBALS['shortcodes']['merchant_discount']));
+check('[merchant_offer_label] is registered', isset($GLOBALS['shortcodes']['merchant_offer_label']));
+
+$GLOBALS['meta'][1]['best_offer_summary'] = '20% off everything sitewide';
+$GLOBALS['meta'][1]['offer_display_mode'] = 'verified_code';
+check('the headline discount is reachable',
+    call_user_func($GLOBALS['shortcodes']['merchant_discount'], array()) === '20%',
+    call_user_func($GLOBALS['shortcodes']['merchant_discount'], array()));
+check('the offer label follows the same gate as the badge',
+    call_user_func($GLOBALS['shortcodes']['merchant_offer_label'], array()) === 'Verified Code',
+    call_user_func($GLOBALS['shortcodes']['merchant_offer_label'], array()));
+
+// A threshold is not a discount, and must not become the headline.
+$GLOBALS['meta'][1]['best_offer_summary'] = 'Free shipping over $49';
+check('a threshold is not rendered as the headline discount',
+    call_user_func($GLOBALS['shortcodes']['merchant_discount'], array()) === '',
+    call_user_func($GLOBALS['shortcodes']['merchant_discount'], array()));
+check('and a fallback can be supplied for that case',
+    call_user_func($GLOBALS['shortcodes']['merchant_discount'],
+        array('fallback' => 'Deals available')) === 'Deals available');
+
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
 echo "All field shortcode checks passed.\n";

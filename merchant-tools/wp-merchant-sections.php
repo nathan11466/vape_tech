@@ -575,24 +575,47 @@ add_shortcode('merchant_hero', function ($atts) {
  * Only facts actually present are shown; the strip disappears entirely rather
  * than printing empty tiles.
  */
-function vc_merchant_quick_facts($post_id) {
+/**
+ * The quick-facts rows, keyed.
+ *
+ * Split out of the renderer so the exact text in a cell is reachable on its
+ * own. Several of these are derived -- a threshold pulled out of prose, a
+ * state count, the nationwide wording -- so they were only ever visible
+ * inside the table and could not be dropped into a sentence.
+ *
+ * @return array key => array('label' => string, 'value' => string)
+ */
+function vc_merchant_fact_rows($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
     $facts = array();
 
     $ship = vc_section_meta($post_id, 'free_shipping_info');
     if ($ship !== '' && preg_match('/\$\s?([\d,]+)/', $ship, $m)) {
-        $facts[] = array(__('Free shipping over', 'vc-merchant'), '$' . $m[1]);
+        $facts['free_shipping_over'] = array(
+            'label' => __('Free shipping over', 'vc-merchant'),
+            'value' => '$' . $m[1],
+        );
     } elseif ($ship !== '' && stripos($ship, 'free shipping on all') !== false) {
-        $facts[] = array(__('Shipping', 'vc-merchant'), __('Free on all orders', 'vc-merchant'));
+        $facts['shipping'] = array(
+            'label' => __('Shipping', 'vc-merchant'),
+            'value' => __('Free on all orders', 'vc-merchant'),
+        );
     }
 
     $returns = vc_section_meta($post_id, 'return_policy_summary');
     if ($returns !== '' && preg_match('/\b(\d{1,3})[\s-]*day/i', $returns, $m)) {
-        $facts[] = array(__('Returns', 'vc-merchant'), sprintf(__('%s days', 'vc-merchant'), $m[1]));
+        $facts['returns'] = array(
+            'label' => __('Returns', 'vc-merchant'),
+            'value' => sprintf(__('%s days', 'vc-merchant'), $m[1]),
+        );
     }
 
     $age = vc_section_meta($post_id, 'age_verification_required');
     if ($age !== '' && stripos($age, 'not stated') === false) {
-        $facts[] = array(__('Age required', 'vc-merchant'), $age);
+        $facts['age_required'] = array(
+            'label' => __('Age required', 'vc-merchant'),
+            'value' => $age,
+        );
     }
 
     $ships_to = vc_section_meta($post_id, 'ships_to_terms');
@@ -605,12 +628,17 @@ function vc_merchant_quick_facts($post_id) {
                 // The merchant published no restrictions, so coverage is our
                 // working assumption rather than their claim. Saying "51
                 // states" here would put a number in their mouth.
-                $facts[] = array(__('Ships to', 'vc-merchant'),
-                    __('US nationwide*', 'vc-merchant'));
+                $facts['ships_to'] = array(
+                    'label' => __('Ships to', 'vc-merchant'),
+                    'value' => __('US nationwide*', 'vc-merchant'),
+                );
             } else {
-                $facts[] = array(__('Ships to', 'vc-merchant'),
-                    sprintf(_n('%d state', '%d states', count($states), 'vc-merchant'),
-                        count($states)));
+                $facts['ships_to'] = array(
+                    'label' => __('Ships to', 'vc-merchant'),
+                    'value' => sprintf(
+                        _n('%d state', '%d states', count($states), 'vc-merchant'),
+                        count($states)),
+                );
             }
         }
     }
@@ -618,17 +646,43 @@ function vc_merchant_quick_facts($post_id) {
     $id_delivery = vc_section_meta($post_id, 'do_they_id_on_delivery');
     if ($id_delivery !== '' && stripos($id_delivery, 'not stated') === false
         && stripos($id_delivery, 'unknown') === false) {
-        $facts[] = array(__('ID on delivery', 'vc-merchant'), $id_delivery);
+        $facts['id_on_delivery'] = array(
+            'label' => __('ID on delivery', 'vc-merchant'),
+            'value' => $id_delivery,
+        );
     }
 
     $restricted = vc_section_meta($post_id, 'restricted_states');
     if ($restricted !== '') {
         $list = array_filter(array_map('trim', explode('|', $restricted)));
         if (!empty($list)) {
-            $facts[] = array(__('Cannot ship to', 'vc-merchant'), implode(', ', $list));
+            $facts['cannot_ship_to'] = array(
+                'label' => __('Cannot ship to', 'vc-merchant'),
+                'value' => implode(', ', $list),
+            );
         }
     }
 
+    return apply_filters('vc_merchant_fact_rows', $facts, $post_id);
+}
+
+/**
+ * Every fact key this page could expose, for the editor panel.
+ */
+function vc_merchant_fact_keys() {
+    return array(
+        'free_shipping_over' => __('Free shipping threshold', 'vc-merchant'),
+        'shipping'           => __('Shipping (free on all orders)', 'vc-merchant'),
+        'returns'            => __('Returns window', 'vc-merchant'),
+        'age_required'       => __('Age required', 'vc-merchant'),
+        'ships_to'           => __('Ships to (summary)', 'vc-merchant'),
+        'id_on_delivery'     => __('ID on delivery', 'vc-merchant'),
+        'cannot_ship_to'     => __('Cannot ship to', 'vc-merchant'),
+    );
+}
+
+function vc_merchant_quick_facts($post_id) {
+    $facts = vc_merchant_fact_rows($post_id);
     if (empty($facts)) {
         return '';
     }
@@ -636,13 +690,52 @@ function vc_merchant_quick_facts($post_id) {
     $out = '<ul class="vc-quickfacts">';
     foreach ($facts as $fact) {
         $out .= '<li class="vc-quickfact"><span class="vc-quickfact__label">'
-            . esc_html($fact[0]) . '</span><span class="vc-quickfact__value">'
-            . esc_html($fact[1]) . '</span></li>';
+            . esc_html($fact['label']) . '</span><span class="vc-quickfact__value">'
+            . esc_html($fact['value']) . '</span></li>';
     }
     $out .= '</ul>';
 
     return $out;
 }
+
+/**
+ * [merchant_fact key="ships_to"] -- the exact text from one quick-facts cell.
+ *
+ * show="label" gives the cell's label instead, and show="both" gives
+ * "Label: value", so a sentence can be built out of either.
+ */
+add_shortcode('merchant_fact', function ($atts) {
+    $atts = shortcode_atts(
+        array('id' => 0, 'key' => '', 'show' => 'value', 'before' => '', 'after' => ''),
+        $atts, 'merchant_fact');
+
+    $post_id = vc_section_post_id($atts);
+    $key = trim((string) $atts['key']);
+    if (!$post_id || $key === '') {
+        return '';
+    }
+
+    $facts = vc_merchant_fact_rows($post_id);
+
+    if (!isset($facts[$key])) {
+        // An unknown key is told apart from a fact this store simply has no
+        // data for, because they look identical on the page otherwise.
+        if (!array_key_exists($key, vc_merchant_fact_keys()) && current_user_can('edit_posts')) {
+            return '<span class="vc-field-error" style="color:#b32d2e;">'
+                . esc_html(sprintf(__('[merchant_fact] unknown key "%s"', 'vc-merchant'), $key))
+                . '</span>';
+        }
+
+        return '';
+    }
+
+    $fact = $facts[$key];
+    $text = $atts['show'] === 'label' ? $fact['label']
+        : ($atts['show'] === 'both' ? $fact['label'] . ': ' . $fact['value'] : $fact['value']);
+
+    return esc_html($atts['before']) . esc_html($text) . esc_html($atts['after']);
+});
+
 add_shortcode('merchant_quickfacts', function ($atts) {
     $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_quickfacts');
     $post_id = vc_section_post_id($atts);
@@ -943,4 +1036,54 @@ add_shortcode('merchant_tags', function ($atts) {
     $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_tags');
 
     return vc_merchant_taxonomy_tags(vc_section_post_id($atts));
+});
+
+/**
+ * [merchant_discount] -- the headline discount figure, as the hero shows it.
+ *
+ * Derived, so it was not reachable as a field. It deliberately excludes
+ * thresholds and prices: "free shipping over $49" is not a discount and
+ * neither is "from $4.99", and rendering either as the headline would state
+ * something the merchant never claimed.
+ */
+add_shortcode('merchant_discount', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0, 'before' => '', 'after' => '', 'fallback' => ''),
+        $atts, 'merchant_discount');
+
+    $post_id = vc_section_post_id($atts);
+    if (!$post_id || !function_exists('vc_merchant_headline_discount')) {
+        return '';
+    }
+
+    list($figure, ) = vc_merchant_headline_discount($post_id);
+    if ($figure === '') {
+        return esc_html($atts['fallback']);
+    }
+
+    return esc_html($atts['before']) . esc_html($figure) . esc_html($atts['after']);
+});
+
+/**
+ * [merchant_offer_label] -- what the page is allowed to call its offer.
+ *
+ * "Verified Code", "Best Deal" or "No Active Code" -- the same gate the hero
+ * badge uses, so a hand-written sentence cannot contradict it.
+ */
+add_shortcode('merchant_offer_label', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_offer_label');
+    $post_id = vc_section_post_id($atts);
+    if (!$post_id) {
+        return '';
+    }
+
+    $mode = function_exists('vc_merchant_offer_mode')
+        ? vc_merchant_offer_mode($post_id) : '';
+
+    $labels = array(
+        'verified_code'     => __('Verified Code', 'vc-merchant'),
+        'best_deal'         => __('Best Deal', 'vc-merchant'),
+        'no_code_confirmed' => __('No Active Code', 'vc-merchant'),
+    );
+
+    return esc_html($labels[$mode] ?? '');
 });

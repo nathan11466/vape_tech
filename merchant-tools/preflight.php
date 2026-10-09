@@ -269,6 +269,7 @@ $required = array(
     'vc_merchant_render_tokens', 'vc_merchant_seo_tokens',
     'vc_freshness_check', 'vc_freshness_purge_caches', 'vc_freshness_unschedule',
     'vc_merchant_destinations', 'vc_merchant_taxonomy_tags',
+    'vc_merchant_fact_rows', 'vc_merchant_fact_keys',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -306,7 +307,8 @@ foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_o
                'merchant_about', 'merchant_policies', 'merchant_faqs', 'merchant_info',
                'merchant_trust', 'merchant_editorial', 'merchant_field',
                'merchant_name', 'merchant_hero', 'merchant_quickfacts', 'merchant_links',
-               'destination_index', 'merchant_destinations', 'merchant_tags') as $sc) {
+               'destination_index', 'merchant_destinations', 'merchant_tags',
+               'merchant_fact', 'merchant_discount', 'merchant_offer_label') as $sc) {
     check("[$sc] is registered", isset($GLOBALS['registered_shortcodes'][$sc]));
 }
 
