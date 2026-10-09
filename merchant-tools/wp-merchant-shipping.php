@@ -158,13 +158,17 @@ function vc_assign_ships_to($post_id, $list) {
             }
         }
 
-        $slug = $parent_name !== ''
-            ? sanitize_title($parent_name . '-' . $name)
-            : sanitize_title($name);
-
-        $term = get_term_by('slug', $slug, 'ships_to');
+        // Match by name first. The slug is derived, and this function used to
+        // rebuild the old parent-prefixed form -- which stopped matching once
+        // destinations moved to bare slugs, and worse, would have created a
+        // duplicate carrying the old format.
+        $term = get_term_by('name', $name, 'ships_to');
         if (!$term) {
-            $term = get_term_by('name', $name, 'ships_to');
+            $term = get_term_by('slug', vc_shipping_preferred_slug($parent_name, $name), 'ships_to');
+        }
+        if (!$term) {
+            // Last resort: a term seeded by an older version.
+            $term = get_term_by('slug', sanitize_title($parent_name . '-' . $name), 'ships_to');
         }
 
         // Create it rather than skipping. A missing term used to be swallowed
@@ -185,7 +189,7 @@ function vc_assign_ships_to($post_id, $list) {
             }
             $created = wp_insert_term($name, 'ships_to', array(
                 'parent' => $parent_id,
-                'slug'   => $slug,
+                'slug'   => vc_shipping_preferred_slug($parent_name, $name),
             ));
             if (is_wp_error($created)) {
                 continue;

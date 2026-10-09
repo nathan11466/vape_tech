@@ -235,8 +235,22 @@ def apply_to_row(row, assume_nationwide=True):
 
     # Keep ships_to_countries populated for the merchant info panel, using the
     # country-level names only so the panel does not print 50 states.
+    countries = [n for n in ships_to if n in COUNTRIES]
     if not (row.get("ships_to_countries") or "").strip() and ships_to:
-        countries = [n for n in ships_to if n in COUNTRIES]
         row["ships_to_countries"] = "|".join(countries)
+
+    # service_locations drives its own taxonomy, and nothing filled it -- the
+    # column was declared and then left empty, so the Service Locations boxes
+    # on every store stayed unticked however many times the CSV was imported.
+    #
+    # Country level only. The service_location tree is about where a merchant
+    # serves customers, and a 51-state list belongs in ships_to, which already
+    # has it.
+    if not (row.get("service_locations") or "").strip() and countries:
+        row["service_locations"] = "|".join(countries)
+
+    # The single primary market, for the review queue and the info panel.
+    if not (row.get("primary_service_location") or "").strip() and countries:
+        row["primary_service_location"] = countries[0]
 
     return confidence

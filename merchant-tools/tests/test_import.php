@@ -288,6 +288,66 @@ check('a path that is not a genuine upload is refused',
 
 @unlink($truncated);
 
+/* -------------------------------------------------------------------------
+ * The taxonomy columns must be reported, not silently empty
+ *
+ * The Ships To and Service Locations boxes on a store are ticked from these
+ * columns. A file without them imported happily, assigned nothing, and said
+ * nothing -- so empty checkboxes in the editor had no explanation anywhere.
+ * ---------------------------------------------------------------------- */
+
+function write_csv($rows) {
+    $path = tempnam(sys_get_temp_dir(), 'vccsv');
+    $fh = fopen($path, 'w');
+    foreach ($rows as $r) { fputcsv($fh, $r); }
+    fclose($fh);
+    return $path;
+}
+
+// A file that has none of the taxonomy columns -- e.g. the scraper's output
+// rather than the enriched file.
+$scraper_out = write_csv(array(
+    array('brand_name', 'brand_url', 'social_links'),
+    array('VooPoo', 'https://voopoo.com', 'x'),
+));
+$res = vc_merchant_import_csv($scraper_out, true);
+$report = implode(' | ', $res['taxonomy']);
+check('a file with no ships_to_terms column says so',
+    strpos($report, 'no "ships_to_terms" column') !== false, $report);
+check('and names service_locations too',
+    strpos($report, 'no "service_locations" column') !== false, $report);
+check('and the absent list is populated so the notice can warn',
+    !empty($res['absent']), json_encode($res['absent']));
+@unlink($scraper_out);
+
+// Columns present but blank on every row -- the strict-shipping case.
+$blank = write_csv(array(
+    array('brand_name', 'ships_to_terms', 'service_locations', 'brand_category'),
+    array('VooPoo', '', '', ''),
+    array('Element Vape', '', '', ''),
+));
+$res = vc_merchant_import_csv($blank, true);
+$report = implode(' | ', $res['taxonomy']);
+check('a column present but empty on every row is called out',
+    strpos($report, 'present but empty on every row') !== false, $report);
+check('and is not reported as absent, because it is there',
+    empty($res['absent']), json_encode($res['absent']));
+@unlink($blank);
+
+// Populated: report the coverage.
+$good = write_csv(array(
+    array('brand_name', 'ships_to_terms', 'service_locations', 'brand_category'),
+    array('VooPoo', 'United States|Texas', 'United States', 'Box Mods'),
+    array('Element Vape', 'United States|Utah', 'United States', 'Vape Juice'),
+    array('Thin One', '', '', ''),
+));
+$res = vc_merchant_import_csv($good, true);
+$report = implode(' | ', $res['taxonomy']);
+check('a populated column reports how many rows carried a value',
+    strpos($report, 'a value on 2 of 3 rows') !== false, $report);
+check('and nothing is flagged as absent', empty($res['absent']), json_encode($res['absent']));
+@unlink($good);
+
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
 echo "All importer checks passed.\n";

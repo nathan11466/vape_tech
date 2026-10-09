@@ -243,12 +243,34 @@ function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = 
     $messages = array();
     $count = 0;
 
+    // Which taxonomy columns this file even has. Checked against the header
+    // rather than per row, so a column missing from the export is reported
+    // once and clearly.
+    $taxonomy_columns = array(
+        'ships_to_terms'    => __('Ships To', 'vc-merchant'),
+        'service_locations' => __('Service Locations', 'vc-merchant'),
+        'brand_category'    => __('Categories', 'vc-merchant'),
+    );
+    $absent = array();
+    foreach ($taxonomy_columns as $column => $label) {
+        if (!in_array($column, $header, true)) {
+            $absent[] = sprintf('%s (no "%s" column)', $label, $column);
+        }
+    }
+    $filled = array_fill_keys(array_keys($taxonomy_columns), 0);
+
     while (($line = fgetcsv($fh)) !== false) {
         if (count($line) !== count($header)) {
             $tally['skipped']++;
             continue;
         }
         $row = array_combine($header, $line);
+
+        foreach (array_keys($taxonomy_columns) as $column) {
+            if (trim((string) ($row[$column] ?? '')) !== '') {
+                $filled[$column]++;
+            }
+        }
 
         list($action, $post_id, $message) = vc_merchant_import_row($row, $dry_run, $publish, $content_mode);
         if (isset($tally[$action])) {
@@ -263,7 +285,36 @@ function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = 
     }
     fclose($fh);
 
-    return array('tally' => $tally, 'messages' => $messages);
+    // Build a plain statement of what the taxonomy columns actually carried,
+    // so an empty set of checkboxes in the editor has an explanation on screen
+    // rather than needing someone to go and read the CSV.
+    $taxonomy_report = array();
+    foreach ($taxonomy_columns as $column => $label) {
+        if (!in_array($column, $header, true)) {
+            $taxonomy_report[] = sprintf(
+                /* translators: 1: taxonomy label, 2: CSV column name */
+                __('%1$s: no "%2$s" column in this file, so nothing was assigned.', 'vc-merchant'),
+                $label, $column);
+            continue;
+        }
+        if ($filled[$column] === 0) {
+            $taxonomy_report[] = sprintf(
+                __('%1$s: the "%2$s" column is present but empty on every row, so nothing was assigned.', 'vc-merchant'),
+                $label, $column);
+            continue;
+        }
+        $taxonomy_report[] = sprintf(
+            /* translators: 1: label, 2: rows with a value, 3: rows read */
+            __('%1$s: a value on %2$d of %3$d rows.', 'vc-merchant'),
+            $label, $filled[$column], $count);
+    }
+
+    return array(
+        'tally'    => $tally,
+        'messages' => $messages,
+        'taxonomy' => $taxonomy_report,
+        'absent'   => $absent,
+    );
 }
 
 /* -------------------------------------------------------------------------
@@ -348,6 +399,21 @@ function vc_merchant_import_screen() {
                 <?php endforeach; ?>
                 </ul>
             </div>
+
+            <?php if (!empty($result['taxonomy'])) : ?>
+                <div class="notice <?php echo empty($result['absent']) ? 'notice-info' : 'notice-warning'; ?>">
+                    <p><strong><?php esc_html_e('Ships To, Service Locations and Categories', 'vc-merchant'); ?></strong></p>
+                    <ul style="margin-left:1em;list-style:disc;">
+                    <?php foreach ($result['taxonomy'] as $line) : ?>
+                        <li><?php echo esc_html($line); ?></li>
+                    <?php endforeach; ?>
+                    </ul>
+                    <p class="description">
+                        <?php esc_html_e('These are the columns that tick the taxonomy boxes on a store. If one reads "nothing was assigned", those boxes will be empty however many stores imported - re-run enrichment and import that file instead.', 'vc-merchant'); ?>
+                    </p>
+                </div>
+            <?php endif; ?>
+
             <details>
                 <summary><?php esc_html_e('Per-merchant detail', 'vc-merchant'); ?></summary>
                 <pre style="max-height:400px;overflow:auto;background:#fff;padding:10px;border:1px solid #ccd0d4;"><?php
