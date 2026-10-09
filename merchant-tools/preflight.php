@@ -76,6 +76,7 @@ function wp_insert_term($name, $tax, $args = array()) {
         'slug' => $args['slug'] ?? '');
     return array('term_id' => $id);
 }
+function get_the_terms($id, $tax) { return false; }
 function get_term($id, $tax = '') {
     foreach ($GLOBALS['inserted_terms'] as $t) {
         if ($t['id'] === $id) {
@@ -267,6 +268,7 @@ $required = array(
     'vc_merchant_max_discount', 'vc_merchant_brand_figures',
     'vc_merchant_render_tokens', 'vc_merchant_seo_tokens',
     'vc_freshness_check', 'vc_freshness_purge_caches', 'vc_freshness_unschedule',
+    'vc_merchant_destinations', 'vc_merchant_taxonomy_tags',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -304,7 +306,7 @@ foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_o
                'merchant_about', 'merchant_policies', 'merchant_faqs', 'merchant_info',
                'merchant_trust', 'merchant_editorial', 'merchant_field',
                'merchant_name', 'merchant_hero', 'merchant_quickfacts', 'merchant_links',
-               'destination_index') as $sc) {
+               'destination_index', 'merchant_destinations', 'merchant_tags') as $sc) {
     check("[$sc] is registered", isset($GLOBALS['registered_shortcodes'][$sc]));
 }
 

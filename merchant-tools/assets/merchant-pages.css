@@ -834,3 +834,15 @@
   text-decoration-thickness: 1px;
   text-decoration-color: rgba(0, 0, 0, .35);
 }
+
+/* ---------- Where this store ships ---------- */
+
+.vc-destinations__list { list-style: none; margin: 0 0 .75rem; padding: 0; }
+.vc-destinations__item { margin: 0 0 .4rem; line-height: 1.6; }
+.vc-destinations__except { margin: .5rem 0 0; }
+.vc-destinations__note {
+  margin: .6rem 0 0;
+  font-size: .85rem;
+  color: #6b7280;
+}
+.vc-tags__row { margin: 0 0 .4rem; font-size: .92rem; line-height: 1.6; }

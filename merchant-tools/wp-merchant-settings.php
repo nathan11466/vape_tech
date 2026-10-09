@@ -29,6 +29,8 @@ function vc_layout_defaults() {
         'about'      => array('label' => 'About the store',            'where' => 'main'),
         'save'       => array('label' => 'Best ways to save',          'where' => 'main'),
         'policies'   => array('label' => 'Shipping, returns & terms',  'where' => 'main'),
+        'destinations' => array('label' => 'Where this store ships',    'where' => 'main'),
+        'tags'       => array('label' => 'Serves / sells (taxonomy)',   'where' => 'side'),
         'faqs'       => array('label' => 'FAQs',                       'where' => 'main'),
         'info'       => array('label' => 'Merchant information panel', 'where' => 'side'),
         'trust'      => array('label' => 'Company information',        'where' => 'side'),

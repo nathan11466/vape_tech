@@ -85,6 +85,7 @@ function get_posts() { return array(); }
 function get_terms() { return array(); }
 function get_term($id, $t = '') { return null; }
 function get_term_by() { return false; }
+function get_the_terms($id, $tax) { return false; }
 function get_term_link($t) { return '#'; }
 function get_term_meta($id, $k, $s = false) { return ''; }
 function wp_insert_post() { return 1; }

@@ -121,6 +121,14 @@ function vc_merchant_block($block, $post_id, $atts = array()) {
                 ? ''
                 : '<div class="vc-coupon-widget">' . do_shortcode($shortcode) . '</div>';
 
+        case 'destinations':
+            return function_exists('vc_merchant_destinations')
+                ? vc_merchant_destinations($post_id) : '';
+
+        case 'tags':
+            return function_exists('vc_merchant_taxonomy_tags')
+                ? vc_merchant_taxonomy_tags($post_id) : '';
+
         case 'quickfacts':
             return function_exists('vc_merchant_quick_facts')
                 ? vc_merchant_quick_facts($post_id) : '';

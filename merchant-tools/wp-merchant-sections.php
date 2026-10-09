@@ -773,3 +773,174 @@ add_shortcode('merchant_links', function ($atts) {
 
     return $post_id ? vc_merchant_links($post_id) : '';
 });
+
+/* -------------------------------------------------------------------------
+ * Where a store ships, from the taxonomy
+ *
+ * The quick-facts strip summarises shipping from the ships_to_terms meta
+ * string ("US nationwide", "48 states"). That is a count, not the
+ * destinations, and it never linked anywhere -- so the assigned terms were
+ * invisible on the page and the destination pages got no links from the
+ * stores that serve them.
+ *
+ * This renders the terms themselves. It deliberately does NOT list every
+ * state for a nationwide store: 112 stores times 51 states is 5,600 links,
+ * which dilutes the ones that mean something. A nationwide store links to the
+ * country page and names its exclusions, because the exclusions are the part
+ * a reader actually needs.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * At or above this many US child terms, a store counts as nationwide.
+ */
+function vc_destinations_nationwide_threshold() {
+    return (int) apply_filters('vc_destinations_nationwide_threshold', 45);
+}
+
+/**
+ * Linked term name, or the plain name when the term has no usable link.
+ */
+function vc_destination_link($term) {
+    $link = get_term_link($term);
+    if (is_wp_error($link)) {
+        return esc_html($term->name);
+    }
+
+    return '<a href="' . esc_url($link) . '">' . esc_html($term->name) . '</a>';
+}
+
+/**
+ * The destinations block: where this store ships, and where it does not.
+ */
+function vc_merchant_destinations($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+
+    if (!taxonomy_exists('ships_to')) {
+        return '';
+    }
+
+    $terms = get_the_terms($post_id, 'ships_to');
+    if (!$terms || is_wp_error($terms)) {
+        return '';
+    }
+
+    // Split the country roll-ups from the places inside them.
+    $parents = array();
+    $children = array();
+    foreach ($terms as $term) {
+        if ((int) $term->parent === 0) {
+            $parents[$term->term_id] = $term;
+        } else {
+            $children[(int) $term->parent][] = $term;
+        }
+    }
+
+    $rows = '';
+
+    foreach ($parents as $parent_id => $parent) {
+        $group = $children[$parent_id] ?? array();
+
+        if (count($group) >= vc_destinations_nationwide_threshold()) {
+            // Nationwide: one link to the country, not fifty-one to states.
+            $rows .= '<li class="vc-destinations__item">'
+                . vc_destination_link($parent) . ' &mdash; '
+                . esc_html(sprintf(
+                    /* translators: %d: number of destinations */
+                    _n('%d destination', 'all %d destinations', count($group), 'vc-merchant'),
+                    count($group)))
+                . '</li>';
+            continue;
+        }
+
+        if (empty($group)) {
+            $rows .= '<li class="vc-destinations__item">' . vc_destination_link($parent) . '</li>';
+            continue;
+        }
+
+        // A specific subset is worth listing in full: it is genuinely
+        // distinguishing information, and there are few enough links for each
+        // to carry weight.
+        $links = array();
+        foreach ($group as $child) {
+            $links[] = vc_destination_link($child);
+        }
+        $rows .= '<li class="vc-destinations__item"><strong>'
+            . esc_html($parent->name) . ':</strong> ' . implode(', ', $links) . '</li>';
+    }
+
+    if ($rows === '') {
+        return '';
+    }
+
+    $out = '<section class="vc-section vc-destinations">';
+    $out .= '<h2>' . esc_html__('Where this store ships', 'vc-merchant') . '</h2>';
+    $out .= '<ul class="vc-destinations__list">' . $rows . '</ul>';
+
+    // Exclusions, which are the part a reader is actually checking for.
+    $restricted = array_filter(array_map('trim',
+        explode('|', (string) vc_section_meta($post_id, 'restricted_states'))));
+    if (!empty($restricted)) {
+        $linked = array();
+        foreach ($restricted as $name) {
+            $term = get_term_by('name', $name, 'ships_to');
+            $linked[] = ($term && !is_wp_error($term))
+                ? vc_destination_link($term) : esc_html($name);
+        }
+        $out .= '<p class="vc-destinations__except"><strong>'
+            . esc_html__('Cannot ship to:', 'vc-merchant') . '</strong> '
+            . implode(', ', $linked) . '</p>';
+    }
+
+    // Where coverage is our working assumption rather than the merchant's
+    // claim, say so here too rather than only in the quick facts.
+    if (vc_section_meta($post_id, 'shipping_confidence') === 'assumed') {
+        $out .= '<p class="vc-destinations__note">'
+            . esc_html__('* This store publishes no delivery restrictions, so nationwide coverage is our assumption rather than a claim they make. Check at checkout.', 'vc-merchant')
+            . '</p>';
+    }
+
+    $out .= '</section>';
+
+    return $out;
+}
+add_shortcode('merchant_destinations', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_destinations');
+
+    return vc_merchant_destinations(vc_section_post_id($atts));
+});
+
+/**
+ * Service locations and product categories, as assigned terms.
+ */
+function vc_merchant_taxonomy_tags($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $out = '';
+
+    $sets = array(
+        'service_location'  => __('Serves', 'vc-merchant'),
+        'merchant_category' => __('Sells', 'vc-merchant'),
+    );
+
+    foreach ($sets as $taxonomy => $label) {
+        if (!taxonomy_exists($taxonomy)) {
+            continue;
+        }
+        $terms = get_the_terms($post_id, $taxonomy);
+        if (!$terms || is_wp_error($terms)) {
+            continue;
+        }
+        $links = array();
+        foreach ($terms as $term) {
+            $links[] = vc_destination_link($term);
+        }
+        $out .= '<p class="vc-tags__row"><strong>' . esc_html($label) . ':</strong> '
+            . implode(', ', $links) . '</p>';
+    }
+
+    return $out === '' ? '' : '<section class="vc-section vc-tags">' . $out . '</section>';
+}
+add_shortcode('merchant_tags', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_tags');
+
+    return vc_merchant_taxonomy_tags(vc_section_post_id($atts));
+});
