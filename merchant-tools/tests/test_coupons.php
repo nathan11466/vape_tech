@@ -18,6 +18,7 @@ $GLOBALS['titles'] = array();
 $GLOBALS['terms'] = array();      // term_id => name
 $GLOBALS['term_slugs'] = array(); // term_id => slug
 $GLOBALS['coupons'] = array();    // list of post objects
+$S = fresh_store();
 $GLOBALS['current_id'] = 1;
 $GLOBALS['filters'] = array();
 $GLOBALS['has_coupon_plugin'] = true;
@@ -82,6 +83,13 @@ function apply_filters($tag, $value) {
     return $value;
 }
 function add_filter($tag, $fn, $p = 10, $a = 1) { $GLOBALS['filters'][$tag][] = $fn; }
+/** Prove a tag is a real extension point by filtering it and seeing it change. */
+function is_real_filter($tag) {
+    $GLOBALS['filters'][$tag][] = function ($v) { return 4242; };
+    $seen = apply_filters($tag, 1);
+    $GLOBALS['filters'][$tag] = array();
+    return $seen === 4242;
+}
 function add_action() {}
 function add_meta_box() {}
 function wp_nonce_field() {}
@@ -120,7 +128,11 @@ function vc_merchant_display_name($id = null) {
 }
 class WP_Query {
     public $posts = array();
-    function __construct($a = array()) { $this->posts = $GLOBALS['coupons']; }
+    function __construct($a = array()) {
+        $GLOBALS['query_count'] = ($GLOBALS['query_count'] ?? 0) + 1;
+        $GLOBALS['last_query_args'] = $a;
+        $this->posts = $GLOBALS['coupons'];
+    }
 }
 
 require __DIR__ . '/../wp-merchant-coupons.php';
@@ -138,6 +150,23 @@ function set_coupon($id, $type, $code, $ok, $bad, $expires = '') {
     );
     return new FakeCoupon($id);
 }
+/**
+ * A fresh store post wired to the VooPoo brand.
+ *
+ * vc_merchant_live_coupons() memoises per store for the request, as it must --
+ * eight call sites hit it during one render. Each scenario therefore needs its
+ * own store rather than reusing one and swapping the coupons underneath it,
+ * which no real page ever does.
+ */
+function fresh_store($name = 'VooPoo') {
+    static $next = 5000;
+    $id = $next++;
+    $GLOBALS['titles'][$id] = $name;
+    $GLOBALS['meta'][$id] = array();
+    $GLOBALS['current_id'] = $id;
+    return $id;
+}
+
 function tags_balanced($html, $tag) {
     return substr_count($html, "<$tag") === substr_count($html, "</$tag>");
 }
@@ -170,39 +199,46 @@ check('an explicit brand link overrides the name match',
  * ---------------------------------------------------------------------- */
 
 $GLOBALS['coupons'] = array(set_coupon(201, 'code', 'VOOPOO15', 12, 2));
+$S = fresh_store();
 check('a working code gives verified_code',
-    vc_merchant_coupon_status(1) === 'verified_code', vc_merchant_coupon_status(1));
+    vc_merchant_coupon_status($S) === 'verified_code', vc_merchant_coupon_status($S));
 
 // Readers reporting failure must withdraw the "verified" claim.
 $GLOBALS['coupons'] = array(set_coupon(202, 'code', 'DEAD20', 1, 9));
+$S = fresh_store();
 check('a code readers report as broken is NOT verified',
-    vc_merchant_coupon_status(1) !== 'verified_code', vc_merchant_coupon_status(1));
+    vc_merchant_coupon_status($S) !== 'verified_code', vc_merchant_coupon_status($S));
 
 $GLOBALS['coupons'] = array(set_coupon(203, 'deal', '', 0, 0));
+$S = fresh_store();
 check('a deal with no code gives best_deal',
-    vc_merchant_coupon_status(1) === 'best_deal', vc_merchant_coupon_status(1));
+    vc_merchant_coupon_status($S) === 'best_deal', vc_merchant_coupon_status($S));
 
 // An expired code must not keep the page claiming one exists.
 $GLOBALS['coupons'] = array(set_coupon(204, 'code', 'OLD10', 50, 0, '2020-01-01'));
+$S = fresh_store();
 check('an expired code is excluded',
-    vc_merchant_live_coupons(1) === array(), count(vc_merchant_live_coupons(1)) . ' live');
+    vc_merchant_live_coupons($S) === array(), count(vc_merchant_live_coupons($S)) . ' live');
 check('expiry flips the page to no_code_confirmed',
-    vc_merchant_coupon_status(1) === 'no_code_confirmed', vc_merchant_coupon_status(1));
+    vc_merchant_coupon_status($S) === 'no_code_confirmed', vc_merchant_coupon_status($S));
 
 $GLOBALS['coupons'] = array(set_coupon(205, 'code', 'FUTURE', 3, 0, '2099-12-31'));
+$S = fresh_store();
 check('a future expiry stays live',
-    vc_merchant_coupon_status(1) === 'verified_code');
+    vc_merchant_coupon_status($S) === 'verified_code');
 
 // A tie goes to the code: more successes than failures is the rule, and equal
 // counts are not evidence it stopped working.
 $GLOBALS['coupons'] = array(set_coupon(206, 'code', 'TIED', 5, 5));
+$S = fresh_store();
 check('an evenly reported code is still treated as working',
-    vc_merchant_coupon_status(1) === 'verified_code', vc_merchant_coupon_status(1));
+    vc_merchant_coupon_status($S) === 'verified_code', vc_merchant_coupon_status($S));
 
 // No reports at all is not a failure signal either.
 $GLOBALS['coupons'] = array(set_coupon(207, 'code', 'NEW', 0, 0));
+$S = fresh_store();
 check('a brand-new code with no reports is still a code',
-    vc_merchant_coupon_status(1) === 'verified_code', vc_merchant_coupon_status(1));
+    vc_merchant_coupon_status($S) === 'verified_code', vc_merchant_coupon_status($S));
 
 /* -------------------------------------------------------------------------
  * Schema must not describe the shop twice
@@ -211,17 +247,19 @@ check('a brand-new code with no reports is still a code',
  * businesses that happen to share a name.
  * ---------------------------------------------------------------------- */
 
-$org_id = apply_filters('vc_merchant_org_id', 'https://vapingcheap.com/stores/voopoo/#merchant', 1);
+$org_id = apply_filters('vc_merchant_org_id', 'https://vapingcheap.com/stores/voopoo/#merchant', $S);
 check('store node adopts the coupon plugin Organization @id',
     $org_id === 'https://vapingcheap.com/brand/voopoo/#organization', $org_id);
 
 $GLOBALS['coupons'] = array(set_coupon(208, 'code', 'LIVE', 5, 0));
+$S = fresh_store();
 check('our Offer node is suppressed when real coupons exist',
-    apply_filters('vc_merchant_emit_offer', true, 1) === false);
+    apply_filters('vc_merchant_emit_offer', true, $S) === false);
 
 $GLOBALS['coupons'] = array();
+$S = fresh_store();
 check('our Offer node is kept when there are no coupons',
-    apply_filters('vc_merchant_emit_offer', true, 1) === true);
+    apply_filters('vc_merchant_emit_offer', true, $S) === true);
 
 /* -------------------------------------------------------------------------
  * The "Linked coupons" admin box
@@ -234,6 +272,7 @@ $GLOBALS['coupons'] = array(
     set_coupon(301, 'code', 'VOOPOO15', 12, 2),
     set_coupon(302, 'deal', '', 0, 0),
 );
+$S = fresh_store();
 $GLOBALS['titles'][301] = '15% off everything sitewide at VooPoo';
 $GLOBALS['titles'][302] = 'Free shipping on orders over $45';
 
@@ -283,8 +322,9 @@ for ($i = 0; $i < 11; $i++) {
     $GLOBALS['titles'][400 + $i] = 'Coupon ' . $i;
 }
 $GLOBALS['coupons'] = $many;
+$S = fresh_store();
 ob_start();
-vc_merchant_coupons_meta_box(new FakePost(1));
+vc_merchant_coupons_meta_box(new FakePost($S));
 $box2 = ob_get_clean();
 check('an overflowing list says how many are hidden',
     strpos($box2, '3 more not shown') !== false, $box2);
@@ -439,8 +479,6 @@ check('and nothing is invented when neither has one',
  * claim about the store.
  * ---------------------------------------------------------------------- */
 
-$GLOBALS['titles'][20] = 'VooPoo';
-$GLOBALS['meta'][20] = array();
 
 function coupon_with($id, $discount, $title, $ok = 5, $bad = 0, $expires = '') {
     $GLOBALS['meta'][$id] = array(
@@ -458,40 +496,46 @@ $GLOBALS['coupons'] = array(
     coupon_with(902, '25%', '25% off clearance'),
     coupon_with(903, '10%', '10% off everything'),
 );
+$S = fresh_store();
 check('the largest live percentage is reported',
-    vc_merchant_max_discount(20) === '25', vc_merchant_max_discount(20));
+    vc_merchant_max_discount($S) === '25', vc_merchant_max_discount($S));
 
 // A threshold and a flat amount are not percentages.
 $GLOBALS['coupons'] = array(
     coupon_with(910, 'Free shipping over $75', 'Free shipping over $75'),
     coupon_with(911, '$10 off', '$10 off your order'),
 );
+$S = fresh_store();
 check('a shipping threshold is not reported as a percentage',
-    vc_merchant_max_discount(20) === '', vc_merchant_max_discount(20));
+    vc_merchant_max_discount($S) === '', vc_merchant_max_discount($S));
 
 // A code readers say is broken must not set the headline claim.
 $GLOBALS['coupons'] = array(
     coupon_with(920, '50%', '50% off', 1, 9),
     coupon_with(921, '10%', '10% off', 8, 0),
 );
+$S = fresh_store();
 check('a failing code does not set the headline discount',
-    vc_merchant_max_discount(20) === '10', vc_merchant_max_discount(20));
+    vc_merchant_max_discount($S) === '10', vc_merchant_max_discount($S));
 
 // An expired one is already out of live_coupons, so it cannot contribute.
 $GLOBALS['coupons'] = array(
     coupon_with(930, '70%', '70% off', 9, 0, '2020-01-01'),
     coupon_with(931, '20%', '20% off', 9, 0),
 );
+$S = fresh_store();
 check('an expired code does not set the headline discount',
-    vc_merchant_max_discount(20) === '20', vc_merchant_max_discount(20));
+    vc_merchant_max_discount($S) === '20', vc_merchant_max_discount($S));
 
 $GLOBALS['coupons'] = array(coupon_with(940, '100%', '100% off everything'));
+$S = fresh_store();
 check('an implausible 100% claim is ignored',
-    vc_merchant_max_discount(20) === '', vc_merchant_max_discount(20));
+    vc_merchant_max_discount($S) === '', vc_merchant_max_discount($S));
 
 $GLOBALS['coupons'] = array();
+$S = fresh_store();
 check('no coupons means no discount figure',
-    vc_merchant_max_discount(20) === '');
+    vc_merchant_max_discount($S) === '');
 
 /* -------------------------------------------------------------------------
  * Cached figures
@@ -502,7 +546,8 @@ $GLOBALS['coupons'] = array(
     coupon_with(950, '30%', '30% off'),
     coupon_with(951, '', 'Free gift'),
 );
-$figures = vc_merchant_brand_figures(20);
+$S = fresh_store();
+$figures = vc_merchant_brand_figures($S);
 check('figures count the live coupons', $figures['active_count'] === 2, json_encode($figures));
 check('figures carry the max discount', $figures['max_discount'] === '30', json_encode($figures));
 check('and are cached on the brand term',
@@ -511,31 +556,31 @@ check('and are cached on the brand term',
 
 // A changed coupon must drop the cache, not serve a stale figure.
 $GLOBALS['coupons'] = array(coupon_with(950, '45%', '45% off'));
+$S = fresh_store();
 check('a stale cache is served until something invalidates it',
-    vc_merchant_brand_figures(20)['max_discount'] === '30');
+    vc_merchant_brand_figures($S)['max_discount'] === '30');
 vc_merchant_invalidate_brand_figures(950);
 check('saving a coupon invalidates the cache',
-    vc_merchant_brand_figures(20)['max_discount'] === '45',
-    vc_merchant_brand_figures(20)['max_discount']);
+    vc_merchant_brand_figures($S)['max_discount'] === '45',
+    vc_merchant_brand_figures($S)['max_discount']);
 
 /* -------------------------------------------------------------------------
  * Live and expired are rendered as separate sections
  * ---------------------------------------------------------------------- */
 
-$GLOBALS['titles'][21] = 'VooPoo';
-$GLOBALS['meta'][21] = array();
 $GLOBALS['coupons'] = array(
     coupon_with(960, '20%', 'Live one'),
     coupon_with(961, '15%', 'Dead one', 5, 0, '2020-05-01'),
     coupon_with(962, '10%', 'Older dead one', 5, 0, '2019-01-01'),
 );
+$S = fresh_store();
 
-$expired = vc_merchant_expired_coupons(21);
+$expired = vc_merchant_expired_coupons($S);
 check('expired coupons are identified', count($expired) === 2, json_encode($expired));
 check('and ordered most-recently-expired first',
     $expired[0] === 961, json_encode($expired));
 
-$section = vc_merchant_coupon_section(21);
+$section = vc_merchant_coupon_section($S);
 check('the live coupons render in their own grid',
     strpos($section, 'ids="960"') !== false, $section);
 check('the expired ones render in a separate section',
@@ -548,25 +593,89 @@ check('and comes after the live grid',
 
 // Nothing expired: one plain grid, no empty "Recently expired" heading.
 $GLOBALS['coupons'] = array(coupon_with(970, '20%', 'Only live one'));
-$plain = vc_merchant_coupon_section(21);
+$S = fresh_store();
+$plain = vc_merchant_coupon_section($S);
 check('no expired coupons means no expired section',
     strpos($plain, 'vc-coupon-expired') === false, $plain);
 
 // A store with no linked brand still renders nothing rather than an
 // unscoped grid.
-$GLOBALS['titles'][22] = 'Unlinked Store';
-$GLOBALS['meta'][22] = array();
+$S = fresh_store('Nothing Matches This Either');
 check('an unlinked store renders no coupon section',
-    vc_merchant_coupon_section(22) === '', vc_merchant_coupon_section(22));
+    vc_merchant_coupon_section($S) === '', vc_merchant_coupon_section($S));
 
 $GLOBALS['filters']['vc_merchant_split_expired'][] = function ($on, $id = null) { return false; };
 $GLOBALS['coupons'] = array(
     coupon_with(980, '20%', 'Live'),
     coupon_with(981, '15%', 'Dead', 5, 0, '2020-05-01'),
 );
+$S = fresh_store();
 check('turning the split off renders a single grid',
-    strpos(vc_merchant_coupon_section(21), 'vc-coupon-expired') === false);
+    strpos(vc_merchant_coupon_section($S), 'vc-coupon-expired') === false);
 $GLOBALS['filters']['vc_merchant_split_expired'] = array();
+
+/* -------------------------------------------------------------------------
+ * The coupon query must not repeat across one page render
+ *
+ * Eight call sites reach vc_merchant_live_coupons() while a store page
+ * renders -- the offer mode, the schema gate, the section, the discount
+ * figure and the counts. Unmemoised that was four or five identical queries
+ * for every view of every store page.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['coupons'] = array(coupon_with(990, '20%', 'A live one'));
+$dup = fresh_store();
+
+$GLOBALS['query_count'] = 0;
+vc_merchant_live_coupons($dup);
+$first = (int) $GLOBALS['query_count'];
+check('the first call does query', $first >= 1, (string) $first);
+
+vc_merchant_live_coupons($dup);
+vc_merchant_live_coupons($dup);
+vc_merchant_coupon_status($dup);
+vc_merchant_max_discount($dup);
+check('repeat calls for the same store do not re-query',
+    (int) $GLOBALS['query_count'] === $first,
+    $GLOBALS['query_count'] . " queries, expected $first");
+
+$other = fresh_store();
+vc_merchant_live_coupons($other);
+check('but a different store is still queried',
+    (int) $GLOBALS['query_count'] > $first);
+
+/* -------------------------------------------------------------------------
+ * The fetch limit must not truncate a large brand
+ *
+ * active_count goes into the page title, so a cap that silently drops
+ * coupons publishes a wrong number.
+ * ---------------------------------------------------------------------- */
+
+check('the fetch limit is well above a plausible brand\'s coupon count',
+    vc_merchant_coupon_fetch_limit() >= 200,
+    (string) vc_merchant_coupon_fetch_limit());
+check('and it is what the query actually asks for',
+    (int) ($GLOBALS['last_query_args']['posts_per_page'] ?? 0)
+        === vc_merchant_coupon_fetch_limit(),
+    json_encode($GLOBALS['last_query_args']['posts_per_page'] ?? null));
+check('and it is filterable for a brand that outgrows it',
+    is_real_filter('vc_merchant_coupon_fetch_limit'));
+
+/* -------------------------------------------------------------------------
+ * A three-digit percentage must be rejected by the plausibility guard
+ * rather than by the digit count of the pattern
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['coupons'] = array(coupon_with(995, '150%', '150% off everything'));
+$big = fresh_store();
+check('a 150% claim is rejected',
+    vc_merchant_max_discount($big) === '', vc_merchant_max_discount($big));
+
+$GLOBALS['coupons'] = array(coupon_with(996, '99%', '99% off clearance'));
+$ninetynine = fresh_store();
+check('but a two-digit 99% is still accepted',
+    vc_merchant_max_discount($ninetynine) === '99',
+    vc_merchant_max_discount($ninetynine));
 
 /* -------------------------------------------------------------------------
  * Degrade cleanly without the coupon plugin
@@ -579,11 +688,11 @@ $GLOBALS['has_coupon_plugin'] = false;
 check('no brand term when the coupon plugin is inactive',
     vc_merchant_brand_term(1) === null);
 check('status returns null so the prose-derived value stands',
-    vc_merchant_coupon_status(1) === null);
+    vc_merchant_coupon_status($S) === null);
 check('org @id is left alone when the coupon plugin is inactive',
-    apply_filters('vc_merchant_org_id', 'https://x/#merchant', 1) === 'https://x/#merchant');
+    apply_filters('vc_merchant_org_id', 'https://x/#merchant', $S) === 'https://x/#merchant');
 check('our Offer node is emitted again when the coupon plugin is inactive',
-    apply_filters('vc_merchant_emit_offer', true, 1) === true);
+    apply_filters('vc_merchant_emit_offer', true, $S) === true);
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

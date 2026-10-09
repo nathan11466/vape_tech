@@ -96,15 +96,26 @@ function vc_merchant_brand_term($post_id = null) {
  * excludes one.
  */
 function vc_merchant_live_coupons($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+
+    // Eight call sites reach this during one store page render -- the offer
+    // mode, the schema gate, the section, the discount figure and the counts.
+    // Without memoising, each one repeats the same query.
+    static $cache = array();
+    if (array_key_exists($post_id, $cache)) {
+        return $cache[$post_id];
+    }
+
     $term = vc_merchant_brand_term($post_id);
     if (!$term) {
-        return array();
+        $cache[$post_id] = array();
+        return $cache[$post_id];
     }
 
     $query = new WP_Query(array(
         'post_type'           => 'wcd_coupon',
         'post_status'         => 'publish',
-        'posts_per_page'      => 30,
+        'posts_per_page'      => vc_merchant_coupon_fetch_limit(),
         'no_found_rows'       => true,
         'ignore_sticky_posts' => true,
         'tax_query'           => array(array(
@@ -128,8 +139,26 @@ function vc_merchant_live_coupons($post_id = null) {
         $live[] = $post;
     }
 
+    $cache[$post_id] = $live;
+
     return $live;
 }
+
+/**
+ * How many of a brand's coupons to read before filtering by expiry.
+ *
+ * Expiry lives in post meta and is parsed leniently in PHP rather than
+ * compared in SQL, so this has to over-fetch. The old limit of 30 silently
+ * truncated a large brand, which made active_count under-report -- and that
+ * number goes in the page title.
+ */
+function vc_merchant_coupon_fetch_limit() {
+    return (int) apply_filters('vc_merchant_coupon_fetch_limit', 200);
+}
+
+// No flush helper: the memo lives for one request, and nothing recomputes
+// figures in the same request that saves a coupon. A generation counter that
+// the cache did not actually consult would be worse than none.
 
 /**
  * The offer claim this page may make, derived from real records.
@@ -830,7 +859,7 @@ function vc_merchant_expired_coupons($post_id = null, $limit = 6) {
     $query = new WP_Query(array(
         'post_type'           => 'wcd_coupon',
         'post_status'         => 'publish',
-        'posts_per_page'      => 30,
+        'posts_per_page'      => vc_merchant_coupon_fetch_limit(),
         'no_found_rows'       => true,
         'ignore_sticky_posts' => true,
         'tax_query'           => array(array(
@@ -888,7 +917,7 @@ function vc_merchant_max_discount($post_id = null) {
         $haystack = trim((string) get_post_meta($post->ID, '_wcd_discount', true))
             . ' ' . get_the_title($post->ID);
 
-        if (preg_match_all('/(\d{1,2}(?:\.\d+)?)\s*%/', $haystack, $matches)) {
+        if (preg_match_all('/(\d{1,3}(?:\.\d+)?)\s*%/', $haystack, $matches)) {
             foreach ($matches[1] as $figure) {
                 $value = (float) $figure;
                 // A "100% off" claim is almost always a typo or a giveaway,

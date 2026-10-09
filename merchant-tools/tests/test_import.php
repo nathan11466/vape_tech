@@ -73,13 +73,18 @@ function add_action() {}
 function add_filter() {}
 function add_submenu_page() {}
 function current_user_can() { return true; }
-function wp_verify_nonce() { return false; }
+function wp_verify_nonce() { return !empty($GLOBALS['nonce_ok']); }
 function wp_nonce_field() {}
 function submit_button() {}
 function esc_html($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
 function esc_html__($v, $d = null) { return $v; }
 function esc_html_e($v, $d = null) { echo $v; }
 function esc_attr($v) { return $v; }
+function esc_url($v) { return (string) $v; }
+function admin_url($p = '') { return '/wp-admin/' . $p; }
+function number_format_i18n($n) { return (string) $n; }
+function selected($a, $b, $e = true) { return ''; }
+function checked($a, $b, $e = true) { return ''; }
 function __($v, $d = null) { return $v; }
 function _n($s, $p, $n, $d = null) { return $n === 1 ? $s : $p; }
 function get_option($k, $d = false) { return $d; }
@@ -225,6 +230,63 @@ check('comma-separated categories are split into terms',
     !empty($GLOBALS['terms_set'][$tid]['merchant_category'])
     && count($GLOBALS['terms_set'][$tid]['merchant_category']) === 2,
     json_encode($GLOBALS['terms_set'][$tid] ?? array()));
+
+/* -------------------------------------------------------------------------
+ * The upload itself
+ *
+ * A partial upload still leaves a readable temp file, so before this the
+ * importer read a truncated CSV and reported success for however many rows
+ * happened to arrive.
+ * ---------------------------------------------------------------------- */
+
+if (!defined('UPLOAD_ERR_OK')) {
+    define('UPLOAD_ERR_OK', 0);
+    define('UPLOAD_ERR_INI_SIZE', 1);
+    define('UPLOAD_ERR_PARTIAL', 3);
+    define('UPLOAD_ERR_NO_FILE', 4);
+}
+
+function run_screen(array $files) {
+    $GLOBALS['nonce_ok'] = true;
+    $_POST = array('vc_merchant_import_nonce' => 'x', 'dry_run' => '1');
+    $_FILES = $files;
+    ob_start();
+    vc_merchant_import_screen();
+    $html = ob_get_clean();
+    $_POST = array();
+    $_FILES = array();
+    $GLOBALS['nonce_ok'] = false;
+    return $html;
+}
+
+$truncated = tempnam(sys_get_temp_dir(), 'vc');
+file_put_contents($truncated, "brand_name,brand_url\nVooPoo,https://x.com\n");
+
+$html = run_screen(array('merchant_csv' => array(
+    'tmp_name' => $truncated, 'error' => UPLOAD_ERR_PARTIAL, 'name' => 'm.csv')));
+check('an interrupted upload is refused, not imported',
+    stripos($html, 'interrupted') !== false && stripos($html, 'incomplete') !== false,
+    substr(strip_tags($html), 0, 200));
+
+$html = run_screen(array('merchant_csv' => array(
+    'tmp_name' => $truncated, 'error' => UPLOAD_ERR_INI_SIZE, 'name' => 'm.csv')));
+check('an oversized upload says so rather than importing nothing silently',
+    stripos($html, 'larger than') !== false, substr(strip_tags($html), 0, 200));
+
+$html = run_screen(array('merchant_csv' => array(
+    'tmp_name' => '', 'error' => UPLOAD_ERR_NO_FILE, 'name' => '')));
+check('no file asks for one', stripos($html, 'choose a CSV') !== false,
+    substr(strip_tags($html), 0, 160));
+
+// A path PHP did not create for this request must be refused, even with a
+// clean error code.
+$html = run_screen(array('merchant_csv' => array(
+    'tmp_name' => $truncated, 'error' => UPLOAD_ERR_OK, 'name' => 'm.csv')));
+check('a path that is not a genuine upload is refused',
+    stripos($html, 'not a genuine upload') !== false,
+    substr(strip_tags($html), 0, 200));
+
+@unlink($truncated);
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

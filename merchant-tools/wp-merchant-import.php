@@ -291,15 +291,35 @@ function vc_merchant_import_screen() {
     if (!empty($_POST['vc_merchant_import_nonce'])
         && wp_verify_nonce($_POST['vc_merchant_import_nonce'], 'vc_merchant_import')) {
 
-        if (empty($_FILES['merchant_csv']['tmp_name'])) {
+        $upload = isset($_FILES['merchant_csv']) ? $_FILES['merchant_csv'] : array();
+        $code = isset($upload['error']) ? (int) $upload['error'] : UPLOAD_ERR_NO_FILE;
+
+        if (empty($upload['tmp_name']) || $code === UPLOAD_ERR_NO_FILE) {
             $error = __('Please choose a CSV file.', 'vc-merchant');
+        } elseif ($code !== UPLOAD_ERR_OK) {
+            // A partial upload still leaves a readable temp file, so without
+            // this a dropped connection imported a truncated CSV and reported
+            // success for however many rows arrived.
+            $messages = array(
+                UPLOAD_ERR_INI_SIZE   => __('The file is larger than this server allows (upload_max_filesize).', 'vc-merchant'),
+                UPLOAD_ERR_FORM_SIZE  => __('The file is larger than the form allows.', 'vc-merchant'),
+                UPLOAD_ERR_PARTIAL    => __('The upload was interrupted and the file is incomplete. Nothing was imported - please try again.', 'vc-merchant'),
+                UPLOAD_ERR_NO_TMP_DIR => __('The server has no temporary folder for uploads.', 'vc-merchant'),
+                UPLOAD_ERR_CANT_WRITE => __('The server could not write the uploaded file to disk.', 'vc-merchant'),
+                UPLOAD_ERR_EXTENSION  => __('A PHP extension blocked the upload.', 'vc-merchant'),
+            );
+            $error = $messages[$code] ?? __('The upload failed. Nothing was imported.', 'vc-merchant');
+        } elseif (!is_uploaded_file($upload['tmp_name'])) {
+            // Defence in depth: only ever read a path PHP itself created for
+            // this request.
+            $error = __('That file was not a genuine upload.', 'vc-merchant');
         } else {
             $dry_run = !empty($_POST['dry_run']);
             $limit = isset($_POST['limit']) ? max(0, (int) $_POST['limit']) : 0;
             $publish = !empty($_POST['publish_now']);
             $content_mode = (isset($_POST['content_mode']) && $_POST['content_mode'] === 'empty')
                 ? 'empty' : 'shortcode';
-            $result = vc_merchant_import_csv($_FILES['merchant_csv']['tmp_name'], $dry_run, $limit, $publish, $content_mode);
+            $result = vc_merchant_import_csv($upload['tmp_name'], $dry_run, $limit, $publish, $content_mode);
             if (is_wp_error($result)) {
                 $error = $result->get_error_message();
                 $result = null;
