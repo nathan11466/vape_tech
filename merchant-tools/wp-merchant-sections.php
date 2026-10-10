@@ -1094,3 +1094,97 @@ add_shortcode('merchant_offer_label', function ($atts) {
 
     return esc_html($labels[$mode] ?? '');
 });
+
+/* -------------------------------------------------------------------------
+ * {field} tokens in page content
+ *
+ * Headings and SEO templates use {brand}, so {display_brand_name} is the
+ * obvious thing to try in a page body -- and it did nothing, because content
+ * only understood [merchant_field key="..."]. Two syntaxes with different
+ * scopes is a trap, so content now understands both.
+ *
+ * Only keys that resolve are replaced. An unrecognised {token} is left
+ * exactly as typed rather than stripped, so a typo is visible and nothing
+ * anyone wrote is silently destroyed.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Every token name a page body can use, mapped to its value.
+ */
+function vc_merchant_token_map($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $map = array();
+
+    // Real columns.
+    if (function_exists('vc_merchant_import_meta_keys')) {
+        foreach (vc_merchant_import_meta_keys() as $key) {
+            $map[$key] = (string) vc_section_meta($post_id, $key);
+        }
+    }
+
+    // The name lives in the post title, so these would otherwise be empty.
+    $name = function_exists('vc_merchant_display_name') ? vc_merchant_display_name($post_id) : '';
+    foreach (vc_section_virtual_fields() as $alias) {
+        $map[$alias] = $name;
+    }
+    // Matches the token used in headings and SEO templates.
+    $map['brand'] = $name;
+
+    // The derived quick-facts values, under the same keys the editor lists.
+    if (function_exists('vc_merchant_fact_rows')) {
+        foreach (vc_merchant_fact_rows($post_id) as $key => $fact) {
+            $map['fact_' . $key] = $fact['value'];
+        }
+    }
+
+    if (function_exists('vc_merchant_headline_discount')) {
+        list($figure, ) = vc_merchant_headline_discount($post_id);
+        $map['discount'] = $figure;
+    }
+
+    return apply_filters('vc_merchant_token_map', $map, $post_id);
+}
+
+/**
+ * Replace {token} with its value, leaving unknown tokens untouched.
+ */
+function vc_merchant_expand_tokens($text, $post_id = null) {
+    $text = (string) $text;
+    if (strpos($text, '{') === false) {
+        return $text;
+    }
+
+    $map = vc_merchant_token_map($post_id);
+
+    return preg_replace_callback('/\{([a-zA-Z0-9_]+)\}/', function ($match) use ($map) {
+        $key = $match[1];
+
+        // Case-insensitive, because a field list reads as Title Case in a
+        // spreadsheet and gets typed back that way.
+        if (!array_key_exists($key, $map)) {
+            $lower = strtolower($key);
+            if (!array_key_exists($lower, $map)) {
+                // Unknown: hand back exactly what was typed.
+                return $match[0];
+            }
+            $key = $lower;
+        }
+
+        $value = trim((string) $map[$key]);
+
+        // An empty field resolves to nothing rather than leaving the token
+        // visible, since the field being blank is the answer.
+        return $value === '' ? '' : esc_html($value);
+    }, $text);
+}
+
+// Runs before do_shortcode (priority 11), so a token inside a shortcode
+// attribute is resolved by the time the shortcode is parsed.
+add_filter('the_content', function ($content) {
+    if (!function_exists('vc_merchant_post_types')
+        || !in_array(get_post_type(), vc_merchant_post_types(), true)) {
+        return $content;
+    }
+
+    return vc_merchant_expand_tokens($content, get_the_ID());
+}, 9);

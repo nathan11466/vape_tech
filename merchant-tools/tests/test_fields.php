@@ -24,6 +24,7 @@ function get_the_ID() { return $GLOBALS['current_id']; }
 function get_the_title($id = null) { return $GLOBALS['titles'][$id ?: $GLOBALS['current_id']] ?? ''; }
 function get_permalink($id = null) { return 'https://vapingcheap.com/stores/brand/'; }
 function get_post_type($id = null) { return 'merchant'; }
+function esc_textarea($v) { return $v; }
 function current_user_can($cap = '') { return $GLOBALS['can_edit']; }
 function is_singular() { return true; }
 function is_tax($t = '') { return false; }
@@ -382,6 +383,94 @@ check('a threshold is not rendered as the headline discount',
 check('and a fallback can be supplied for that case',
     call_user_func($GLOBALS['shortcodes']['merchant_discount'],
         array('fallback' => 'Deals available')) === 'Deals available');
+
+/* -------------------------------------------------------------------------
+ * {token} syntax in page content
+ *
+ * Headings and SEO templates use {brand}, so {display_brand_name} is the
+ * obvious thing to try in a body. It did nothing, which is a trap of my own
+ * making -- content now understands both syntaxes.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['titles'][1] = 'VooPoo';
+$GLOBALS['meta'][1] = array(
+    'display_brand_name' => 'VooPoo',
+    'brand_url'          => 'https://voopoo.com',
+    'best_offer_summary' => '20% off sitewide',
+    'last_checked_text'  => 'Checked 8 October 2026',
+    'top_offer_type'     => 'Sitewide code',
+    'coupon_intro'       => 'VooPoo run frequent sitewide sales.',
+    'free_shipping_info' => 'Free shipping on orders over $75.',
+    'why_code_not_work'  => '',
+);
+$GLOBALS['current_id'] = 1;
+
+check('a field token resolves',
+    vc_merchant_expand_tokens('Shop at {display_brand_name} today.') === 'Shop at VooPoo today.',
+    vc_merchant_expand_tokens('Shop at {display_brand_name} today.'));
+
+check('every token the user tried resolves',
+    vc_merchant_expand_tokens('{brand_url} {best_offer_summary} {last_checked_text} {top_offer_type} {coupon_intro}')
+        === 'https://voopoo.com 20% off sitewide Checked 8 October 2026 Sitewide code VooPoo run frequent sitewide sales.',
+    vc_merchant_expand_tokens('{brand_url} {best_offer_summary} {last_checked_text} {top_offer_type} {coupon_intro}'));
+
+check('{brand} works in content as well as in headings',
+    vc_merchant_expand_tokens('{brand} deals') === 'VooPoo deals');
+
+check('a derived fact is reachable as a token',
+    vc_merchant_expand_tokens('Ships free over {fact_free_shipping_over}.')
+        === 'Ships free over $75.',
+    vc_merchant_expand_tokens('Ships free over {fact_free_shipping_over}.'));
+
+// The two names that are not fields at all must survive as typed, so the
+// mistake is visible rather than silently swallowed.
+check('an unknown token is left exactly as typed',
+    vc_merchant_expand_tokens('{brand_dot_com}') === '{brand_dot_com}',
+    vc_merchant_expand_tokens('{brand_dot_com}'));
+check('and so is a made-up one next to a real one',
+    vc_merchant_expand_tokens('{brand_dot_com} at {display_brand_name}')
+        === '{brand_dot_com} at VooPoo',
+    vc_merchant_expand_tokens('{brand_dot_com} at {display_brand_name}'));
+
+check('a blank field resolves to nothing rather than showing the token',
+    trim(vc_merchant_expand_tokens('{why_code_not_work}')) === '',
+    vc_merchant_expand_tokens('{why_code_not_work}'));
+
+check('Title Case is accepted, since that is how a spreadsheet reads',
+    vc_merchant_expand_tokens('{Display_Brand_Name}') === 'VooPoo',
+    vc_merchant_expand_tokens('{Display_Brand_Name}'));
+
+check('content with no braces is returned untouched',
+    vc_merchant_expand_tokens('Plain text only.') === 'Plain text only.');
+
+// Values are escaped, because they come from scraped sites.
+$GLOBALS['meta'][1]['coupon_intro'] = '<script>alert(1)</script>';
+check('a token value is escaped',
+    strpos(vc_merchant_expand_tokens('{coupon_intro}'), '<script>') === false
+    && strpos(vc_merchant_expand_tokens('{coupon_intro}'), '&lt;script&gt;') !== false,
+    vc_merchant_expand_tokens('{coupon_intro}'));
+$GLOBALS['meta'][1]['coupon_intro'] = 'VooPoo run frequent sitewide sales.';
+
+// Braces that are not tokens must not be mangled.
+check('CSS or code in a body is left alone',
+    vc_merchant_expand_tokens('.a { color: red; }') === '.a { color: red; }',
+    vc_merchant_expand_tokens('.a { color: red; }'));
+
+check('a token inside a shortcode attribute resolves',
+    vc_merchant_expand_tokens('[foo name="{display_brand_name}"]')
+        === '[foo name="VooPoo"]',
+    vc_merchant_expand_tokens('[foo name="{display_brand_name}"]'));
+
+// Every importer column must be reachable as a token, or the syntax is
+// inconsistent with the shortcode.
+$missing = array();
+foreach (vc_merchant_import_meta_keys() as $key) {
+    if (!array_key_exists($key, vc_merchant_token_map(1))) {
+        $missing[] = $key;
+    }
+}
+check('every importer column is reachable as a token',
+    empty($missing), implode(', ', array_slice($missing, 0, 5)));
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

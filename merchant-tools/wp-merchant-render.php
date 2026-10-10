@@ -57,6 +57,9 @@ function vc_merchant_custom_block($key, $post_id) {
     if ($heading !== '') {
         $out .= '<h2>' . esc_html($heading) . '</h2>';
     }
+    if (function_exists('vc_merchant_expand_tokens')) {
+        $content = vc_merchant_expand_tokens($content, $post_id);
+    }
     $out .= '<div class="vc-custom__body">' . do_shortcode(wpautop($content)) . '</div>';
     $out .= '</section>';
 
