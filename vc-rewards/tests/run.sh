@@ -11,4 +11,5 @@ for f in ../vc-rewards.php ../includes/*.php; do
 done
 php test_rewards.php || status=1
 php test_wpforo.php || status=1
+php test_extras.php || status=1
 exit $status

@@ -88,9 +88,20 @@ function vc_rewards_defaults() {
 
         'min_age'             => 21,
 
+        // Stage 3: more ways to earn.
+        'first_post_bonus'    => 200,   // first member to post a deal that gets verified
+        'award_points'        => array('proof' => 150, 'spam_report' => 100),
+        'award_max'           => 1000,
+        'referral_bonus'      => 2500,
+        'referral_monthly_cap' => 10,
+        'cashback_percent'    => 3,     // of order value, paid from your commission
+        'answer_pair_days'    => 30,
+        'follow_channels'     => '',    // "YouTube | https://youtube.com/@vapingcheap" per line
+        'subid_param'         => '',
+
         // wpForo. Forum IDs (comma separated) whose new topics earn as each type.
-        'forum_types'         => array('deal' => '', 'review' => '', 'guide' => ''),
-        'forum_min_words'     => array('deal' => 0, 'review' => 150, 'guide' => 150),
+        'forum_types'         => array('deal' => '', 'review' => '', 'guide' => '', 'store_report' => ''),
+        'forum_min_words'     => array('deal' => 0, 'review' => 150, 'guide' => 150, 'store_report' => 100),
         'forum_max_links'     => 3, // more outbound links than this and a moderator checks it first
         'forum_copy_min_words' => 30, // shorter posts are never treated as copies
 
@@ -139,13 +150,68 @@ function vc_rewards_type_defaults() {
             'min_voters'   => 3,
             'holding_days' => 14,
         ),
+        'store_report' => array(
+            'label'        => 'Store experience report',
+            'kind'         => 'helpful',
+            'base_points'  => 400,
+            'threshold'    => 6,
+            'min_voters'   => 3,
+            'holding_days' => 14,
+        ),
+        // A member reports that a published coupon has stopped working.
+        // Voters check the code; "confirmed" pays the reporter.
+        'report' => array(
+            'label'        => 'Dead coupon report',
+            'kind'         => 'report',
+            'base_points'  => 150,
+            'threshold'    => 4,
+            'min_voters'   => 2,
+            'holding_days' => 3,
+        ),
+        // Shipping threshold, restricted states and so on, decided by a moderator.
+        'correction' => array(
+            'label'        => 'Store fact correction',
+            'kind'         => 'moderated',
+            'base_points'  => 250,
+            'threshold'    => 0,
+            'min_voters'   => 0,
+            'holding_days' => 7,
+        ),
+        // The asker marked it best answer in a wpForo Q&A forum.
+        'answer' => array(
+            'label'        => 'Accepted answer',
+            'kind'         => 'auto',
+            'base_points'  => 200,
+            'threshold'    => 0,
+            'min_voters'   => 0,
+            'holding_days' => 7,
+        ),
     );
+}
+
+/** Kinds members vote on with a right answer, after revealing the item. */
+function vc_rewards_kind_is_factual($kind) {
+    return $kind === 'factual' || $kind === 'report';
+}
+
+/** Kinds that appear in the members' verify queue. */
+function vc_rewards_votable_kinds() {
+    return array('factual', 'report', 'helpful');
 }
 
 /**
  * Verdicts members can give, per vote kind, and which side each counts for.
  */
 function vc_rewards_verdicts($kind) {
+    if ($kind === 'report') {
+        return array(
+            'confirmed'   => array('label' => __('Confirmed, it no longer works', 'vc-rewards'), 'side' => 1),
+            'still_works' => array('label' => __('Still works', 'vc-rewards'), 'side' => -1),
+        );
+    }
+    if ($kind === 'moderated' || $kind === 'auto') {
+        return array();
+    }
     if ($kind === 'helpful') {
         return array(
             'helpful'     => array('label' => __('Helpful', 'vc-rewards'), 'side' => 1),

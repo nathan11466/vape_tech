@@ -170,7 +170,8 @@ function vc_rewards_wpforo_topic_added($topic, $forum = array()) {
     $fingerprint = vc_rewards_word_count($body) >= (int) vc_rewards_setting('forum_copy_min_words')
         ? vc_rewards_fingerprint($body)
         : '';
-    $args = array('fingerprint' => $fingerprint);
+    $links = vc_rewards_external_links($body);
+    $args  = array('fingerprint' => $fingerprint, 'link_key' => $links ? vc_rewards_link_key($links[0]) : '');
     if (!empty($topic['status'])) {
         $args['state'] = 'held';
     }

@@ -48,13 +48,15 @@ function vc_rewards_install() {
         reject_reason varchar(20) NOT NULL DEFAULT '',
         appeal varchar(10) NOT NULL DEFAULT '',
         fingerprint char(32) NOT NULL DEFAULT '',
+        link_key char(32) NOT NULL DEFAULT '',
         created_at datetime NOT NULL,
         resolved_at datetime DEFAULT NULL,
         PRIMARY KEY  (id),
         UNIQUE KEY object (object_type,object_id),
         KEY author (author_id),
         KEY state (state),
-        KEY fingerprint (fingerprint)
+        KEY fingerprint (fingerprint),
+        KEY link_key (link_key)
     ) $charset;");
 
     dbDelta("CREATE TABLE $votes (
@@ -123,6 +125,69 @@ function vc_rewards_install() {
         PRIMARY KEY  (id),
         KEY status (status),
         KEY user_id (user_id)
+    ) $charset;");
+
+    // Things members send in that are not posts of their own: dead-coupon
+    // reports and store fact corrections. A contribution points at the row.
+    $items = vc_rewards_table('items');
+    dbDelta("CREATE TABLE $items (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        kind varchar(20) NOT NULL,
+        user_id bigint(20) unsigned NOT NULL,
+        target_type varchar(20) NOT NULL,
+        target_id bigint(20) unsigned NOT NULL,
+        field varchar(40) NOT NULL DEFAULT '',
+        old_value text NOT NULL,
+        new_value text NOT NULL,
+        source_url varchar(255) NOT NULL DEFAULT '',
+        note text NOT NULL,
+        created_at datetime NOT NULL,
+        PRIMARY KEY  (id),
+        KEY target (target_type,target_id),
+        KEY user_id (user_id)
+    ) $charset;");
+
+    $purchases = vc_rewards_table('purchases');
+    dbDelta("CREATE TABLE $purchases (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        txn_id varchar(100) NOT NULL,
+        user_id bigint(20) unsigned NOT NULL,
+        merchant varchar(191) NOT NULL DEFAULT '',
+        order_value decimal(10,2) NOT NULL DEFAULT 0,
+        status varchar(12) NOT NULL,
+        points int(11) NOT NULL DEFAULT 0,
+        ledger_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL,
+        updated_at datetime NOT NULL,
+        PRIMARY KEY  (id),
+        UNIQUE KEY txn_id (txn_id),
+        KEY user_id (user_id)
+    ) $charset;");
+
+    $challenges = vc_rewards_table('challenges');
+    dbDelta("CREATE TABLE $challenges (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        title varchar(191) NOT NULL,
+        metric varchar(20) NOT NULL,
+        contrib_type varchar(20) NOT NULL DEFAULT '',
+        brand_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        target int(11) NOT NULL,
+        bonus int(11) NOT NULL,
+        sponsor varchar(191) NOT NULL DEFAULT '',
+        starts_at datetime NOT NULL,
+        ends_at datetime NOT NULL,
+        status varchar(10) NOT NULL DEFAULT 'active',
+        PRIMARY KEY  (id),
+        KEY open_until (status,ends_at)
+    ) $charset;");
+
+    $completions = vc_rewards_table('challenge_done');
+    dbDelta("CREATE TABLE $completions (
+        challenge_id bigint(20) unsigned NOT NULL,
+        user_id bigint(20) unsigned NOT NULL,
+        ledger_id bigint(20) unsigned NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL,
+        PRIMARY KEY  (challenge_id,user_id)
     ) $charset;");
 
     // Members who joined before the plugin skip the new-account review.

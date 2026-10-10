@@ -6,6 +6,9 @@
  *   [vc_verify_queue]        coupons waiting for members to verify
  *   [vc_rewards_account]     balance, rank, history, redemptions, appeals
  *   [vc_rewards_leaderboard] top members by reputation
+ *
+ * Stage 3 adds [vc_report_coupon] and [vc_suggest_correction] (reports.php)
+ * and [vc_rewards_challenges] (challenges.php).
  */
 
 if (!defined('ABSPATH')) {
@@ -73,6 +76,11 @@ function vc_rewards_handle_forms() {
     if (!apply_filters('vc_rewards_redirect_after_form', true)) {
         return;
     }
+    if (!empty($result['redirect'])) {
+        // Only ever an address an admin entered in settings (follow channels).
+        wp_redirect(esc_url_raw($result['redirect'])); // phpcs:ignore WordPress.Security.SafeRedirect
+        exit;
+    }
     wp_safe_redirect(wp_get_referer() ?: home_url(add_query_arg(array())));
     exit;
 }
@@ -115,7 +123,8 @@ function vc_rewards_process_form($action, $user_id, array $posted) {
                 'message' => $ok ? __('Appeal sent. A moderator will take another look.', 'vc-rewards') : __('That post can not be appealed.', 'vc-rewards'),
             );
     }
-    return null;
+    // Forms added by other parts of the plugin (reports, corrections, bonuses).
+    return apply_filters('vc_rewards_process_form', null, $action, $user_id, $posted);
 }
 
 /**
@@ -219,13 +228,21 @@ function vc_rewards_queue_items($user_id, $limit = 20, array $types = array()) {
     $ledger  = vc_rewards_table('ledger');
 
     $factual = array();
+    $votable = array();
     foreach (vc_rewards_setting('types') as $key => $type) {
-        if ($type['kind'] === 'factual') {
+        if (vc_rewards_kind_is_factual($type['kind'])) {
             $factual[] = $key;
+        }
+        if (in_array($type['kind'], vc_rewards_votable_kinds(), true)) {
+            $votable[] = $key;
         }
     }
     $type_sql = '';
     $params   = array((int) $user_id);
+    $types    = $types ? array_values(array_intersect($types, $votable)) : $votable;
+    if (!$types) {
+        return array();
+    }
     if ($types) {
         $type_sql = ' AND c.contrib_type IN (' . implode(',', array_fill(0, count($types), '%s')) . ')';
         $params   = array_merge($params, $types);
@@ -251,7 +268,7 @@ function vc_rewards_render_vote_card($c, $user_id) {
     $verdicts = vc_rewards_verdicts($type['kind']);
     $voted    = vc_rewards_user_vote($c->id, $user_id);
     $info     = vc_rewards_object_info($c);
-    $factual  = $type['kind'] === 'factual';
+    $factual  = vc_rewards_kind_is_factual($type['kind']);
     $revealed = !$factual || vc_rewards_has_revealed($c->id, $user_id);
     $can_vote = (int) $c->author_id !== (int) $user_id
         && ($c->state === 'voting' || ($c->state === 'accepted' && vc_rewards_in_holding($c)));
@@ -272,9 +289,14 @@ function vc_rewards_render_vote_card($c, $user_id) {
     } else {
         $status = vc_rewards_state_label($c->state);
     }
-    $reveal_label = $c->object_type === 'wcd_coupon'
-        ? __('Reveal code and try it', 'vc-rewards')
-        : __('Open the deal and check it', 'vc-rewards');
+    if ($type['kind'] === 'report') {
+        $reveal_label = __('Show the code and check it', 'vc-rewards');
+        $status       = $c->state === 'voting' ? __('Reported as not working', 'vc-rewards') : $status;
+    } elseif ($c->object_type === 'wcd_coupon') {
+        $reveal_label = __('Reveal code and try it', 'vc-rewards');
+    } else {
+        $reveal_label = __('Open the deal and check it', 'vc-rewards');
+    }
 
     ob_start();
     ?>
@@ -379,7 +401,7 @@ add_shortcode('vc_rewards_account', function () {
     $user_id = get_current_user_id();
     $out = '';
 
-    $out .= vc_rewards_flash_notice(array('dob', 'redeem', 'appeal'));
+    $out .= vc_rewards_flash_notice(apply_filters('vc_rewards_account_actions', array('dob', 'redeem', 'appeal')));
 
     if (!vc_rewards_age_verified($user_id)) {
         $out .= '<form method="post" class="vc-rewards-form vc-rewards-dob">'
@@ -418,6 +440,9 @@ add_shortcode('vc_rewards_account', function () {
         $out .= '<p class="vc-rewards-meta">' . esc_html__('Daily visit and bonus points unlock for redemption once one of your posts is accepted.', 'vc-rewards') . '</p>';
     }
     $out .= '</section>';
+
+    // Challenges, referral link, bonuses.
+    $out .= apply_filters('vc_rewards_account_sections', '', $user_id);
 
     // Redemption.
     $min = (int) vc_rewards_setting('min_redemption');

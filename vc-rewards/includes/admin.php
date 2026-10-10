@@ -17,6 +17,7 @@ add_action('admin_menu', function () {
     add_menu_page(__('Rewards', 'vc-rewards'), __('Rewards', 'vc-rewards'), 'read', 'vc-rewards', 'vc_rewards_queue_page', 'dashicons-awards', 58);
     add_submenu_page('vc-rewards', __('Moderation queue', 'vc-rewards'), __('Queue', 'vc-rewards'), 'read', 'vc-rewards', 'vc_rewards_queue_page');
     add_submenu_page('vc-rewards', __('Redemptions', 'vc-rewards'), __('Redemptions', 'vc-rewards'), 'read', 'vc-rewards-redemptions', 'vc_rewards_redemptions_page');
+    do_action('vc_rewards_admin_menu');
     add_submenu_page('vc-rewards', __('Rewards settings', 'vc-rewards'), __('Settings', 'vc-rewards'), 'manage_options', 'vc-rewards-settings', 'vc_rewards_settings_page');
 });
 
@@ -116,8 +117,17 @@ function vc_rewards_queue_page() {
         });
     }
 
+    // Corrections, point awards and anything else other files add.
+    do_action('vc_rewards_queue_sections');
+
     // Voting.
-    $voting = vc_rewards_contributions_in('voting', 100);
+    $votable = array();
+    foreach (vc_rewards_setting('types') as $key => $type) {
+        if (in_array($type['kind'], vc_rewards_votable_kinds(), true)) {
+            $votable[] = esc_sql($key);
+        }
+    }
+    $voting = vc_rewards_contributions_in('voting', 100, "AND contrib_type IN ('" . implode("','", $votable) . "')");
     echo '<h2>' . esc_html(sprintf(
         /* translators: %d: count */
         __('Being verified by members (%d)', 'vc-rewards'),
@@ -200,7 +210,7 @@ add_action('admin_post_vc_rewards_mod', function () {
             break;
         case 'reject':
             $reason = isset($_POST['reason']) ? sanitize_key(wp_unslash($_POST['reason'])) : 'invalid';
-            if (!in_array($reason, array('invalid', 'expired', 'fake', 'spam', 'copied'), true)) {
+            if (!in_array($reason, array('invalid', 'expired', 'fake', 'spam', 'copied', 'declined'), true)) {
                 $reason = 'invalid';
             }
             vc_rewards_reject($id, $reason);
@@ -217,6 +227,13 @@ add_action('admin_post_vc_rewards_mod', function () {
         case 'deny_appeal':
             vc_rewards_deny_appeal($id);
             $done = __('Appeal closed.', 'vc-rewards');
+            break;
+        default:
+            // Operations added by other files return array(page, message).
+            $result = apply_filters('vc_rewards_mod_op', null, $op, $id, $user_id);
+            if (is_array($result)) {
+                list($page, $done) = $result;
+            }
             break;
         case 'redeem_approve':
         case 'redeem_reject':
@@ -312,15 +329,37 @@ function vc_rewards_settings_fields() {
         'min_age'             => __('Minimum age', 'vc-rewards'),
         'forum_min_words.review' => __('Forum review: minimum words', 'vc-rewards'),
         'forum_min_words.guide'  => __('Forum guide: minimum words', 'vc-rewards'),
+        'forum_min_words.store_report' => __('Forum store report: minimum words', 'vc-rewards'),
+        'first_post_bonus'    => __('Bonus for the first verified post of a deal', 'vc-rewards'),
+        'award_points.proof'  => __('Award: proof photo', 'vc-rewards'),
+        'award_points.spam_report' => __('Award: confirmed spam report', 'vc-rewards'),
+        'award_max'           => __('Largest custom award', 'vc-rewards'),
+        'referral_bonus'      => __('Referral bonus (paid when the new member qualifies)', 'vc-rewards'),
+        'referral_monthly_cap' => __('Referral bonuses per member per month', 'vc-rewards'),
+        'cashback_percent'    => __('Cashback: percent of order value paid as points', 'vc-rewards'),
+        'answer_pair_days'    => __('Accepted answers: days before the same asker can reward the same member again', 'vc-rewards'),
         'forum_max_links'     => __('Forum: outbound links before a moderator checks first', 'vc-rewards'),
     );
     foreach (vc_rewards_type_defaults() as $key => $type) {
         $fields['types.' . $key . '.base_points']  = sprintf(__('%s: base points', 'vc-rewards'), $type['label']);
+        if (!in_array($type['kind'], vc_rewards_votable_kinds(), true)) {
+            $fields['types.' . $key . '.holding_days'] = sprintf(__('%s: holding days', 'vc-rewards'), $type['label']);
+            continue;
+        }
         $fields['types.' . $key . '.threshold']    = sprintf(__('%s: weighted score to accept', 'vc-rewards'), $type['label']);
         $fields['types.' . $key . '.min_voters']   = sprintf(__('%s: minimum voters', 'vc-rewards'), $type['label']);
         $fields['types.' . $key . '.holding_days'] = sprintf(__('%s: holding days', 'vc-rewards'), $type['label']);
     }
     return $fields;
+}
+
+/** Text settings: key => array(label, 'text' or 'textarea', help). */
+function vc_rewards_text_settings() {
+    return array(
+        'reward_options'  => array(__('Rewards members can request (one per line)', 'vc-rewards'), 'textarea', ''),
+        'follow_channels' => array(__('Follow bonus channels (one per line: Name | URL)', 'vc-rewards'), 'textarea', __('Members get a one-time bonus per channel. It is not checked, so it only becomes redeemable after a post is accepted.', 'vc-rewards')),
+        'subid_param'     => array(__('Affiliate sub-ID parameter', 'vc-rewards'), 'text', __('Added to store links for logged-in members, so the network report says who bought (for example subid, u1 or sid). Leave blank to turn off.', 'vc-rewards')),
+    );
 }
 
 function vc_rewards_get_path(array $array, $path) {
@@ -368,8 +407,10 @@ function vc_rewards_settings_page() {
                 $saved['forum_types'][$type] = implode(',', $ids);
             }
         }
-        if (isset($input['reward_options'])) {
-            $saved['reward_options'] = sanitize_textarea_field($input['reward_options']);
+        foreach (vc_rewards_text_settings() as $key => $field) {
+            if (isset($input[$key])) {
+                $saved[$key] = $field[1] === 'textarea' ? sanitize_textarea_field($input[$key]) : sanitize_text_field($input[$key]);
+            }
         }
         update_option(VC_REWARDS_OPTION, $saved);
         $settings = vc_rewards_merge(vc_rewards_defaults(), $saved);
@@ -394,8 +435,16 @@ function vc_rewards_settings_page() {
         echo '<tr><th><label for="vc_forum_' . esc_attr($type) . '">' . esc_html(sprintf(__('wpForo forum IDs for: %s', 'vc-rewards'), $info ? $info['label'] : $type)) . '</label></th><td>'
             . '<input type="text" id="vc_forum_' . esc_attr($type) . '" name="vc[forum_types][' . esc_attr($type) . ']" value="' . esc_attr($ids) . '" class="regular-text" placeholder="3, 7"></td></tr>';
     }
-    echo '<tr><th><label for="vc_reward_options">' . esc_html__('Rewards members can request (one per line)', 'vc-rewards') . '</label></th><td>'
-        . '<textarea id="vc_reward_options" name="vc[reward_options]" rows="5" class="large-text">' . esc_textarea($settings['reward_options']) . '</textarea></td></tr>';
+    foreach (vc_rewards_text_settings() as $key => $field) {
+        $input = $field[1] === 'textarea'
+            ? '<textarea id="vc_' . esc_attr($key) . '" name="vc[' . esc_attr($key) . ']" rows="5" class="large-text">' . esc_textarea($settings[$key]) . '</textarea>'
+            : '<input type="text" id="vc_' . esc_attr($key) . '" name="vc[' . esc_attr($key) . ']" value="' . esc_attr($settings[$key]) . '" class="regular-text">';
+        echo '<tr><th><label for="vc_' . esc_attr($key) . '">' . esc_html($field[0]) . '</label></th><td>' . $input; // phpcs:ignore WordPress.Security.EscapeOutput
+        if (!empty($field[2])) {
+            echo '<p class="description">' . esc_html($field[2]) . '</p>';
+        }
+        echo '</td></tr>';
+    }
     echo '</table>';
     submit_button();
     echo '</form></div>';

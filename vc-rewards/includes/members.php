@@ -82,7 +82,7 @@ function vc_rewards_onetime_bonus($user_id, $key, $note) {
     $done = get_user_meta($user_id, '_vc_onetime', true);
     $done = is_array($done) ? $done : array();
     if (in_array($key, $done, true)) {
-        return;
+        return false;
     }
     $done[] = $key;
     update_user_meta($user_id, '_vc_onetime', $done);
@@ -90,6 +90,7 @@ function vc_rewards_onetime_bonus($user_id, $key, $note) {
         'status' => 'settled',
         'note'   => $note,
     ));
+    return true;
 }
 
 /**
@@ -142,6 +143,7 @@ function vc_rewards_daily_visit($user_id, $today = null) {
             'note'   => sprintf(__('%d-day streak', 'vc-rewards'), $streak),
         ));
     }
+    do_action('vc_rewards_daily_visit', (int) $user_id);
     return true;
 }
 

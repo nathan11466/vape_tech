@@ -92,7 +92,7 @@ function vc_rewards_cast_vote($contribution_id, $voter_id, $verdict) {
     if (!isset($verdicts[$verdict])) {
         return array('ok' => false, 'message' => __('Unknown vote.', 'vc-rewards'));
     }
-    if ($type['kind'] === 'factual' && !vc_rewards_has_revealed($c->id, $voter_id)) {
+    if (vc_rewards_kind_is_factual($type['kind']) && !vc_rewards_has_revealed($c->id, $voter_id)) {
         return array('ok' => false, 'message' => __('Reveal the code and try it before voting.', 'vc-rewards'));
     }
     if (vc_rewards_user_vote($c->id, $voter_id) !== null) {

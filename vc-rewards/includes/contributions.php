@@ -50,6 +50,7 @@ function vc_rewards_create_contribution($object_type, $object_id, $contrib_type,
         'author_ip_hash' => vc_rewards_ip_hash(),
         'state'          => $state,
         'fingerprint'    => isset($args['fingerprint']) ? (string) $args['fingerprint'] : '',
+        'link_key'       => isset($args['link_key']) ? (string) $args['link_key'] : '',
         'created_at'     => vc_rewards_now(),
     ));
     $id = (int) $wpdb->insert_id;
@@ -117,7 +118,7 @@ function vc_rewards_has_accepted_contribution($user_id) {
     return (bool) $wpdb->get_var($wpdb->prepare(
         "SELECT 1 FROM $table WHERE author_id = %d AND state = 'accepted' LIMIT 1",
         (int) $user_id
-    ));
+    )) || vc_rewards_sum($user_id, "kind = 'purchase' AND status = 'settled' AND points > 0") > 0;
 }
 
 /** The author's pending reward row still exists, so a clawback is possible. */
@@ -196,11 +197,20 @@ function vc_rewards_evaluate($contribution_id) {
         $accept = ($t['score'] >= $type['threshold'] && $t['positive_voters'] >= $type['min_voters'])
             || ($alone && $t['moderator_positive'] && $t['score'] > 0);
 
-        if ($type['kind'] === 'factual') {
+        if (!in_array($type['kind'], vc_rewards_votable_kinds(), true)) {
+            // Moderated and automatic types are never decided by votes.
+            return $c;
+        }
+        if (vc_rewards_kind_is_factual($type['kind'])) {
             $reject = ($t['score'] <= -$type['threshold'] && $t['negative_voters'] >= $type['min_voters'])
                 || ($alone && $t['moderator_negative'] && $t['score'] < 0);
-            // A code most voters call expired was never the author's lie.
-            $reason = $t['expired'] * 2 > $t['negative'] ? 'expired' : 'invalid';
+            if ($type['kind'] === 'report') {
+                // An honest report of a code that turns out to work costs nothing.
+                $reason = 'still_works';
+            } else {
+                // A code most voters call expired was never the author's lie.
+                $reason = $t['expired'] * 2 > $t['negative'] ? 'expired' : 'invalid';
+            }
         } else {
             // "Not helpful" never counts against anyone; only spam votes do.
             $reject = $t['spam'] - $t['positive'] >= (float) vc_rewards_setting('spam_threshold');
@@ -221,6 +231,10 @@ function vc_rewards_evaluate($contribution_id) {
 
 function vc_rewards_author_reward($contribution, array $tally) {
     $type  = vc_rewards_type($contribution->contrib_type);
+    if (!in_array($type['kind'], array('factual', 'helpful'), true)) {
+        // Reports, corrections and answers pay a flat amount.
+        return (int) round($type['base_points'] * (float) $contribution->multiplier);
+    }
     $bonus = min(
         (int) round($tally['positive'] * vc_rewards_setting('points_per_weight')),
         (int) vc_rewards_setting('vote_bonus_cap')
