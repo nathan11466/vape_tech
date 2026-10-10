@@ -1042,7 +1042,9 @@ function vc_merchant_coupon_section($post_id = null) {
 
     $out .= '<section class="vc-coupon-widget vc-coupon-expired">'
         . '<h2 class="vc-coupon-expired__heading">'
-        . esc_html__('Recently expired', 'vc-merchant')
+        . esc_html(function_exists('vc_block_heading')
+            ? vc_block_heading('expired', $post_id, __('Recently expired', 'vc-merchant'))
+            : __('Recently expired', 'vc-merchant'))
         . '</h2>'
         . '<p class="vc-coupon-expired__note">'
         . esc_html__('These codes have stopped working. They are listed so you can see what has run out rather than wonder whether it was ever here.', 'vc-merchant')

@@ -196,7 +196,8 @@ add_shortcode('merchant_offer', function ($atts) {
     }
 
     $out = '<div class="vc-offer-status">' . vc_merchant_offer_badge($post_id) . '</div>';
-    $out .= vc_merchant_section(__('Best current deal', 'vc-merchant'),
+    $out .= vc_merchant_section(vc_block_heading('coupon', $post_id,
+        __('Best current deal', 'vc-merchant')),
         vc_section_meta($post_id, 'best_offer_summary'));
 
     $shortcode = function_exists('vc_merchant_coupon_shortcode')
@@ -220,9 +221,11 @@ add_shortcode('merchant_about', function ($atts) {
     }
     $name = vc_merchant_display_name($post_id);
 
-    return vc_merchant_section(sprintf(__('About %s', 'vc-merchant'), $name),
+    return vc_merchant_section(vc_block_heading('about', $post_id,
+        sprintf(__('About %s', 'vc-merchant'), $name)),
             vc_section_meta($post_id, 'brand_summary'))
-        . vc_merchant_section(sprintf(__('Best ways to save at %s', 'vc-merchant'), $name),
+        . vc_merchant_section(vc_block_heading('save', $post_id,
+            sprintf(__('Best ways to save at %s', 'vc-merchant'), $name)),
             vc_section_meta($post_id, 'best_ways_to_save'));
 });
 
@@ -966,7 +969,11 @@ function vc_merchant_destinations($post_id = null) {
     }
 
     $out = '<section class="vc-section vc-destinations">';
-    $out .= '<h2>' . esc_html__('Where this store ships', 'vc-merchant') . '</h2>';
+    $heading = vc_block_heading('destinations', $post_id,
+        __('Where this store ships', 'vc-merchant'));
+    if ($heading !== '') {
+        $out .= '<h2>' . esc_html($heading) . '</h2>';
+    }
     $out .= '<ul class="vc-destinations__list">' . $rows . '</ul>';
 
     // Exclusions, which are the part a reader is actually checking for.

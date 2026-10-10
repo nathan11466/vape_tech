@@ -15,6 +15,54 @@ if (!defined('ABSPATH')) {
 /**
  * Render one content section, or nothing when the field is empty.
  */
+/**
+ * The configured heading for a block, falling back to the shipped wording.
+ *
+ * The fallback is passed in rather than looked up so the English default
+ * stays beside the code that uses it, and so a site running without the
+ * settings module still prints something sensible.
+ */
+function vc_block_heading($key, $post_id, $fallback) {
+    if (!function_exists('vc_layout_heading')) {
+        return $fallback;
+    }
+    $saved = vc_layout_get()['headings'];
+
+    // Only the stored value wins; an untouched block keeps the wording the
+    // code shipped with, which is what the fallback is.
+    return array_key_exists($key, $saved)
+        ? vc_layout_heading($key, $post_id)
+        : $fallback;
+}
+
+/**
+ * One custom block: an editor's own content, with shortcodes expanded.
+ *
+ * Content is stored through wp_kses_post() by the settings screen, so markup
+ * is allowed and already filtered by the time it gets here.
+ */
+function vc_merchant_custom_block($key, $post_id) {
+    if (!function_exists('vc_layout_custom_content')) {
+        return '';
+    }
+
+    $content = trim(vc_layout_custom_content($key));
+    if ($content === '') {
+        return '';
+    }
+
+    $heading = function_exists('vc_layout_heading') ? vc_layout_heading($key, $post_id) : '';
+
+    $out = '<section class="vc-section vc-custom vc-custom--' . esc_attr($key) . '">';
+    if ($heading !== '') {
+        $out .= '<h2>' . esc_html($heading) . '</h2>';
+    }
+    $out .= '<div class="vc-custom__body">' . do_shortcode(wpautop($content)) . '</div>';
+    $out .= '</section>';
+
+    return $out;
+}
+
 function vc_merchant_section($heading, $value) {
     $value = trim((string) $value);
     if ($value === '') {
@@ -134,12 +182,13 @@ function vc_merchant_block($block, $post_id, $atts = array()) {
                 ? vc_merchant_quick_facts($post_id) : '';
 
         case 'about':
-            return vc_merchant_section(sprintf(__('About %s', 'vc-merchant'), $name),
-                $m('brand_summary'));
+            return vc_merchant_section(vc_block_heading('about', $post_id,
+                sprintf(__('About %s', 'vc-merchant'), $name)), $m('brand_summary'));
 
         case 'save':
             return vc_merchant_section(
-                sprintf(__('Best ways to save at %s', 'vc-merchant'), $name),
+                vc_block_heading('save', $post_id,
+                    sprintf(__('Best ways to save at %s', 'vc-merchant'), $name)),
                 $m('best_ways_to_save'));
 
         case 'policies':
@@ -155,8 +204,14 @@ function vc_merchant_block($block, $post_id, $atts = array()) {
 
         case 'trust':
             $trust = vc_merchant_trust_info($post_id);
-            return $trust === '' ? '' : '<section class="vc-trust-section"><h2>'
-                . esc_html__('Company information', 'vc-merchant') . '</h2>' . $trust . '</section>';
+            if ($trust === '') {
+                return '';
+            }
+            $trust_heading = vc_block_heading('trust', $post_id,
+                __('Company information', 'vc-merchant'));
+            return '<section class="vc-trust-section">'
+                . ($trust_heading === '' ? '' : '<h2>' . esc_html($trust_heading) . '</h2>')
+                . $trust . '</section>';
 
         case 'links':
             return function_exists('vc_merchant_links') ? vc_merchant_links($post_id) : '';
@@ -170,6 +225,11 @@ function vc_merchant_block($block, $post_id, $atts = array()) {
         case 'editorial':
             return shortcode_exists('merchant_editorial')
                 ? do_shortcode('[merchant_editorial id="' . $post_id . '"]') : '';
+
+        case 'custom1':
+        case 'custom2':
+        case 'custom3':
+            return vc_merchant_custom_block($block, $post_id);
     }
 
     return '';

@@ -270,6 +270,8 @@ $required = array(
     'vc_freshness_check', 'vc_freshness_purge_caches', 'vc_freshness_unschedule',
     'vc_merchant_destinations', 'vc_merchant_taxonomy_tags',
     'vc_merchant_fact_rows', 'vc_merchant_fact_keys',
+    'vc_layout_heading', 'vc_layout_heading_defaults', 'vc_layout_custom_content',
+    'vc_block_heading', 'vc_merchant_custom_block',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -338,6 +340,19 @@ if (function_exists('vc_editor_field_groups')) {
 check('a deactivation hook is registered',
     !empty($GLOBALS['deactivation_hooks']),
     'nothing would unschedule the freshness check');
+
+if (function_exists('vc_layout_heading_defaults') && function_exists('vc_layout_defaults')) {
+    $known = array_merge(array_keys(vc_layout_defaults()), array('expired'));
+    $orphans = array_diff(array_keys(vc_layout_heading_defaults()), $known);
+    check('every configurable heading belongs to a real block',
+        empty($orphans), implode(', ', $orphans));
+
+    foreach (array('custom1', 'custom2', 'custom3') as $slot) {
+        $blocks = vc_layout_defaults();
+        check("$slot is hidden by default", ($blocks[$slot]['where'] ?? '') === 'off',
+            'a new block visible by default would change every existing page');
+    }
+}
 
 echo "\nShipped files\n";
 $files = array(

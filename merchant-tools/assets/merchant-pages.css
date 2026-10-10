@@ -846,3 +846,31 @@
   color: #6b7280;
 }
 .vc-tags__row { margin: 0 0 .4rem; font-size: .92rem; line-height: 1.6; }
+
+/* ---------- Tokens the Page Layout screen can override ----------
+ *
+ * Declared here with the shipped values so the settings screen only has to
+ * emit the ones that were actually changed. A token left alone keeps its
+ * value here, including under dark mode.
+ */
+:root {
+  --vc-heading-size: 1.35rem;
+  --vc-text-size: 1rem;
+  --vc-section-gap: 1.75rem;
+}
+
+.vc-merchant-page .vc-section > h2,
+.vc-merchant-page .vc-trust-section > h2,
+.vc-merchant-page .vc-destinations > h2 {
+  font-size: var(--vc-heading-size);
+}
+.vc-merchant-page { font-size: var(--vc-text-size); }
+.vc-merchant-page .vc-section { margin-bottom: var(--vc-section-gap); }
+
+/* ---------- Custom blocks ---------- */
+
+.vc-custom__body > :first-child { margin-top: 0; }
+.vc-custom__body > :last-child { margin-bottom: 0; }
+.vc-custom__body img { max-width: 100%; height: auto; }
+.vc-custom__body ul,
+.vc-custom__body ol { margin: 0 0 .75rem 1.25rem; }

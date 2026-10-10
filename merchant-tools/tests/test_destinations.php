@@ -57,6 +57,11 @@ function __($v, $d = null) { return $v; }
 function _n($s, $p, $n, $d = null) { return $n === 1 ? $s : $p; }
 function vc_section_meta($id, $k) { return (string) get_post_meta($id, $k, true); }
 function vc_section_post_id($atts) { return !empty($atts['id']) ? (int) $atts['id'] : get_the_ID(); }
+// The block heading is configurable; the slice under test only needs the
+// shipped fallback, which is what an untouched install uses.
+function vc_block_heading($key, $post_id, $fallback) {
+    return $GLOBALS['heading_override'][$key] ?? $fallback;
+}
 class WP_Error { function get_error_message() { return 'err'; } }
 
 // Loading the whole sections module would pull in the rest of the plugin, so
