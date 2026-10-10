@@ -98,6 +98,9 @@ function vc_rewards_defaults() {
         'answer_pair_days'    => 30,
         'follow_channels'     => '',    // "YouTube | https://youtube.com/@vapingcheap" per line
         'subid_param'         => '',
+        'awin_publisher_id'   => '1961155',
+        'awin_source_tag'     => 'rewd',  // clickref6 on every Awin link, as in the site's own links
+        'awin_stores'         => "ecigmafia.com = 67004\nsourcemore.com = 90119",
 
         // wpForo. Forum IDs (comma separated) whose new topics earn as each type.
         'forum_types'         => array('deal' => '', 'review' => '', 'guide' => '', 'store_report' => ''),

@@ -43,6 +43,7 @@ require_once VC_REWARDS_DIR . 'includes/bonuses.php';
 require_once VC_REWARDS_DIR . 'includes/challenges.php';
 require_once VC_REWARDS_DIR . 'includes/referrals.php';
 require_once VC_REWARDS_DIR . 'includes/purchases.php';
+require_once VC_REWARDS_DIR . 'includes/awin.php';
 require_once VC_REWARDS_DIR . 'includes/redemptions.php';
 require_once VC_REWARDS_DIR . 'includes/frontend.php';
 

@@ -293,6 +293,73 @@ vc_rewards_purchases_page();
 check('purchases page renders', strpos(ob_get_clean(), 'Import a network report') !== false);
 
 /* ------------------------------------------------------------------------- */
+section('Awin links');
+
+$expected = 'https://www.awin1.com/cread.php?awinmid=67004&awinaffid=1961155&clickref6=rewd&ued=https%3A%2F%2Fwww.ecigmafia.com%2F';
+check('plain store link becomes the same Awin link as the site\'s own', vc_rewards_awin_wrap('https://www.ecigmafia.com/') === $expected, vc_rewards_awin_wrap('https://www.ecigmafia.com/'));
+check('deep links and subdomains work', strpos(vc_rewards_awin_wrap('https://shop.sourcemore.com/kits?x=1'), 'awinmid=90119') !== false
+    && strpos(vc_rewards_awin_wrap('https://shop.sourcemore.com/kits?x=1'), 'ued=https%3A%2F%2Fshop.sourcemore.com%2Fkits%3Fx%3D1') !== false);
+check('stores not on Awin are left alone', vc_rewards_awin_wrap('https://notonawin.example/') === 'https://notonawin.example/');
+check('Awin links are not wrapped twice', vc_rewards_awin_wrap($expected) === $expected);
+$tagged = vc_rewards_tag_link($expected, $buyer);
+check('member sub-ID goes in clickref, clickref6 kept', strpos($tagged, 'clickref=' . $subid) !== false && strpos($tagged, 'clickref6=rewd') !== false);
+
+update_option(VC_REWARDS_OPTION, array_merge(get_option(VC_REWARDS_OPTION), array('awin_stores' => "ecigmafia.com = 67004\nhttps://www.extra-store.example/ = 555")));
+check('settings list accepts full URLs', vc_rewards_awin_advertiser_for('https://extra-store.example/x') === 555);
+
+$c_awin = editor_coupon($brand, 'AWIN1');
+update_post_meta($c_awin, '_wcd_destination_url', 'https://www.ecigmafia.com/sale/');
+wp_set_current_user(0);
+check('guests get the Awin link on coupon buttons', strpos(get_post_meta($c_awin, '_wcd_destination_url', true), 'awinmid=67004') !== false
+    && strpos(get_post_meta($c_awin, '_wcd_destination_url', true), 'clickref=') === false);
+wp_set_current_user($buyer);
+check('members get it with their sub-ID', strpos(get_post_meta($c_awin, '_wcd_destination_url', true), 'clickref=' . $subid) !== false);
+$html = vc_rewards_affiliate_links_in_html('<p><a href="https://www.ecigmafia.com/">Ecig Mafia</a> and <a href="https://other.example/">other</a></p>');
+check('post content links are rewritten', strpos($html, 'awinmid=67004') !== false && strpos($html, 'href="https://other.example/"') !== false);
+
+/* ------------------------------------------------------------------------- */
+section('Awin sync');
+
+check('sync without a token explains what is missing', !empty(vc_rewards_awin_sync()['errors']));
+define('VC_AWIN_TOKEN', 'test-token');
+$awin_calls = array();
+add_filter('pre_http_request', function ($pre, $args, $url) use (&$awin_calls, $subid) {
+    if (strpos($url, 'api.awin.com') === false) {
+        return $pre;
+    }
+    $awin_calls[] = array($url, $args['headers']['Authorization'] ?? '');
+    if (strpos($url, '/programmes') !== false) {
+        $body = array(array('id' => 777, 'name' => 'New Store', 'displayUrl' => 'https://www.newstore.example', 'validDomains' => array(array('domain' => 'www.newstore.example'), array('domain' => 'www.awin1.com'))));
+    } elseif (count($awin_calls) === 2) {
+        $body = array(
+            array('id' => 501, 'advertiserId' => 67004, 'commissionStatus' => 'approved', 'saleAmount' => array('amount' => 40, 'currency' => 'USD'), 'clickRefs' => array('clickRef' => $subid, 'clickRef6' => 'rewd')),
+            array('id' => 502, 'advertiserId' => 67004, 'commissionStatus' => 'pending', 'saleAmount' => array('amount' => 25, 'currency' => 'USD'), 'clickRefs' => array('clickRef' => $subid)),
+            array('id' => 503, 'advertiserId' => 90119, 'commissionStatus' => 'approved', 'saleAmount' => array('amount' => 99, 'currency' => 'USD'), 'clickRefs' => array('clickRef6' => 'rewd')),
+            array('id' => 504, 'advertiserId' => 1, 'commissionStatus' => 'approved', 'saleAmount' => array('amount' => 30, 'currency' => 'GBP'), 'clickRefs' => array('clickRef' => $subid)),
+        );
+    } else {
+        $body = array();
+    }
+    return array('headers' => array(), 'body' => wp_json_encode($body), 'response' => array('code' => 200, 'message' => 'OK'), 'cookies' => array(), 'filename' => null);
+}, 10, 3);
+
+$before = vc_rewards_balance($buyer);
+$counts = vc_rewards_awin_sync(90);
+check('90 days is read in 31-day pieces with the token', count($awin_calls) === 3 && $awin_calls[0][1] === 'Bearer test-token'
+    && strpos($awin_calls[0][0], 'publishers/1961155/transactions/') !== false);
+check('approved member sale pays 3% of $40 = 3,000', $counts['paid'] === 1 && vc_rewards_balance($buyer) - $before === 3000);
+check('pending noted, non-member sale ignored, other currency held back', $counts['added'] === 1 && $counts['other_currency'] === 1);
+$awin_calls = array();
+vc_rewards_awin_sync(90);
+check('running it again pays nothing more', vc_rewards_balance($buyer) - $before === 3000);
+check('joined stores load from the API', vc_rewards_awin_refresh_stores() === 1 && vc_rewards_awin_advertiser_for('https://newstore.example/x') === 777);
+check('Awin\'s own domains are never treated as stores', !isset(vc_rewards_awin_stores()['awin1.com']));
+wp_set_current_user(1);
+ob_start();
+vc_rewards_purchases_page();
+check('purchases page shows Awin status', strpos(ob_get_clean(), 'Sync now') !== false);
+
+/* ------------------------------------------------------------------------- */
 section('Accepted forum answers');
 
 class VC_Extras_WPF {

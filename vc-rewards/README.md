@@ -98,6 +98,14 @@ Rank-up bonuses (1,250 / 5,000 / 12,500) are paid once per account, ever, and si
 | Cashback on a confirmed purchase | 3% of the order value | Set your affiliate network's sub-ID parameter in settings so store links carry the member's sub-ID. Import the network's confirmed sales under **Rewards → Purchases** (admins only). Reversals take the points back. |
 | Completed profile, following a channel | 250 each, once | Automatic. Follow bonuses aren't checked, so like visit points they only become redeemable after a post is accepted. Channels are listed in settings. |
 
+### Awin
+
+- **Links:** plain links to stores on Awin, in coupon buttons and in posts, are turned into Awin tracking links in the same shape as the site's own (`cread.php?awinmid=…&awinaffid=1961155&clickref6=rewd&ued=…`). Stores not on Awin are left alone. For logged-in members the link also gets `clickref=<their sub-ID>`. Other sites' links never get it.
+- **Which stores:** every programme you've joined, read daily from the Awin API, plus the list in **Rewards → Settings → Awin stores** (`domain = advertiser ID`). Ecig Mafia (67004) and SourceMore (90119) are listed by default.
+- **Sales:** once a day the last 90 days of transactions are read. Approved sales with a member sub-ID pay cashback, pending ones are noted, and declined or deleted ones take it back. Non-USD sales are counted but left for you to add by hand. **Rewards → Purchases → Sync now** runs it on demand.
+- **Setup:** the publisher ID is in settings. Put the API token (Awin → API credentials) in `wp-config.php`: `define('VC_AWIN_TOKEN', '…');`. Without the token, link building still works from the settings list; only the sale sync and the automatic store list need it.
+- Paying cashback makes the site an incentive publisher. Check each programme allows it.
+
 Rewards from awards, challenges and referrals stay pending for 7 to 14 days. Every number is in **Rewards → Settings**.
 
 ### Daily visits
@@ -112,7 +120,7 @@ Members request a reward from the list in settings (minimum 25,000 points = $10)
 
 - Promoting a forum reply into a reward-earning post.
 - Newsletter signup bonus. It needs your email provider's double opt-in to report back.
-- Pulling sales automatically from an affiliate network's API. Reports are imported as CSV for now.
+- Automatic sale syncing for networks other than Awin. Their reports are imported as CSV.
 - Phone verification and ID-based age verification. The date of birth is self-declared.
 - myCRED. This plugin keeps its own ledger, because myCRED has no pending points or clawbacks. To show settled points in myCRED's leaderboards and badges, add `add_filter('vc_rewards_mirror_to_mycred', '__return_true');`.
 

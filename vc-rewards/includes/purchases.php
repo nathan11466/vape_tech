@@ -33,6 +33,10 @@ function vc_rewards_user_from_subid($subid) {
 function vc_rewards_tag_link($url, $user_id = null) {
     $param   = sanitize_key((string) vc_rewards_setting('subid_param'));
     $user_id = $user_id === null ? get_current_user_id() : (int) $user_id;
+    if (function_exists('vc_rewards_is_awin_link') && vc_rewards_is_awin_link($url)) {
+        // Awin's member slot; clickref2-6 stay free for the site's own tags.
+        $param = 'clickref';
+    }
     if ($param === '' || !$user_id || (string) $url === '') {
         return $url;
     }
@@ -40,12 +44,6 @@ function vc_rewards_tag_link($url, $user_id = null) {
 }
 add_filter('vc_rewards_tag_link', 'vc_rewards_tag_link');
 
-add_filter('vc_rewards_reveal_payload', function ($payload) {
-    if (is_array($payload) && !empty($payload['url'])) {
-        $payload['url'] = esc_url(vc_rewards_tag_link(html_entity_decode($payload['url'])));
-    }
-    return $payload;
-}, 50);
 
 function vc_rewards_purchase_points($order_value) {
     // 2,500 points = $1.
@@ -75,7 +73,7 @@ function vc_rewards_record_purchase(array $row) {
     $map    = array(
         'approved' => 'confirmed', 'confirmed' => 'confirmed', 'locked' => 'confirmed', 'paid' => 'confirmed',
         'pending' => 'pending', 'open' => 'pending', 'new' => 'pending',
-        'reversed' => 'reversed', 'declined' => 'reversed', 'rejected' => 'reversed', 'void' => 'reversed', 'returned' => 'reversed',
+        'reversed' => 'reversed', 'declined' => 'reversed', 'deleted' => 'reversed', 'rejected' => 'reversed', 'void' => 'reversed', 'returned' => 'reversed',
     );
     $status  = isset($map[$status]) ? $map[$status] : '';
     $user_id = !empty($row['user_id']) ? (int) $row['user_id'] : vc_rewards_user_from_subid($row['subid'] ?? '');
@@ -214,6 +212,7 @@ function vc_rewards_purchases_page() {
     if ($notice) {
         echo '<div class="notice notice-info is-dismissible"><p>' . esc_html($notice) . '</p></div>';
     }
+    do_action('vc_rewards_purchases_top');
     $param = (string) vc_rewards_setting('subid_param');
     echo '<p class="description">' . esc_html(sprintf(
         /* translators: 1: percent, 2: parameter name */

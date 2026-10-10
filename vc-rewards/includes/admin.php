@@ -358,6 +358,9 @@ function vc_rewards_text_settings() {
     return array(
         'reward_options'  => array(__('Rewards members can request (one per line)', 'vc-rewards'), 'textarea', ''),
         'follow_channels' => array(__('Follow bonus channels (one per line: Name | URL)', 'vc-rewards'), 'textarea', __('Members get a one-time bonus per channel. It is not checked, so it only becomes redeemable after a post is accepted.', 'vc-rewards')),
+        'awin_publisher_id' => array(__('Awin publisher ID', 'vc-rewards'), 'text', __('The awinaffid number in your Awin links. The API token goes in wp-config.php as VC_AWIN_TOKEN.', 'vc-rewards')),
+        'awin_source_tag'   => array(__('Awin clickref6 tag', 'vc-rewards'), 'text', __('Added to every Awin link the site builds, so Awin reports can tell these clicks apart.', 'vc-rewards')),
+        'awin_stores'       => array(__('Awin stores (one per line: domain = advertiser ID)', 'vc-rewards'), 'textarea', __('Plain links to these stores become Awin links. With the API token set, every store you have joined is added automatically, so this list is only for extras or overrides.', 'vc-rewards')),
         'subid_param'     => array(__('Affiliate sub-ID parameter', 'vc-rewards'), 'text', __('Added to store links for logged-in members, so the network report says who bought (for example subid, u1 or sid). Leave blank to turn off.', 'vc-rewards')),
     );
 }
