@@ -19,6 +19,7 @@ function vc_rewards_enqueue() {
         'ajax'  => admin_url('admin-ajax.php'),
         'nonce' => wp_create_nonce('vc_rewards'),
         'error' => __('Something went wrong. Please try again.', 'vc-rewards'),
+        'open'  => __('Open the deal', 'vc-rewards'),
     ));
 }
 
@@ -204,35 +205,56 @@ add_shortcode('vc_submit_coupon', function () {
  * [vc_verify_queue]
  * ---------------------------------------------------------------------- */
 
-function vc_rewards_queue_items($user_id, $limit = 20) {
+/**
+ * Open contributions the member can vote on.
+ *
+ * Voting ones first, then accepted factual ones still in their holding
+ * period, so a code or deal that dies early can still be caught.
+ *
+ * $types: contribution types to include; empty for all.
+ */
+function vc_rewards_queue_items($user_id, $limit = 20, array $types = array()) {
     global $wpdb;
     $contrib = vc_rewards_table('contributions');
     $ledger  = vc_rewards_table('ledger');
-    // Open for voting, or accepted but still in its holding period, so a
-    // code that dies early can still be caught.
+
+    $factual = array();
+    foreach (vc_rewards_setting('types') as $key => $type) {
+        if ($type['kind'] === 'factual') {
+            $factual[] = $key;
+        }
+    }
+    $type_sql = '';
+    $params   = array((int) $user_id);
+    if ($types) {
+        $type_sql = ' AND c.contrib_type IN (' . implode(',', array_fill(0, count($types), '%s')) . ')';
+        $params   = array_merge($params, $types);
+    }
+    $factual_sql = $factual ? implode(',', array_fill(0, count($factual), '%s')) : "''";
+    $params      = array_merge($params, $factual, array((int) $limit));
+
     return $wpdb->get_results($wpdb->prepare(
         "SELECT c.* FROM $contrib c
-         WHERE c.object_type = 'wcd_coupon' AND c.author_id <> %d
+         WHERE c.author_id <> %d $type_sql
            AND (c.state = 'voting'
-                OR (c.state = 'accepted' AND EXISTS (
+                OR (c.state = 'accepted' AND c.contrib_type IN ($factual_sql) AND EXISTS (
                     SELECT 1 FROM $ledger l WHERE l.contribution_id = c.id AND l.user_id = c.author_id
                       AND l.kind = 'contribution' AND l.status = 'pending')))
          ORDER BY (c.state = 'voting') DESC, c.id DESC
          LIMIT %d",
-        (int) $user_id,
-        (int) $limit
+        $params
     ));
 }
 
 function vc_rewards_render_vote_card($c, $user_id) {
-    $post_id  = (int) $c->object_id;
     $type     = vc_rewards_type($c->contrib_type);
     $verdicts = vc_rewards_verdicts($type['kind']);
     $voted    = vc_rewards_user_vote($c->id, $user_id);
-    $terms    = get_the_terms($post_id, 'wcd_brand');
-    $brand    = $terms && !is_wp_error($terms) ? $terms[0]->name : '';
-    $expires  = (string) get_post_meta($post_id, '_wcd_expiration', true);
-    $details  = get_post_field('post_content', $post_id);
+    $info     = vc_rewards_object_info($c);
+    $factual  = $type['kind'] === 'factual';
+    $revealed = !$factual || vc_rewards_has_revealed($c->id, $user_id);
+    $can_vote = (int) $c->author_id !== (int) $user_id
+        && ($c->state === 'voting' || ($c->state === 'accepted' && vc_rewards_in_holding($c)));
 
     $buttons = '';
     foreach ($verdicts as $key => $v) {
@@ -243,25 +265,38 @@ function vc_rewards_render_vote_card($c, $user_id) {
         );
     }
 
-    $status = $c->state === 'accepted'
-        ? __('Verified. Still working?', 'vc-rewards')
-        : __('Needs verifying', 'vc-rewards');
+    if ($c->state === 'accepted') {
+        $status = $factual ? __('Verified. Still working?', 'vc-rewards') : __('Accepted', 'vc-rewards');
+    } elseif ($c->state === 'voting') {
+        $status = $factual ? __('Needs verifying', 'vc-rewards') : __('Needs votes', 'vc-rewards');
+    } else {
+        $status = vc_rewards_state_label($c->state);
+    }
+    $reveal_label = $c->object_type === 'wcd_coupon'
+        ? __('Reveal code and try it', 'vc-rewards')
+        : __('Open the deal and check it', 'vc-rewards');
 
     ob_start();
     ?>
     <article class="vc-rewards-card" data-contribution="<?php echo (int) $c->id; ?>">
         <header>
-            <strong><?php echo esc_html($brand); ?></strong>
+            <strong><?php echo esc_html($info['brand'] !== '' ? $info['brand'] : $type['label']); ?></strong>
             <span class="vc-rewards-badge"><?php echo esc_html($status); ?></span>
         </header>
-        <p class="vc-rewards-discount"><?php echo esc_html(get_post_meta($post_id, '_wcd_discount', true)); ?></p>
-        <?php if ($details) : ?>
-            <p class="vc-rewards-details"><?php echo esc_html(wp_trim_words($details, 40)); ?></p>
+        <p class="vc-rewards-discount">
+            <?php if ($info['url']) : ?>
+                <a href="<?php echo esc_url($info['url']); ?>"><?php echo esc_html($info['summary'] !== '' ? $info['summary'] : $info['title']); ?></a>
+            <?php else : ?>
+                <?php echo esc_html($info['summary'] !== '' ? $info['summary'] : $info['title']); ?>
+            <?php endif; ?>
+        </p>
+        <?php if ($info['detail']) : ?>
+            <p class="vc-rewards-details"><?php echo esc_html($info['detail']); ?></p>
         <?php endif; ?>
-        <?php if ($expires) : ?>
+        <?php if ($info['expires']) : ?>
             <p class="vc-rewards-meta"><?php
                 /* translators: %s: date */
-                printf(esc_html__('Expires %s', 'vc-rewards'), esc_html(date_i18n(get_option('date_format'), strtotime($expires))));
+                printf(esc_html__('Expires %s', 'vc-rewards'), esc_html(date_i18n(get_option('date_format'), strtotime($info['expires']))));
             ?></p>
         <?php endif; ?>
         <?php if ($voted) : ?>
@@ -269,12 +304,14 @@ function vc_rewards_render_vote_card($c, $user_id) {
                 /* translators: %s: the member's vote */
                 printf(esc_html__('You voted: %s', 'vc-rewards'), esc_html($verdicts[$voted]['label'] ?? $voted));
             ?></p>
-        <?php else : ?>
-            <div class="vc-rewards-reveal">
-                <button type="button" class="vc-rewards-reveal-btn"><?php esc_html_e('Reveal code and try it', 'vc-rewards'); ?></button>
-                <span class="vc-rewards-code" hidden></span>
-            </div>
-            <div class="vc-rewards-votes" hidden><?php echo $buttons; // phpcs:ignore WordPress.Security.EscapeOutput ?></div>
+        <?php elseif ($can_vote) : ?>
+            <?php if (!$revealed) : ?>
+                <div class="vc-rewards-reveal">
+                    <button type="button" class="vc-rewards-reveal-btn"><?php echo esc_html($reveal_label); ?></button>
+                    <span class="vc-rewards-code" hidden></span>
+                </div>
+            <?php endif; ?>
+            <div class="vc-rewards-votes" <?php echo $revealed ? '' : 'hidden'; ?>><?php echo $buttons; // phpcs:ignore WordPress.Security.EscapeOutput ?></div>
             <p class="vc-rewards-result" role="status"></p>
         <?php endif; ?>
     </article>
@@ -282,7 +319,9 @@ function vc_rewards_render_vote_card($c, $user_id) {
     return ob_get_clean();
 }
 
-add_shortcode('vc_verify_queue', function () {
+add_shortcode('vc_verify_queue', function ($atts) {
+    $atts  = shortcode_atts(array('type' => ''), $atts);
+    $types = array_filter(array_map('sanitize_key', explode(',', (string) $atts['type'])));
     if (!is_user_logged_in()) {
         return vc_rewards_login_prompt();
     }
@@ -293,15 +332,15 @@ add_shortcode('vc_verify_queue', function () {
     }
     vc_rewards_enqueue();
 
-    $items = vc_rewards_queue_items($user_id);
+    $items = vc_rewards_queue_items($user_id, 30, $types);
     if (!$items) {
-        return '<p class="vc-rewards-empty">' . esc_html__('Nothing waiting to be verified right now. Check back soon.', 'vc-rewards') . '</p>';
+            return '<p class="vc-rewards-empty">' . esc_html__('Nothing waiting to be verified right now. Check back soon.', 'vc-rewards') . '</p>';
     }
 
     $rank = vc_rewards_rank($user_id);
     $out  = '<p class="vc-rewards-intro">' . esc_html(sprintf(
         /* translators: 1: rank, 2: vote weight */
-        __('You are a %1$s, so your vote counts %2$s. Reveal a code, try it at the store, then vote.', 'vc-rewards'),
+        __('You are a %1$s, so your vote counts %2$s. Try each deal before you vote on it.', 'vc-rewards'),
         vc_rewards_rank_label($rank),
         vc_rewards_rank_weight($rank) > 0
             /* translators: %s: weight number */
@@ -427,7 +466,9 @@ add_shortcode('vc_rewards_account', function () {
                 /* translators: %s: appeal status */
                 $action = esc_html(sprintf(__('Appeal %s', 'vc-rewards'), $c->appeal));
             }
-            $out .= '<tr><td>' . esc_html(get_the_title($c->object_id)) . '</td><td>'
+            $info = vc_rewards_object_info($c);
+            $title = $info['url'] ? '<a href="' . esc_url($info['url']) . '">' . esc_html($info['title']) . '</a>' : esc_html($info['title']);
+            $out .= '<tr><td>' . $title . '</td><td>'
                 . esc_html(vc_rewards_state_label($c->state)) . '</td><td>' . $action . '</td></tr>';
         }
         $out .= '</tbody></table></section>';

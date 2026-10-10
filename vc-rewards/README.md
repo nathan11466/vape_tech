@@ -1,8 +1,8 @@
 # VapingCheap Community Rewards
 
-Members submit coupons, other members verify them, and the submitter earns points weighted by the rank of the members who verified. Reputation, ranks, penalties, new-account review and hand-approved redemptions keep it hard to farm.
+Members submit coupons and post deal finds, reviews and guides in the wpForo forum. Other members verify them, and the submitter earns points weighted by the rank of the members who verified. Reputation, ranks, penalties, new-account review and hand-approved redemptions keep it hard to farm.
 
-This is stage 1 of the design: **coupons**. The data model already handles forum posts (wpForo deal finds, reviews and guides); connecting wpForo is stage 2.
+Stages 1 and 2 of the design: **coupons** (WP Coupon & Deals) and **forum posts** (wpForo).
 
 ## Install
 
@@ -20,6 +20,8 @@ This is stage 1 of the design: **coupons**. The data model already handles forum
 `[vc_rewards_leaderboard limit="10"]` shows the top members by reputation anywhere you like.
 
 5. Tick **Moderator** on the profile of anyone (besides admins) who should moderate. Moderators get a **Rewards** menu in wp-admin.
+
+6. For the forum (optional, wpForo 3.x): in **Rewards → Settings**, enter the wpForo forum IDs whose new topics earn as a *deal*, *review* or *guide*. Leave a type blank to switch it off. In wpForo's own settings, turn off its reputation points and like rewards so members see one points system.
 
 ## How it works
 
@@ -61,6 +63,18 @@ Rank-up bonuses (1,250 / 5,000 / 12,500) are paid once per account, ever, and si
 - Flagging something a moderator then clears costs 250 points and 5 reputation.
 - Authors can appeal a rejection once. Overturning refunds the penalty and reputation in full.
 
+### Forum posts (wpForo)
+
+- A new **topic** in a mapped forum becomes a contribution. Replies never earn.
+- **Deal finds** are checked like coupons: open the link, then vote *Works*, *Doesn't work* or *Expired*. Base 400 points.
+- **Reviews and guides** get *Helpful*, *Not helpful* or *Inaccurate or spam*. "Not helpful" never costs the author anything; enough net spam weight rejects it with the fake/spam penalty. Base 750 (review) and 600 (guide), and they need 150 words to earn.
+- The vote widget appears under the topic's first post, and forum posts show in **Verify** and **Rewards → Queue** next to coupons.
+- Held posts are held in wpForo too (status "unapproved"). Approving in wpForo's moderation screen and releasing in **Rewards → Queue** do the same thing.
+- A new account's first 3 posts of any kind wait for a moderator, including replies and off-topic topics. So do topics from members with negative reputation, reviews and guides that link to a store, and posts with more than 3 outbound links. Members who registered before the plugin was activated skip the new-account review.
+- A topic whose text (30+ words) matches another member's post is rejected as **copied**, with the fake/spam penalty.
+- Voted *Doesn't work* or spam: the topic is unapproved (hidden). *Expired*, or withdrawn after acceptance: the topic stays visible but is closed to replies. Deleting a topic cancels its pending reward without a penalty.
+- Paused accounts can't post in the forum.
+
 ### Daily visits
 
 Logged-in members get 25 points on their first page view each day, plus 250 for every 7 days in a row. These points add no reputation and **can't be redeemed until the member has had a post accepted**.
@@ -71,7 +85,7 @@ Members request a reward from the list in settings (minimum 25,000 points = $10)
 
 ## Not in this stage
 
-- wpForo deal finds, reviews and guides. The rules are already configured, and the tests run them through a stand-in `wpforo_topic` object.
+- Promoting a forum reply into a reward-earning post.
 - The other earning actions in the design: confirmed affiliate purchases, merchant fact corrections, referrals, weekly challenges.
 - Phone verification and ID-based age verification. The date of birth is self-declared.
 - myCRED. This plugin keeps its own ledger, because myCRED has no pending points or clawbacks. To show settled points in myCRED's leaderboards and badges, add `add_filter('vc_rewards_mirror_to_mycred', '__return_true');`.
@@ -79,13 +93,14 @@ Members request a reward from the list in settings (minimum 25,000 points = $10)
 ## Hooks
 
 - `vc_rewards_settings`: filter the merged settings array.
+- `vc_rewards_object_info` `($info, $contribution)` and `vc_rewards_reveal_payload` `($payload, $contribution)`: describe a new kind of object to the queue and vote widget. `includes/coupons.php` and `includes/wpforo.php` are the two examples.
 - `vc_rewards_contribution_state` `($contribution_id, $new_state, $old_state)`: integrations listen here. The coupon integration uses it to publish and unpublish.
 - `vc_rewards_vote_cast`, `vc_rewards_rank_changed`, `vc_rewards_ledger_added`, `vc_rewards_redemption_requested`, `vc_rewards_redemption_decided`.
 - `vc_rewards_client_ip`: filter the IP before hashing, for sites behind a proxy or CDN that need to read a forwarded header.
 
 ## Running the tests
 
-The suite runs against a real WordPress on SQLite, so the SQL, hooks and post status changes are all the real thing. WP Coupon & Deals isn't open source, so the bootstrap registers its post type and taxonomy under the same names.
+`tests/test_rewards.php` covers the core and coupons; `tests/test_wpforo.php` covers the forum against a stand-in `WPF()` that fires wpForo 3.2's hooks with the same arguments. The suite runs against a real WordPress on SQLite, so the SQL, hooks and post status changes are all the real thing. WP Coupon & Deals isn't open source, so the bootstrap registers its post type and taxonomy under the same names.
 
 ```bash
 git clone --depth 1 https://github.com/WordPress/WordPress wp

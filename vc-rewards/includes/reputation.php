@@ -167,6 +167,14 @@ function vc_rewards_under_review($user_id) {
     if (vc_rewards_reputation($user_id) < 0) {
         return true;
     }
+    // Forum regulars from before the rewards launch are not new accounts.
+    if (!metadata_exists('user', (int) $user_id, '_vc_hold_approved')) {
+        $user      = get_userdata((int) $user_id);
+        $installed = get_option('vc_rewards_installed_at');
+        if ($user && $installed && $user->user_registered < $installed) {
+            return false;
+        }
+    }
     $approved = (int) get_user_meta((int) $user_id, '_vc_hold_approved', true);
     return $approved < (int) vc_rewards_setting('hold_first_posts');
 }

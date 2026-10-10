@@ -174,51 +174,32 @@ add_action('vc_rewards_contribution_state', function ($contribution_id, $state) 
     }
 }, 10, 2);
 
-/** What a member sees when they reveal a coupon. */
-function vc_rewards_coupon_reveal_payload($contribution) {
-    $post_id = (int) $contribution->object_id;
+add_filter('vc_rewards_object_info', function ($info, $c) {
+    if ($c->object_type !== 'wcd_coupon') {
+        return $info;
+    }
+    $post_id = (int) $c->object_id;
+    $terms   = get_the_terms($post_id, 'wcd_brand');
+    return array(
+        'title'   => get_the_title($post_id),
+        'url'     => get_post_status($post_id) === 'publish' ? get_permalink($post_id) : '',
+        'summary' => (string) get_post_meta($post_id, '_wcd_discount', true),
+        'detail'  => wp_trim_words((string) get_post_field('post_content', $post_id), 40),
+        'expires' => (string) get_post_meta($post_id, '_wcd_expiration', true),
+        'brand'   => $terms && !is_wp_error($terms) ? $terms[0]->name : '',
+        'code'    => (string) get_post_meta($post_id, '_wcd_code', true),
+        'link'    => (string) get_post_meta($post_id, '_wcd_destination_url', true),
+    );
+}, 10, 2);
+
+/** Revealing a coupon hands over its code and link. */
+add_filter('vc_rewards_reveal_payload', function ($payload, $c) {
+    if ($c->object_type !== 'wcd_coupon') {
+        return $payload;
+    }
+    $post_id = (int) $c->object_id;
     return array(
         'code' => (string) get_post_meta($post_id, '_wcd_code', true),
         'url'  => esc_url((string) get_post_meta($post_id, '_wcd_destination_url', true)),
     );
-}
-
-/* -------------------------------------------------------------------------
- * AJAX
- * ---------------------------------------------------------------------- */
-
-function vc_rewards_ajax_guard() {
-    if (empty($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'vc_rewards')) {
-        wp_send_json_error(array('message' => __('This page is out of date. Refresh and try again.', 'vc-rewards')), 403);
-    }
-    $user_id = get_current_user_id();
-    $error   = vc_rewards_participation_error($user_id);
-    if ($error) {
-        wp_send_json_error(array('message' => $error), 403);
-    }
-    return $user_id;
-}
-
-add_action('wp_ajax_vc_rewards_reveal', function () {
-    $user_id = vc_rewards_ajax_guard();
-    $c = vc_rewards_get_contribution(isset($_POST['contribution']) ? (int) $_POST['contribution'] : 0);
-    $visible = $c && ($c->state === 'voting' || $c->state === 'accepted');
-    if (!$visible || $c->object_type !== 'wcd_coupon') {
-        wp_send_json_error(array('message' => __('That coupon is not available.', 'vc-rewards')), 404);
-    }
-    vc_rewards_record_reveal($c->id, $user_id);
-    wp_send_json_success(vc_rewards_coupon_reveal_payload($c));
-});
-
-add_action('wp_ajax_vc_rewards_vote', function () {
-    $user_id = vc_rewards_ajax_guard();
-    $result  = vc_rewards_cast_vote(
-        isset($_POST['contribution']) ? (int) $_POST['contribution'] : 0,
-        $user_id,
-        isset($_POST['verdict']) ? sanitize_key(wp_unslash($_POST['verdict'])) : ''
-    );
-    if ($result['ok']) {
-        wp_send_json_success(array('message' => $result['message']));
-    }
-    wp_send_json_error(array('message' => $result['message']));
-});
+}, 10, 2);

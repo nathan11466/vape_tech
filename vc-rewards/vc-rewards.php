@@ -1,13 +1,13 @@
 <?php
 /**
  * Plugin Name: VapingCheap Community Rewards
- * Description: Members submit coupons and verify each other's finds. Rewards are weighted by the rank of the members who verify, with reputation, penalties and hand-reviewed redemptions.
- * Version: 0.1.0
+ * Description: Members submit coupons and forum deal finds, reviews and guides, and verify each other's posts. Rewards are weighted by the rank of the members who verify, with reputation, penalties and hand-reviewed redemptions.
+ * Version: 0.2.0
  * Requires PHP: 7.4
  * Text Domain: vc-rewards
  *
- * Design: rewards are paid for *contributions* (a coupon today; wpForo deal
- * finds, reviews and guides later) once members with enough standing have
+ * Design: rewards are paid for *contributions* (a coupon, or a wpForo deal find,
+ * review or guide) once members with enough standing have
  * voted on them. Two scores are kept apart on purpose:
  *
  *   points      spendable, can be redeemed, live in the ledger table
@@ -21,8 +21,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-const VC_REWARDS_VERSION    = '0.1.0';
-const VC_REWARDS_DB_VERSION = '1';
+const VC_REWARDS_VERSION    = '0.2.0';
+const VC_REWARDS_DB_VERSION = '2';
 
 define('VC_REWARDS_DIR', plugin_dir_path(__FILE__));
 define('VC_REWARDS_URL', plugin_dir_url(__FILE__));
@@ -34,7 +34,9 @@ require_once VC_REWARDS_DIR . 'includes/reputation.php';
 require_once VC_REWARDS_DIR . 'includes/contributions.php';
 require_once VC_REWARDS_DIR . 'includes/votes.php';
 require_once VC_REWARDS_DIR . 'includes/members.php';
+require_once VC_REWARDS_DIR . 'includes/objects.php';
 require_once VC_REWARDS_DIR . 'includes/coupons.php';
+require_once VC_REWARDS_DIR . 'includes/wpforo.php';
 require_once VC_REWARDS_DIR . 'includes/redemptions.php';
 require_once VC_REWARDS_DIR . 'includes/frontend.php';
 

@@ -47,12 +47,14 @@ function vc_rewards_install() {
         multiplier decimal(4,2) NOT NULL DEFAULT 1.00,
         reject_reason varchar(20) NOT NULL DEFAULT '',
         appeal varchar(10) NOT NULL DEFAULT '',
+        fingerprint char(32) NOT NULL DEFAULT '',
         created_at datetime NOT NULL,
         resolved_at datetime DEFAULT NULL,
         PRIMARY KEY  (id),
         UNIQUE KEY object (object_type,object_id),
         KEY author (author_id),
-        KEY state (state)
+        KEY state (state),
+        KEY fingerprint (fingerprint)
     ) $charset;");
 
     dbDelta("CREATE TABLE $votes (
@@ -123,6 +125,8 @@ function vc_rewards_install() {
         KEY user_id (user_id)
     ) $charset;");
 
+    // Members who joined before the plugin skip the new-account review.
+    add_option('vc_rewards_installed_at', gmdate('Y-m-d H:i:s'));
     update_option('vc_rewards_db_version', VC_REWARDS_DB_VERSION);
 }
 

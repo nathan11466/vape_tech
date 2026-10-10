@@ -10,4 +10,5 @@ for f in ../vc-rewards.php ../includes/*.php; do
     php -l "$f" >/dev/null || status=1
 done
 php test_rewards.php || status=1
+php test_wpforo.php || status=1
 exit $status

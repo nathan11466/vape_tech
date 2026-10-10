@@ -52,19 +52,21 @@ function vc_rewards_user_link($user_id) {
     );
 }
 
-function vc_rewards_coupon_summary($c) {
-    if ($c->object_type !== 'wcd_coupon') {
-        return esc_html($c->object_type . ' #' . $c->object_id);
+function vc_rewards_contribution_summary($c) {
+    $info = vc_rewards_object_info($c);
+    $type = vc_rewards_type($c->contrib_type);
+    $title = $info['url']
+        ? '<a href="' . esc_url($info['url']) . '" target="_blank">' . esc_html($info['title']) . '</a>'
+        : esc_html($info['title']);
+    $out = '<strong>' . $title . '</strong> <span class="description">' . esc_html($type ? $type['label'] : $c->contrib_type) . '</span>';
+    if ($info['code'] !== '') {
+        $out .= '<br><code>' . esc_html($info['code']) . '</code>';
     }
-    $post_id = (int) $c->object_id;
-    $code    = (string) get_post_meta($post_id, '_wcd_code', true);
-    $url     = (string) get_post_meta($post_id, '_wcd_destination_url', true);
-    $out = '<strong>' . esc_html(get_the_title($post_id)) . '</strong>';
-    if ($code !== '') {
-        $out .= '<br><code>' . esc_html($code) . '</code>';
+    if ($info['link'] !== '') {
+        $out .= '<br><a href="' . esc_url($info['link']) . '" target="_blank" rel="noopener noreferrer">' . esc_html(wp_parse_url($info['link'], PHP_URL_HOST)) . '</a>';
     }
-    if ($url !== '') {
-        $out .= '<br><a href="' . esc_url($url) . '" target="_blank" rel="noopener noreferrer">' . esc_html(wp_parse_url($url, PHP_URL_HOST)) . '</a>';
+    if ($info['detail'] !== '' && $c->object_type !== 'wcd_coupon') {
+        $out .= '<br><span class="description">' . esc_html(wp_trim_words($info['detail'], 25)) . '</span>';
     }
     return $out;
 }
@@ -135,6 +137,7 @@ function vc_rewards_queue_page() {
             . vc_rewards_action_button('accept', $c->id, __('Accept', 'vc-rewards'), array(), 'button button-primary')
             . vc_rewards_action_button('reject', $c->id, __("Didn't work", 'vc-rewards'), array('reason' => 'invalid'))
             . vc_rewards_action_button('reject', $c->id, __('Expired', 'vc-rewards'), array('reason' => 'expired'))
+            . vc_rewards_action_button('reject', $c->id, __('Copied', 'vc-rewards'), array('reason' => 'copied'))
             . vc_rewards_action_button('reject', $c->id, __('Fake or spam', 'vc-rewards'), array('reason' => 'fake'), 'button button-link-delete');
     }, true);
 
@@ -166,7 +169,7 @@ function vc_rewards_contribution_table(array $rows, callable $actions, $with_sco
     }
     echo '<th>' . esc_html__('Submitted', 'vc-rewards') . '</th><th>' . esc_html__('Actions', 'vc-rewards') . '</th></tr></thead><tbody>';
     foreach ($rows as $c) {
-        echo '<tr><td>' . vc_rewards_coupon_summary($c) . '</td><td>' . vc_rewards_user_link($c->author_id) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput
+        echo '<tr><td>' . vc_rewards_contribution_summary($c) . '</td><td>' . vc_rewards_user_link($c->author_id) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput
         if ($with_score) {
             $type = vc_rewards_type($c->contrib_type);
             echo '<td>' . esc_html(sprintf('%s / %s', rtrim(rtrim($c->score, '0'), '.') ?: '0', $type['threshold'])) . '</td>';
@@ -197,7 +200,7 @@ add_action('admin_post_vc_rewards_mod', function () {
             break;
         case 'reject':
             $reason = isset($_POST['reason']) ? sanitize_key(wp_unslash($_POST['reason'])) : 'invalid';
-            if (!in_array($reason, array('invalid', 'expired', 'fake', 'spam'), true)) {
+            if (!in_array($reason, array('invalid', 'expired', 'fake', 'spam', 'copied'), true)) {
                 $reason = 'invalid';
             }
             vc_rewards_reject($id, $reason);
@@ -307,6 +310,9 @@ function vc_rewards_settings_fields() {
         'min_redemption'      => __('Minimum redemption', 'vc-rewards'),
         'hold_first_posts'    => __('Posts reviewed by hand for new accounts', 'vc-rewards'),
         'min_age'             => __('Minimum age', 'vc-rewards'),
+        'forum_min_words.review' => __('Forum review: minimum words', 'vc-rewards'),
+        'forum_min_words.guide'  => __('Forum guide: minimum words', 'vc-rewards'),
+        'forum_max_links'     => __('Forum: outbound links before a moderator checks first', 'vc-rewards'),
     );
     foreach (vc_rewards_type_defaults() as $key => $type) {
         $fields['types.' . $key . '.base_points']  = sprintf(__('%s: base points', 'vc-rewards'), $type['label']);
@@ -356,6 +362,12 @@ function vc_rewards_settings_page() {
             }
         }
         $saved['moderator_can_accept_alone'] = empty($input['moderator_can_accept_alone']) ? 0 : 1;
+        foreach (array_keys(vc_rewards_defaults()['forum_types']) as $type) {
+            if (isset($input['forum_types'][$type])) {
+                $ids = array_filter(array_map('absint', preg_split('/[\s,]+/', (string) $input['forum_types'][$type])));
+                $saved['forum_types'][$type] = implode(',', $ids);
+            }
+        }
         if (isset($input['reward_options'])) {
             $saved['reward_options'] = sanitize_textarea_field($input['reward_options']);
         }
@@ -376,6 +388,12 @@ function vc_rewards_settings_page() {
     }
     echo '<tr><th>' . esc_html__('Early days', 'vc-rewards') . '</th><td><label><input type="checkbox" name="vc[moderator_can_accept_alone]" value="1" ' . checked(!empty($settings['moderator_can_accept_alone']), true, false) . '> '
         . esc_html__("A moderator's vote alone can accept or reject a post (turn off once there are enough members voting)", 'vc-rewards') . '</label></td></tr>';
+    foreach ($settings['forum_types'] as $type => $ids) {
+        $info = vc_rewards_type($type);
+        /* translators: %s: contribution type */
+        echo '<tr><th><label for="vc_forum_' . esc_attr($type) . '">' . esc_html(sprintf(__('wpForo forum IDs for: %s', 'vc-rewards'), $info ? $info['label'] : $type)) . '</label></th><td>'
+            . '<input type="text" id="vc_forum_' . esc_attr($type) . '" name="vc[forum_types][' . esc_attr($type) . ']" value="' . esc_attr($ids) . '" class="regular-text" placeholder="3, 7"></td></tr>';
+    }
     echo '<tr><th><label for="vc_reward_options">' . esc_html__('Rewards members can request (one per line)', 'vc-rewards') . '</label></th><td>'
         . '<textarea id="vc_reward_options" name="vc[reward_options]" rows="5" class="large-text">' . esc_textarea($settings['reward_options']) . '</textarea></td></tr>';
     echo '</table>';

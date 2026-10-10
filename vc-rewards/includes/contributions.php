@@ -29,12 +29,19 @@ function vc_rewards_ip_hash() {
     return $ip === '' ? '' : wp_hash('vc_rewards_ip|' . $ip);
 }
 
-function vc_rewards_create_contribution($object_type, $object_id, $contrib_type, $author_id) {
+/**
+ * $args:
+ *   state        force a starting state ('held' when the source system is
+ *                already holding the post for moderation); otherwise the
+ *                author's standing decides between 'held' and 'voting'
+ *   fingerprint  normalised-content hash, for spotting reposted text
+ */
+function vc_rewards_create_contribution($object_type, $object_id, $contrib_type, $author_id, array $args = array()) {
     global $wpdb;
     if (!vc_rewards_type($contrib_type)) {
         return 0;
     }
-    $state = vc_rewards_under_review($author_id) ? 'held' : 'voting';
+    $state = isset($args['state']) ? $args['state'] : (vc_rewards_under_review($author_id) ? 'held' : 'voting');
     $wpdb->insert(vc_rewards_table('contributions'), array(
         'object_type'    => $object_type,
         'object_id'      => (int) $object_id,
@@ -42,6 +49,7 @@ function vc_rewards_create_contribution($object_type, $object_id, $contrib_type,
         'author_id'      => (int) $author_id,
         'author_ip_hash' => vc_rewards_ip_hash(),
         'state'          => $state,
+        'fingerprint'    => isset($args['fingerprint']) ? (string) $args['fingerprint'] : '',
         'created_at'     => vc_rewards_now(),
     ));
     $id = (int) $wpdb->insert_id;
@@ -49,6 +57,31 @@ function vc_rewards_create_contribution($object_type, $object_id, $contrib_type,
         do_action('vc_rewards_contribution_state', $id, $state, '');
     }
     return $id;
+}
+
+/**
+ * Hash of a text with formatting, case and punctuation stripped, so a
+ * reposted guide matches even after light reformatting.
+ */
+function vc_rewards_fingerprint($text) {
+    $text = strtolower(wp_strip_all_tags((string) $text));
+    $text = preg_replace('/[^a-z0-9]+/', ' ', $text);
+    $text = trim(preg_replace('/\s+/', ' ', $text));
+    return $text === '' ? '' : md5($text);
+}
+
+/** An earlier contribution, by someone else, with the same fingerprint. */
+function vc_rewards_fingerprint_taken($fingerprint, $author_id) {
+    global $wpdb;
+    if ($fingerprint === '') {
+        return 0;
+    }
+    $table = vc_rewards_table('contributions');
+    return (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM $table WHERE fingerprint = %s AND author_id <> %d AND state <> 'rejected' LIMIT 1",
+        $fingerprint,
+        (int) $author_id
+    ));
 }
 
 function vc_rewards_get_contribution($id) {
@@ -222,7 +255,8 @@ function vc_rewards_accept($contribution_id) {
 }
 
 /**
- * $reason: invalid (didn't work when posted), expired, fake, spam.
+ * $reason: invalid (didn't work when posted), expired, fake, spam, copied
+ * (someone else's text), removed (deleted at the source; no penalty).
  */
 function vc_rewards_reject($contribution_id, $reason) {
     $c = vc_rewards_get_contribution($contribution_id);
@@ -235,7 +269,7 @@ function vc_rewards_reject($contribution_id, $reason) {
     vc_rewards_void_for_contribution($c->id, array('contribution'), $c->author_id);
     vc_rewards_set_state($c, 'rejected', array('reject_reason' => $reason));
 
-    if ($reason === 'fake' || $reason === 'spam') {
+    if ($reason === 'fake' || $reason === 'spam' || $reason === 'copied') {
         $mult = vc_rewards_setting('penalty_fake_mult');
         $rep  = vc_rewards_setting('rep_rejected_fake');
     } elseif ($reason === 'invalid') {
@@ -260,7 +294,7 @@ function vc_rewards_reject($contribution_id, $reason) {
 
     // A spam post during a new account's hold restarts the hold, and repeat
     // offenders are locked out until a moderator looks.
-    if (($reason === 'fake' || $reason === 'spam') && vc_rewards_under_review($c->author_id)) {
+    if (in_array($reason, array('fake', 'spam', 'copied'), true) && vc_rewards_under_review($c->author_id)) {
         update_user_meta($c->author_id, '_vc_hold_approved', 0);
         $strikes = (int) get_user_meta($c->author_id, '_vc_hold_rejections', true) + 1;
         update_user_meta($c->author_id, '_vc_hold_rejections', $strikes);

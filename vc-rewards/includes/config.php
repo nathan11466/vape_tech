@@ -88,13 +88,19 @@ function vc_rewards_defaults() {
 
         'min_age'             => 21,
 
+        // wpForo. Forum IDs (comma separated) whose new topics earn as each type.
+        'forum_types'         => array('deal' => '', 'review' => '', 'guide' => ''),
+        'forum_min_words'     => array('deal' => 0, 'review' => 150, 'guide' => 150),
+        'forum_max_links'     => 3, // more outbound links than this and a moderator checks it first
+        'forum_copy_min_words' => 30, // shorter posts are never treated as copies
+
         'types' => vc_rewards_type_defaults(),
     );
 }
 
 /**
- * Contribution types. Only 'coupon' has an integration in this release; the
- * forum types are configured so the wpForo stage is wiring, not new rules.
+ * Contribution types. 'coupon' comes from WP Coupon & Deals; deal, review
+ * and guide come from wpForo topics in the forums mapped on the Settings screen.
  *
  * kind: factual votes have a right answer and grade the voter's accuracy;
  * helpful votes are opinion and never cost the author anything on their own.

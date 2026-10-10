@@ -47,7 +47,7 @@
                     a.href = res.data.url;
                     a.target = '_blank';
                     a.rel = 'noopener nofollow sponsored';
-                    a.textContent = 'Open store';
+                    a.textContent = vcRewards.open;
                     code.after(a);
                 }
                 e.target.hidden = true;
