@@ -36,7 +36,17 @@ function wp_verify_nonce() { return false; }
 function add_query_arg($a, $u = '') { return $u; }
 function admin_url($p = '') { return '/wp-admin/' . $p; }
 function post_type_exists($t) { return false; }
-function taxonomy_exists($t) { return false; }
+function taxonomy_exists($t) { return isset($GLOBALS['taxes'][$t]); }
+function get_object_taxonomies($pt, $out = 'names') {
+    $res = array();
+    foreach ($GLOBALS['taxes'] ?? array() as $slug => $label) {
+        $res[$slug] = (object) array('name' => $slug, 'label' => $label);
+    }
+    return $res;
+}
+function wp_count_terms($a = array()) { return 12; }
+function get_the_terms($id, $tax) { return $GLOBALS['post_terms'][$tax] ?? false; }
+function is_wp_error($t) { return false; }
 
 require __DIR__ . '/../migrate/vc-coupon-exporter.php';
 
@@ -97,6 +107,93 @@ check('no fields means no guesses', vce_guess_mapping(array()) === array());
 
 check('it never offers the destination post type as a source',
     !in_array('wcd_coupon', array_keys(vce_candidate_post_types()), true));
+
+/* -------------------------------------------------------------------------
+ * A brand kept as a taxonomy, not a field
+ *
+ * Coupon plugins commonly store the store as a category-like taxonomy called
+ * "vendor", "store" or "brand". Guessing only from meta keys misses it
+ * entirely, and taking just the first term loses the rest.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['taxes'] = array(
+    'vendor'           => 'Vendors',
+    'coupon_category'  => 'Coupon Categories',
+    'coupon_location'  => 'Locations',
+    'product_type'     => 'Product Types',
+);
+
+$tax_guess = vce_guess_taxonomy_mapping(vce_taxonomies_for('old_coupon'));
+
+check('a taxonomy called "vendor" is recognised as the brand',
+    ($tax_guess['brand'] ?? '') === 'vendor', json_encode($tax_guess));
+check('a location taxonomy maps to location',
+    ($tax_guess['location'] ?? '') === 'coupon_location', json_encode($tax_guess));
+check('a category taxonomy maps to store_category',
+    ($tax_guess['store_category'] ?? '') === 'coupon_category', json_encode($tax_guess));
+check('a product taxonomy maps to product_category',
+    ($tax_guess['product_category'] ?? '') === 'product_type', json_encode($tax_guess));
+check('no taxonomy is claimed by two columns',
+    count($tax_guess) === count(array_unique($tax_guess)), json_encode($tax_guess));
+
+// Other common namings for the store.
+foreach (array('store', 'brand', 'merchant', 'retailer', 'shop') as $slug) {
+    $GLOBALS['taxes'] = array($slug => ucfirst($slug));
+    $g = vce_guess_taxonomy_mapping(vce_taxonomies_for('x'));
+    check("a taxonomy called \"$slug\" is recognised as the brand",
+        ($g['brand'] ?? '') === $slug, json_encode($g));
+}
+
+// A taxonomy whose slug says nothing but whose LABEL does.
+$GLOBALS['taxes'] = array('tax_7' => 'Vendor');
+$g = vce_guess_taxonomy_mapping(vce_taxonomies_for('x'));
+check('a taxonomy is matched on its label when the slug is opaque',
+    ($g['brand'] ?? '') === 'tax_7', json_encode($g));
+
+// Nothing coupon-ish must not be force-fitted.
+$GLOBALS['taxes'] = array('post_tag' => 'Tags');
+$g = vce_guess_taxonomy_mapping(vce_taxonomies_for('x'));
+check('an unrelated taxonomy is not mapped to brand',
+    !isset($g['brand']), json_encode($g));
+
+$GLOBALS['taxes'] = array();
+check('no taxonomies means no guesses', vce_guess_taxonomy_mapping(array()) === array());
+
+/* --- A meta key must still win over a taxonomy for the same column ----- */
+
+$GLOBALS['taxes'] = array('vendor' => 'Vendors');
+$meta_guess = vce_guess_mapping(array('_coupon_brand_name' => 40));
+check('a taxonomy guess and a meta guess are kept separate',
+    array_keys(vce_guess_taxonomy_mapping(vce_taxonomies_for('x'))) !== array_keys($meta_guess),
+    json_encode(array(vce_guess_taxonomy_mapping(vce_taxonomies_for('x')), $meta_guess)));
+
+/* --- Reading the terms ------------------------------------------------- */
+
+$GLOBALS['taxes'] = array('vendor' => 'Vendors');
+$GLOBALS['post_terms']['vendor'] = array(
+    (object) array('name' => 'VooPoo'),
+    (object) array('name' => 'Element Vape'),
+);
+check('all of a coupon\'s terms are exported, not just the first',
+    vce_term_names(1, 'vendor') === 'VooPoo|Element Vape', vce_term_names(1, 'vendor'));
+
+$GLOBALS['post_terms']['vendor'] = array((object) array('name' => 'VooPoo'));
+check('a single term exports without a stray pipe',
+    vce_term_names(1, 'vendor') === 'VooPoo', vce_term_names(1, 'vendor'));
+
+// A pipe inside a name would read as a separator on the way back in.
+$GLOBALS['post_terms']['vendor'] = array((object) array('name' => 'Smoke|Vape Co'));
+check('a pipe inside a term name is replaced so it cannot split the column',
+    vce_term_names(1, 'vendor') === 'Smoke/Vape Co', vce_term_names(1, 'vendor'));
+
+$GLOBALS['post_terms']['vendor'] = array(
+    (object) array('name' => 'VooPoo'), (object) array('name' => 'VooPoo'));
+check('duplicate terms are collapsed', vce_term_names(1, 'vendor') === 'VooPoo');
+
+$GLOBALS['post_terms'] = array();
+check('a coupon with no terms exports empty, not a pipe',
+    vce_term_names(1, 'vendor') === '', vce_term_names(1, 'vendor'));
+check('an unknown taxonomy exports empty', vce_term_names(1, 'nope') === '');
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

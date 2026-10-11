@@ -99,6 +99,90 @@ function vce_meta_keys($post_type, $sample = 40) {
 }
 
 /**
+ * Taxonomies attached to a post type, with how many terms each holds.
+ *
+ * Coupon plugins commonly keep the store as a taxonomy -- "vendor", "store",
+ * "brand" -- set up like categories rather than as a field, so these have to
+ * be offered alongside the meta keys.
+ */
+function vce_taxonomies_for($post_type) {
+    $out = array();
+    foreach (get_object_taxonomies($post_type, 'objects') as $tax) {
+        $count = wp_count_terms(array('taxonomy' => $tax->name, 'hide_empty' => false));
+        if (is_wp_error($count)) {
+            $count = 0;
+        }
+        $out[$tax->name] = array(
+            'label' => $tax->label,
+            'count' => (int) $count,
+        );
+    }
+
+    return $out;
+}
+
+/**
+ * Which of the four taxonomy columns a source taxonomy most likely feeds.
+ */
+function vce_guess_taxonomy_mapping(array $taxonomies) {
+    $patterns = array(
+        // The store itself goes by several names depending on the plugin.
+        'brand'            => array('vendor', 'brand', 'store', 'shop', 'merchant', 'retailer', 'company'),
+        'product_category' => array('product'),
+        'location'         => array('location', 'country', 'region', 'geo'),
+        'store_category'   => array('category', 'cat', 'type', 'niche'),
+    );
+
+    $guess = array();
+    foreach ($patterns as $column => $needles) {
+        foreach ($needles as $needle) {
+            foreach (array_keys($taxonomies) as $slug) {
+                if (in_array($slug, $guess, true)) {
+                    continue;
+                }
+                if (stripos($slug, $needle) !== false
+                    || stripos($taxonomies[$slug]['label'], $needle) !== false) {
+                    $guess[$column] = $slug;
+                    break 2;
+                }
+            }
+        }
+    }
+
+    return $guess;
+}
+
+/**
+ * A post's terms in a taxonomy, pipe-joined.
+ *
+ * Every term, not just the first: the importer takes several per column
+ * separated by a pipe, and dropping the rest would lose data silently.
+ */
+function vce_term_names($post_id, $taxonomy) {
+    if (!taxonomy_exists($taxonomy)) {
+        return '';
+    }
+
+    $terms = get_the_terms($post_id, $taxonomy);
+    if (!$terms || is_wp_error($terms)) {
+        return '';
+    }
+
+    $names = array();
+    foreach ($terms as $term) {
+        $name = trim((string) $term->name);
+        // A pipe inside a term name would read as a term separator on the
+        // way back in, so it cannot survive as-is.
+        $name = str_replace('|', '/', $name);
+        if ($name !== '') {
+            $names[] = $name;
+        }
+    }
+
+    return implode('|', array_unique($names));
+}
+
+/**
  * The columns WP Coupon & Deals imports, in its own order.
  */
 function vce_target_columns() {
@@ -201,8 +285,17 @@ function vce_screen() {
             </table>
         <?php endif; ?>
 
-        <?php if ($chosen && !empty($meta['keys'])) :
-            $guess = vce_guess_mapping($meta['keys']); ?>
+        <?php if ($chosen && (!empty($meta['keys']) || !empty(vce_taxonomies_for($chosen)))) :
+            $guess = vce_guess_mapping($meta['keys'] ?? array());
+            $taxonomies = vce_taxonomies_for($chosen);
+            $tax_guess = vce_guess_taxonomy_mapping($taxonomies);
+            foreach ($tax_guess as $column => $slug) {
+                // A taxonomy only wins where no meta key already claimed the
+                // column, so a plugin that stores both is not overridden.
+                if (empty($guess[$column])) {
+                    $guess[$column] = '__tax:' . $slug;
+                }
+            } ?>
             <h2><?php echo esc_html(sprintf(
                 __('2. Map the fields of %s', 'vc-coupon-exporter'), $chosen)); ?></h2>
             <p class="description" style="max-width:720px;">
@@ -229,7 +322,16 @@ function vce_screen() {
                                         <option value="__post_excerpt">
                                             <?php esc_html_e('the post excerpt', 'vc-coupon-exporter'); ?></option>
                                     <?php endif; ?>
-                                    <?php foreach ($meta['keys'] as $key => $filled) : ?>
+                                    <?php foreach ($taxonomies as $slug => $tax) : ?>
+                                        <option value="<?php echo esc_attr('__tax:' . $slug); ?>"
+                                            <?php selected(($guess[$column] ?? '') === '__tax:' . $slug); ?>>
+                                            <?php echo esc_html(sprintf(
+                                                /* translators: 1: taxonomy label, 2: slug, 3: term count */
+                                                __('category: %1$s (%2$s, %3$d terms)', 'vc-coupon-exporter'),
+                                                $tax['label'], $slug, $tax['count'])); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                    <?php foreach (($meta['keys'] ?? array()) as $key => $filled) : ?>
                                         <option value="<?php echo esc_attr($key); ?>"
                                             <?php selected(($guess[$column] ?? '') === $key); ?>>
                                             <?php echo esc_html(sprintf('%s (%d filled)', $key, $filled)); ?>
@@ -239,14 +341,6 @@ function vce_screen() {
                             </td>
                         </tr>
                     <?php endforeach; ?>
-                    <tr>
-                        <th scope="row"><?php esc_html_e('Brand fallback', 'vc-coupon-exporter'); ?></th>
-                        <td>
-                            <input type="text" name="brand_taxonomy" class="regular-text"
-                                   placeholder="<?php esc_attr_e('taxonomy slug holding the store, e.g. coupon_store', 'vc-coupon-exporter'); ?>" />
-                            <p class="description"><?php esc_html_e('If the old plugin kept the store as a taxonomy rather than a field, name it here and its term will be used for "brand".', 'vc-coupon-exporter'); ?></p>
-                        </td>
-                    </tr>
                 </table>
                 <?php submit_button(__('Download CSV', 'vc-coupon-exporter')); ?>
             </form>
@@ -276,12 +370,12 @@ add_action('admin_init', function () {
 
     $map = array();
     foreach (vce_target_columns() as $column) {
+        // Not sanitize_key: a source is either a meta key or "__tax:slug".
         $value = sanitize_text_field(wp_unslash($_POST['map'][$column] ?? ''));
         if ($value !== '') {
             $map[$column] = $value;
         }
     }
-    $brand_taxonomy = sanitize_key($_POST['brand_taxonomy'] ?? '');
 
     $posts = get_posts(array(
         'post_type'      => $post_type,
@@ -312,6 +406,8 @@ add_action('admin_init', function () {
                 $value = $post->post_content;
             } elseif ($source === '__post_excerpt') {
                 $value = $post->post_excerpt;
+            } elseif (strpos($source, '__tax:') === 0) {
+                $value = vce_term_names($post->ID, substr($source, 6));
             } elseif ($source !== '') {
                 $value = get_post_meta($post->ID, $source, true);
             }
@@ -332,13 +428,6 @@ add_action('admin_init', function () {
             }
             if ($column === 'featured') {
                 $value = ($value === '' || $value === '0' || strtolower($value) === 'no') ? '0' : '1';
-            }
-            if ($column === 'brand' && $value === '' && $brand_taxonomy !== ''
-                && taxonomy_exists($brand_taxonomy)) {
-                $terms = get_the_terms($post->ID, $brand_taxonomy);
-                if ($terms && !is_wp_error($terms)) {
-                    $value = $terms[0]->name;
-                }
             }
 
             // A code column that came through empty leaves type as "deal",
