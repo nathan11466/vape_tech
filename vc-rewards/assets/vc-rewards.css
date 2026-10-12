@@ -1,0 +1,26 @@
+.vc-rewards-notice { padding: 10px 14px; border-radius: 6px; margin: 0 0 16px; }
+.vc-rewards-notice.is-ok { background: #edf7ed; border: 1px solid #b7dfb9; }
+.vc-rewards-notice.is-error { background: #fdecea; border: 1px solid #f5c2bd; }
+.vc-rewards-form input[type="text"], .vc-rewards-form input[type="url"],
+.vc-rewards-form input[type="number"], .vc-rewards-form select,
+.vc-rewards-form textarea { width: 100%; max-width: 480px; }
+.vc-rewards-queue { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.vc-rewards-card { border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
+.vc-rewards-card header { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.vc-rewards-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #f0f0f1; }
+.vc-rewards-discount { font-size: 1.1em; font-weight: 600; margin: 8px 0; }
+.vc-rewards-meta, .vc-rewards-details { font-size: 13px; color: #555; }
+.vc-rewards-code { display: inline-block; font-family: monospace; font-size: 1.1em; padding: 4px 10px; border: 1px dashed #888; border-radius: 4px; margin-right: 8px; }
+.vc-rewards-votes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.vc-rewards-summary dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 0 0 16px; }
+.vc-rewards-summary dl div { border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
+.vc-rewards-summary dt { font-size: 12px; color: #555; }
+.vc-rewards-summary dd { margin: 4px 0 0; font-weight: 600; }
+.vc-rewards-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.vc-rewards-table td { padding: 6px 8px; border-bottom: 1px solid #eee; }
+.vc-rewards-table .num, .vc-rewards-leaderboard .num { text-align: right; font-variant-numeric: tabular-nums; }
+.vc-rewards-table tr.is-void td { text-decoration: line-through; color: #888; }
+.vc-rewards-table tr.is-pending td { color: #666; }
+.vc-rewards-link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; }
+.vc-rewards-leaderboard li { display: flex; gap: 8px; align-items: center; }
+.vc-rewards-leaderboard .num { margin-left: auto; }
