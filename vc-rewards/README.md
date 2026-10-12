@@ -108,6 +108,26 @@ Rank-up bonuses (1,250 / 5,000 / 12,500) are paid once per account, ever, and si
 
 Rewards from awards, challenges and referrals stay pending for 7 to 14 days. Every number is in **Rewards → Settings**.
 
+### Vault and community fund
+
+Every point a member earns also goes into their vault and stays there: it is
+never spent, can't be bought or moved to anyone else, and redeeming doesn't
+lower it. Penalties and reversed purchases do take points back out.
+
+Each week (Monday to Monday, UTC) or month, the fund set on the Settings screen
+is shared out in ordinary points by vault size. To share, a member must have
+earned the period minimum (500 by default) from posts, votes, purchases or
+challenges (daily visits don't count), be past Newcomer, have a post accepted,
+hold the vault minimum (2,500) and not be banned. No one gets more than the
+top-share percent (10%); the excess goes to everyone else. Shares are held 7
+days before settling. The fund is off (0) until you set it, and the first
+period paid is the first one to end after switching it on. Rewards →
+Community fund shows who qualifies so far and past payouts.
+
+The fund is a number of points you choose, not a share of revenue. Keep it
+that way: tying payouts to revenue, or letting vault points be bought or
+traded, would likely make them a security.
+
 ### Daily visits
 
 Logged-in members get 25 points on their first page view each day, plus 250 for every 7 days in a row. These points add no reputation and **can't be redeemed until the member has had a post accepted**.

@@ -339,6 +339,10 @@ function vc_rewards_settings_fields() {
         'cashback_percent'    => __('Cashback: percent of order value paid as points', 'vc-rewards'),
         'answer_pair_days'    => __('Accepted answers: days before the same asker can reward the same member again', 'vc-rewards'),
         'forum_max_links'     => __('Forum: outbound links before a moderator checks first', 'vc-rewards'),
+        'vault_pool'          => __('Community fund: points shared each period (0 = off)', 'vc-rewards'),
+        'vault_max_share'     => __('Community fund: most one member can get (percent of the fund)', 'vc-rewards'),
+        'vault_min'           => __('Community fund: vault size needed to share', 'vc-rewards'),
+        'vault_min_earned'    => __('Community fund: points a member must earn in the period from posts, votes or purchases', 'vc-rewards'),
     );
     foreach (vc_rewards_type_defaults() as $key => $type) {
         $fields['types.' . $key . '.base_points']  = sprintf(__('%s: base points', 'vc-rewards'), $type['label']);
@@ -361,6 +365,7 @@ function vc_rewards_text_settings() {
         'awin_publisher_id' => array(__('Awin publisher ID', 'vc-rewards'), 'text', __('The awinaffid number in your Awin links. The API token goes in wp-config.php as VC_AWIN_TOKEN.', 'vc-rewards')),
         'awin_source_tag'   => array(__('Awin clickref6 tag', 'vc-rewards'), 'text', __('Added to every Awin link the site builds, so Awin reports can tell these clicks apart.', 'vc-rewards')),
         'awin_stores'       => array(__('Awin stores (one per line: domain = advertiser ID)', 'vc-rewards'), 'textarea', __('Plain links to these stores become Awin links. With the API token set, every store you have joined is added automatically, so this list is only for extras or overrides.', 'vc-rewards')),
+        'vault_period'    => array(__('Community fund period', 'vc-rewards'), 'text', __('weekly (Monday to Monday, UTC) or monthly.', 'vc-rewards')),
         'subid_param'     => array(__('Affiliate sub-ID parameter', 'vc-rewards'), 'text', __('Added to store links for logged-in members, so the network report says who bought (for example subid, u1 or sid). Leave blank to turn off.', 'vc-rewards')),
     );
 }

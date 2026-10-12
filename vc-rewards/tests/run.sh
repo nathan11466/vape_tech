@@ -12,4 +12,5 @@ done
 php test_rewards.php || status=1
 php test_wpforo.php || status=1
 php test_extras.php || status=1
+php test_vault.php || status=1
 exit $status

@@ -190,6 +190,17 @@ function vc_rewards_install() {
         PRIMARY KEY  (challenge_id,user_id)
     ) $charset;");
 
+    $vault_payouts = vc_rewards_table('vault_payouts');
+    dbDelta("CREATE TABLE $vault_payouts (
+        period varchar(12) NOT NULL,
+        pool int(11) NOT NULL,
+        paid int(11) NOT NULL DEFAULT 0,
+        members int(11) NOT NULL DEFAULT 0,
+        total_vault bigint(20) NOT NULL DEFAULT 0,
+        created_at datetime NOT NULL,
+        PRIMARY KEY  (period)
+    ) $charset;");
+
     // Members who joined before the plugin skip the new-account review.
     add_option('vc_rewards_installed_at', gmdate('Y-m-d H:i:s'));
     update_option('vc_rewards_db_version', VC_REWARDS_DB_VERSION);

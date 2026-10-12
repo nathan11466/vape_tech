@@ -102,6 +102,13 @@ function vc_rewards_defaults() {
         'awin_source_tag'     => 'rewd',  // clickref6 on every Awin link, as in the site's own links
         'awin_stores'         => "ecigmafia.com = 67004\nsourcemore.com = 90119",
 
+        // Vault and community fund. 0 = fund off.
+        'vault_pool'          => 0,     // points shared out each period
+        'vault_period'        => 'weekly', // or 'monthly'
+        'vault_max_share'     => 10,    // percent of the fund one member can get
+        'vault_min'           => 2500,  // vault size needed to share
+        'vault_min_earned'    => 500,   // earned that period from posts, votes, purchases (not visits)
+
         // wpForo. Forum IDs (comma separated) whose new topics earn as each type.
         'forum_types'         => array('deal' => '', 'review' => '', 'guide' => '', 'store_report' => ''),
         'forum_min_words'     => array('deal' => 0, 'review' => 150, 'guide' => 150, 'store_report' => 100),
