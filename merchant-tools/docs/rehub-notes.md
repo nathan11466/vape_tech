@@ -1,10 +1,10 @@
 # ReHub theme — architecture notes
 
-Read from WPSoul's own documentation and articles on 2026-10-18. Confidence
-is marked on each point, because several important facts are **inferred from
-shortcode examples rather than stated outright** — the docs name very few
-exact meta keys. Anything marked *inferred* must be confirmed against the
-installed theme before code depends on it.
+Read from WPSoul's documentation on 2026-10-18, then **verified against the
+theme source** (ReHub + rehub-framework, ThemeForest package) on the same
+day. Everything below is now read out of the code rather than inferred,
+except where noted. Source paths are relative to the theme or the framework
+plugin.
 
 Sources are listed at the bottom.
 
@@ -17,10 +17,16 @@ or coupon layouts. *(Stated, in two places.)*
 **Stores are a taxonomy on posts, not a post type.** Enabled in Theme Options
 → Affiliate → "Enable Affiliate Store taxonomy for posts". *(Stated.)*
 
-- Taxonomy slug: **`dealstore`**, changeable. *(Inferred — appears as
-  `taxonomy="dealstore"` in shortcode examples and in URLs like
-  `/dealstore/amazon/` and `/dealstore/gogreen-com/`, across two separate
-  docs. Strong, but never stated as "the slug is dealstore".)*
+- Taxonomy: **`dealstore`**, registered on `post` in
+  `rehub-framework/includes/taxonomy_cpt.php:28`. Hierarchical, public,
+  `show_in_rest`, `show_admin_column`. The rewrite slug is the
+  `rehub_deal_store_tag` theme option, defaulting to `dealstore`.
+  **Registration is gated on the `enable_brand_taxonomy` option being 1** —
+  without that, the taxonomy does not exist at all. *(Verified in source.)*
+- **`offerexpiration`**, also on `post`, holds the expired state.
+  *(Verified.)*
+- Store archive template: **`taxonomy-dealstore.php`** in the theme root.
+  *(Verified.)*
 - Store term fields: link, description, bottom description, **SEO title**,
   Cashback Notice, **logo**. *(Stated in the cashback article.)*
 - Store archives ship a **filter panel with tabs: All / Deals / Coupons /
@@ -36,19 +42,40 @@ This is a genuinely different shape from both of the other systems here:
 | WP Coupon & Deals | `wcd_brand` taxonomy | `wcd_coupon` post type |
 | vc-merchant-fields | `merchant` post type | — (reads the above) |
 
-## Meta keys
+## Offer meta keys — the full set
 
-The docs name only a handful. **Do not guess the rest.**
+Read from `rehub-framework/includes/theme_metabox.php`. These are the post
+meta keys behind the Post Offer section, and they map onto our CSV columns
+almost one-to-one.
 
-| Key | What | Confidence |
+| ReHub key | Holds | Our equivalent |
 |---|---|---|
-| `rehub_offer_product_thumb` | offer image on a post | stated |
-| `rehub_woo_coupon_coupon_img_url` | image for WooCommerce coupons | stated |
-| `_notice_custom` | per-post cashback notice | stated |
-| `cbtrkr_approved_usd`, `cbtrkr_pending_usd` | Cashback Tracker points | stated, but the article also prints `cbtkr_approved_usd` — one is a typo, verify in the install |
+| `rehub_offer_name` | offer/store name | `display_brand_name` |
+| `rehub_offer_product_url` | destination / affiliate link | `brand_url` |
+| `rehub_offer_product_coupon` | the coupon code | coupon plugin's `_wcd_code` |
+| `rehub_offer_coupon_date` | expiry date | `_wcd_expiration` |
+| `rehub_offer_coupon_mask` | reveal mask | — |
+| `rehub_offer_discount` | discount figure | `vc_merchant_max_discount()` |
+| `rehub_offer_product_desc` | description | `coupon_intro` / `brand_summary` |
+| `rehub_offer_product_thumb` | offer image | — |
+| `rehub_offer_logo_url` | **logo URL** | `brand_logo_url` |
+| `rehub_offer_product_price`, `..._price_old` | price, was-price | — |
+| `rehub_offer_btn_text` | CTA label | — |
+| `rehub_offer_verify_label` | **"verified" label** | `vc_merchant_offer_mode()` |
+| `rehub_offer_disclaimer` | terms / exclusions | `_wcd_additional_info` |
+| `rehub_offer_shortcode_generate` | generated shortcode | — |
+| `rehub_woo_coupon_code`, `..._date`, `..._mask`, `..._coupon_img_url` | the WooCommerce-product equivalents | — |
 
-Offer fields that exist but whose storage keys are **not documented**: URL,
-coupon text, coupon code, expiration date, reveal option, price.
+Two of these matter more than the rest. `rehub_offer_logo_url` is exactly
+what the logo sideloading work produces, and `rehub_offer_verify_label` is
+exactly what the offer gate decides — so the honesty rules and the logo
+pipeline both have somewhere to land.
+
+From the cashback article, not the theme source: `_notice_custom` (per-post
+cashback notice) and the Cashback Tracker point keys
+`cbtrkr_approved_usd` / `cbtrkr_pending_usd`. That article also prints
+`cbtkr_approved_usd` once — one spelling is a typo, so check the install if
+cashback is ever wanted.
 
 **Expiry moved from meta to a taxonomy term** in current versions, and the
 expired state is stored as a term. The expiry check runs lazily — only when a
@@ -56,19 +83,28 @@ visitor opens the page does the post get marked expired. *(Stated.)*
 
 ## The one shortcode that matters most for us
 
+ReHub registers **131 shortcodes** via a map in
+`rehub-framework/includes/shortcodes.php`, loaded in `class-rehub.php:77`.
+The integration hinge is this one, handled by `wpsm_get_custom_value()` at
+`rehub-theme/shortcodes/shortcodes.php:3663`:
+
 ```
-[wpsm_custom_meta field="_notice_custom" type="custom"]
+[wpsm_custom_meta field="free_shipping_info" type="custom" label="Shipping"]
 ```
 
-ReHub can print **arbitrary post meta** on a page. *(Stated.)* That is the
-hinge for any integration: if merchant data lands as post meta on
-ReHub-shaped posts, ReHub's own templates can display it with no custom
-template code.
+Its attributes: `post_id`, `field`, `subfield`, `subsubfield`, `attrfield`,
+`type` (default `custom`), `show_empty`, `label`, `posttext`, `icon`,
+`list`, `labelclass`, `labelblock`, `posttextclass`, `showtoggle`,
+`symbollimit`, `spanvalue`, `imageMapper`. *(Verified.)*
 
-Other shortcodes seen: `[wpsm_tax_archive]`, `[RH_ELEMENTOR]`,
-`[wpsm_button_popup]`, plus review/scorebox/comparison shortcodes. There is
-**no dedicated coupon shortcode** — coupon blocks come from the "Offerbox"
-block in the theme's shortcode generator.
+That is richer than the docs suggest — it prints **arbitrary post meta with
+a label, an icon and trailing text**. So all 48 CSV columns could be
+rendered on a ReHub page **with no custom template code at all**, which is
+the single biggest finding in favour of letting ReHub own the page.
+
+The offer and store shortcodes, verified from the map: `wpsm_offerbox`,
+`quick_offer`, `wpsm_bigoffer`, `wpsm_offer_list`, `wpsm_add_deal_popup`,
+`wpsm_tax_archive`, `wpsm_custom_meta`.
 
 ## Bulk import — worse than what we already have
 
@@ -118,18 +154,29 @@ match the page. Both point the same way: **one system owns each schema type.**
 - The SEO article is from **2020** and parts are stale; verify settings
   against current plugin docs before following it.
 
-## Still unknown — needs the theme files or a live-site inspection
+## Name collisions — none
 
-1. The real `dealstore` taxonomy slug as registered.
-2. Every offer meta key: URL, coupon text, code, expiration, reveal, price.
-3. The Offerbox block's generated shortcode and its attributes.
-4. Whether ReHub registers anything that collides with our `ships_to`
-   taxonomy or `merchant` post type.
-5. Which template file renders a store archive, if a custom layout is wanted.
+Checked every name our two plugins register against the whole theme and
+framework source:
 
-None of these should be guessed. Earlier in this project a coupon shortcode
-was guessed as `[wcd_coupons]` when it was really `[coupon_deals]`, which
-would have rendered an empty section silently.
+| Name | Result |
+|---|---|
+| `ships_to` | no collision |
+| `service_location` | no collision |
+| `merchant_category` | no collision |
+| `merchant` (post type) | **no collision** — the string appears in 23 files, but only ever as a Content Egg array key (`$item['merchant']`), never registered as a post type or taxonomy |
+| `wcd_coupon`, `wcd_brand` | no collision |
+
+So all three systems can run side by side without WordPress-level clashes.
+The remaining conflicts are editorial and schema-level, not structural.
+
+## Still worth checking on the live install
+
+1. Whether `enable_brand_taxonomy` is switched on — `dealstore` does not
+   exist until it is.
+2. Whether `rehub_deal_store_tag` has been changed from `dealstore`, which
+   would move every store URL.
+3. The Cashback Tracker point key spelling, if cashback is ever wanted.
 
 ## Sources
 
