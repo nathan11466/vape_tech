@@ -272,6 +272,8 @@ $required = array(
     'vc_merchant_fact_rows', 'vc_merchant_fact_keys',
     'vc_layout_heading', 'vc_layout_heading_defaults', 'vc_layout_custom_content',
     'vc_block_heading', 'vc_merchant_custom_block',
+    'vc_rehub_active', 'vc_rehub_sync_merchant', 'vc_rehub_term_map',
+    'vc_rehub_offer_map',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -354,12 +356,37 @@ if (function_exists('vc_layout_heading_defaults') && function_exists('vc_layout_
     }
 }
 
+if (function_exists('vc_rehub_term_map')) {
+    // Read from ReHub's meta_for_brand_cat() and Post Offer section. A key
+    // outside these lists would be written and never read.
+    $rehub_term_keys = array('brand_heading', 'brand_short_description', 'brand_url',
+        'cashback_notice', 'brand_second_description', 'brandimage');
+    $rehub_offer_keys = array('rehub_offer_btn_text', 'rehub_offer_coupon_date',
+        'rehub_offer_coupon_mask', 'rehub_offer_disclaimer', 'rehub_offer_discount',
+        'rehub_offer_logo_url', 'rehub_offer_name', 'rehub_offer_product_coupon',
+        'rehub_offer_product_desc', 'rehub_offer_product_price',
+        'rehub_offer_product_price_old', 'rehub_offer_product_thumb',
+        'rehub_offer_product_url', 'rehub_offer_shortcode_generate',
+        'rehub_offer_verify_label');
+
+    $stray = array_diff(array_keys(vc_rehub_term_map()), $rehub_term_keys);
+    check('every ReHub store field written is one the theme defines',
+        empty($stray), implode(', ', $stray));
+
+    $stray = array_diff(array_keys(vc_rehub_offer_map()), $rehub_offer_keys);
+    check('every ReHub offer field written is one the theme defines',
+        empty($stray), implode(', ', $stray));
+
+    check('the adapter does nothing when ReHub is absent', vc_rehub_active() === false,
+        'taxonomy_exists() is stubbed false here, so this must be false');
+}
+
 echo "\nShipped files\n";
 $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
     'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
     'wp-merchant-settings.php', 'wp-merchant-editor.php', 'wp-merchant-coupons.php',
-    'wp-merchant-logos.php', 'wp-merchant-freshness.php',
+    'wp-merchant-logos.php', 'wp-merchant-freshness.php', 'wp-merchant-rehub.php',
     'wp-merchant-import.php',
     'assets/merchant-pages.css',
 );

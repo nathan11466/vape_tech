@@ -98,7 +98,7 @@ foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merch
                'wp-merchant-seo.php', 'wp-merchant-archive.php',
                'wp-merchant-sections.php', 'wp-merchant-editor.php',
                'wp-merchant-coupons.php', 'wp-merchant-logos.php',
-               'wp-merchant-freshness.php',
+               'wp-merchant-freshness.php', 'wp-merchant-rehub.php',
                'wp-merchant-import.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
     if (file_exists($vc_path)) {
