@@ -26,6 +26,7 @@ import argparse
 import csv
 import os
 import re
+import urllib.parse
 import sys
 from collections import Counter, defaultdict
 
@@ -52,6 +53,7 @@ NEW_COLUMNS = [
     "ships_to_countries",
     "alternative_brand_names",
     "display_brand_name",
+    "brand_dot_com",         # bare domain for link text: voopoo.com
     "contact_email",
     "contact_page_url",
     "contact_method",
@@ -358,6 +360,28 @@ def grade_row(row, boilerplate):
     return confidence, status, low_fields, notes, score
 
 
+def bare_domain(url):
+    """
+    A URL reduced to its bare domain: voopoo.com, not https://www.voopoo.com/.
+
+    Only ever restates what brand_url already says. Returns "" for anything
+    that is not a usable host rather than guessing at one.
+    """
+    url = (url or "").strip()
+    if not url:
+        return ""
+
+    # urlsplit needs a scheme to find the host.
+    if not re.match(r"^[a-z][a-z0-9+.-]*://", url, re.I):
+        url = "https://" + url.lstrip("/")
+
+    host = (urllib.parse.urlsplit(url).hostname or "").lower().rstrip(".")
+    host = re.sub(r"^www\.", "", host)
+
+    # A host with no dot is not a domain -- localhost, or a typo.
+    return host if "." in host else ""
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -415,6 +439,11 @@ def main():
             row["section_origins"] = "|".join(f"{f}:{o}" for f, o in sorted(origins.items()))
             compose_tally.update(origins.values())
             row["_disclosure_count"] = sum(1 for o in origins.values() if o == "disclosure")
+
+        # The bare domain, for link text. Only restates brand_url, so it is
+        # filled whenever that is present and this is not.
+        if not (row.get("brand_dot_com") or "").strip():
+            row["brand_dot_com"] = bare_domain(row.get("brand_url", ""))
 
         # Resolve shipping destinations into taxonomy terms.
         # House rule: a US merchant ships to every state unless it states

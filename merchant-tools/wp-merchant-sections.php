@@ -26,7 +26,67 @@ function vc_section_post_id($atts) {
 }
 
 function vc_section_meta($post_id, $key) {
-    return trim((string) get_post_meta($post_id, $key, true));
+    $value = trim((string) get_post_meta($post_id, $key, true));
+
+    // A few fields can be worked out from another when blank, so they are
+    // usable before the CSV is re-run with the column filled.
+    if ($value === '') {
+        $value = vc_section_derive($post_id, $key);
+    }
+
+    return $value;
+}
+
+/**
+ * Work a blank field out from another, where that is unambiguous.
+ *
+ * Only ever derives something the data already states in a different form --
+ * never invents a value. Returns '' when there is nothing to derive from.
+ */
+function vc_section_derive($post_id, $key) {
+    if ($key === 'brand_dot_com') {
+        // The bare domain, for use as link text: voopoo.com, not
+        // https://www.voopoo.com/. Derived from brand_url so all 112 stores
+        // have it without waiting on a re-import.
+        $url = trim((string) get_post_meta($post_id, 'brand_url', true));
+        if ($url === '') {
+            return '';
+        }
+
+        return vc_bare_domain($url);
+    }
+
+    return (string) apply_filters('vc_section_derive', '', $key, $post_id);
+}
+
+/**
+ * A URL reduced to its bare domain.
+ *
+ * Drops the scheme, a leading www., any path, query and port, and a trailing
+ * dot. Returns '' for anything that is not a usable host, rather than
+ * guessing at one.
+ */
+function vc_bare_domain($url) {
+    $url = trim((string) $url);
+    if ($url === '') {
+        return '';
+    }
+
+    // parse_url needs a scheme to find the host, so give it one if missing.
+    if (!preg_match('#^[a-z][a-z0-9+.-]*://#i', $url)) {
+        $url = 'https://' . ltrim($url, '/');
+    }
+
+    $host = parse_url($url, PHP_URL_HOST);
+    if (!$host) {
+        return '';
+    }
+
+    $host = strtolower(rtrim($host, '.'));
+    $host = preg_replace('/^www\\./', '', $host);
+
+    // A host with no dot is not a domain -- localhost, or a typo.
+    return strpos($host, '.') === false ? '' : $host;
 }
 
 /* -------------------------------------------------------------------------

@@ -28,7 +28,8 @@ const VC_MERCHANT_KEY_META = '_vc_merchant_key';
  */
 function vc_merchant_import_meta_keys() {
     return array(
-        'externalMerchantKey', 'brand_url', 'coupon_plugin_shortcode', 'best_offer_summary',
+        'externalMerchantKey', 'brand_url', 'brand_dot_com',
+        'coupon_plugin_shortcode', 'best_offer_summary',
         'last_checked_text', 'top_offer_type', 'coupon_intro', 'brand_summary',
         'best_ways_to_save', 'free_shipping_info', 'return_policy_summary', 'payment_methods',
         'common_exclusions', 'stacking_policy', 'why_code_not_work', 'verification_method',

@@ -26,6 +26,8 @@ function vc_editor_field_groups() {
         __('Offer', 'vc-merchant') => array(
             'best_offer_summary'      => array('label' => 'Best offer summary', 'big' => true),
             'top_offer_type'          => array('label' => 'Offer type'),
+            'brand_dot_com' => array('label' => 'Domain only (voopoo.com)',
+                'help' => 'Left blank, this is worked out from brand_url.'),
             'coupon_plugin_shortcode' => array('label' => 'Coupon widget shortcode'),
             'last_checked_text'       => array('label' => 'Last checked'),
             'offer_display_mode'      => array('label' => 'Offer display mode',

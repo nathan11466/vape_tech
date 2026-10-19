@@ -422,15 +422,16 @@ check('a derived fact is reachable as a token',
         === 'Ships free over $75.',
     vc_merchant_expand_tokens('Ships free over {fact_free_shipping_over}.'));
 
-// The two names that are not fields at all must survive as typed, so the
-// mistake is visible rather than silently swallowed.
+// A name that is not a field at all must survive as typed, so the mistake is
+// visible rather than silently swallowed. (brand_dot_com was the original
+// example here and is now a real field, so this uses one that is not.)
 check('an unknown token is left exactly as typed',
-    vc_merchant_expand_tokens('{brand_dot_com}') === '{brand_dot_com}',
-    vc_merchant_expand_tokens('{brand_dot_com}'));
+    vc_merchant_expand_tokens('{2nd_display_name}') === '{2nd_display_name}',
+    vc_merchant_expand_tokens('{2nd_display_name}'));
 check('and so is a made-up one next to a real one',
-    vc_merchant_expand_tokens('{brand_dot_com} at {display_brand_name}')
-        === '{brand_dot_com} at VooPoo',
-    vc_merchant_expand_tokens('{brand_dot_com} at {display_brand_name}'));
+    vc_merchant_expand_tokens('{2nd_display_name} at {display_brand_name}')
+        === '{2nd_display_name} at VooPoo',
+    vc_merchant_expand_tokens('{2nd_display_name} at {display_brand_name}'));
 
 check('a blank field resolves to nothing rather than showing the token',
     trim(vc_merchant_expand_tokens('{why_code_not_work}')) === '',
@@ -471,6 +472,71 @@ foreach (vc_merchant_import_meta_keys() as $key) {
 }
 check('every importer column is reachable as a token',
     empty($missing), implode(', ', array_slice($missing, 0, 5)));
+
+/* -------------------------------------------------------------------------
+ * brand_dot_com — the bare domain
+ *
+ * Useful as link text: "voopoo.com" reads better in a table cell or an
+ * anchor than "https://www.voopoo.com/". Derived from brand_url when blank,
+ * so all 112 stores have it without waiting on a re-import.
+ * ---------------------------------------------------------------------- */
+
+check('a plain domain is left as it is', vc_bare_domain('voopoo.com') === 'voopoo.com');
+check('the scheme is dropped', vc_bare_domain('https://voopoo.com') === 'voopoo.com');
+check('www. is dropped', vc_bare_domain('https://www.voopoo.com/') === 'voopoo.com');
+check('a path, query and trailing slash are dropped',
+    vc_bare_domain('https://www.voopoo.com/shop?a=1') === 'voopoo.com');
+check('a subdomain that is not www is kept',
+    vc_bare_domain('https://shop.voopoo.co.uk/x') === 'shop.voopoo.co.uk',
+    vc_bare_domain('https://shop.voopoo.co.uk/x'));
+check('case is normalised and a trailing dot dropped',
+    vc_bare_domain('https://WWW.VooPoo.com.') === 'voopoo.com',
+    vc_bare_domain('https://WWW.VooPoo.com.'));
+check('a protocol-relative URL works',
+    vc_bare_domain('//voopoo.com/x') === 'voopoo.com');
+check('an empty value gives nothing', vc_bare_domain('') === '');
+check('a host with no dot is refused rather than guessed at',
+    vc_bare_domain('http://localhost:8080/') === '', vc_bare_domain('http://localhost:8080/'));
+check('text that is not a URL gives nothing',
+    vc_bare_domain('not a url') === '', vc_bare_domain('not a url'));
+
+/* --- It reaches the field, token and shortcode paths ------------------ */
+
+$GLOBALS['meta'][1] = array(
+    'display_brand_name' => 'VooPoo',
+    'brand_url'          => 'https://www.voopoo.com/',
+    'brand_dot_com'      => '',
+);
+$GLOBALS['current_id'] = 1;
+
+check('a blank brand_dot_com is derived from brand_url',
+    vc_section_meta(1, 'brand_dot_com') === 'voopoo.com',
+    vc_section_meta(1, 'brand_dot_com'));
+check('and reaches [merchant_field]',
+    field(array('key' => 'brand_dot_com')) === 'voopoo.com',
+    field(array('key' => 'brand_dot_com')));
+check('and reaches the {token} syntax',
+    vc_merchant_expand_tokens('Shop at {brand_dot_com}') === 'Shop at voopoo.com',
+    vc_merchant_expand_tokens('Shop at {brand_dot_com}'));
+
+// A value in the column must win over the derivation.
+$GLOBALS['meta'][1]['brand_dot_com'] = 'voopoo.co.uk';
+check('a value in the column beats the derivation',
+    vc_section_meta(1, 'brand_dot_com') === 'voopoo.co.uk');
+$GLOBALS['meta'][1]['brand_dot_com'] = '';
+
+// Nothing to derive from must give nothing, not a guess.
+$GLOBALS['meta'][1]['brand_url'] = '';
+check('with no brand_url it derives nothing rather than inventing a domain',
+    vc_section_meta(1, 'brand_dot_com') === '',
+    vc_section_meta(1, 'brand_dot_com'));
+$GLOBALS['meta'][1]['brand_url'] = 'https://www.voopoo.com/';
+
+// Derivation must not leak into unrelated fields.
+check('an unrelated blank field is still blank',
+    vc_section_meta(1, 'why_code_not_work') === '');
+check('and the importer carries the column so it survives a re-import',
+    in_array('brand_dot_com', vc_merchant_import_meta_keys(), true));
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

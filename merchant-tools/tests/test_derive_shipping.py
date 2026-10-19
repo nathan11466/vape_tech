@@ -84,6 +84,23 @@ names = [n for n in r["service_locations"].split("|") if n]
 check("every service_location is a known country",
       all(n in derive_shipping.COUNTRIES for n in names), repr(names))
 
+# --- brand_dot_com -----------------------------------------------------
+from enrich_merchants import bare_domain  # noqa: E402
+
+cases = [
+    ("https://www.voopoo.com/", "voopoo.com", "scheme and www dropped"),
+    ("voopoo.com", "voopoo.com", "a plain domain is left alone"),
+    ("https://shop.voopoo.co.uk/path?a=1", "shop.voopoo.co.uk", "a real subdomain is kept"),
+    ("https://WWW.VooPoo.com.", "voopoo.com", "case and trailing dot normalised"),
+    ("//voopoo.com/x", "voopoo.com", "protocol-relative works"),
+    ("", "", "empty gives nothing"),
+    ("not a url", "", "text that is not a URL gives nothing"),
+    ("http://localhost:8080/", "", "a host with no dot is refused, not guessed at"),
+]
+for url, want, label in cases:
+    got = bare_domain(url)
+    check(label, got == want, f"{url!r} -> {got!r}, wanted {want!r}")
+
 print()
 if fails:
     print(f"{len(fails)} check(s) FAILED")
