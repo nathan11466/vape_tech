@@ -166,6 +166,47 @@ function vc_rehub_coupon_embed($post_id) {
 }
 
 /**
+ * Which column the ReHub store name comes from.
+ *
+ * Empty means the default: display_brand_name, falling back to the post
+ * title. Any importer column can be chosen instead, because which one holds
+ * the public-facing name differs by dataset.
+ */
+function vc_rehub_name_source() {
+    return (string) apply_filters('vc_rehub_name_source',
+        get_option('vc_rehub_name_source', ''));
+}
+
+/**
+ * The store name for a merchant, from whichever column is configured.
+ *
+ * Falls back through the chosen column, then display_brand_name, then the
+ * post title -- so a store with the chosen column blank still gets a name
+ * rather than being skipped.
+ */
+function vc_rehub_store_name($post_id) {
+    $source = vc_rehub_name_source();
+
+    if ($source !== '' && $source !== '__post_title') {
+        $value = trim((string) get_post_meta($post_id, $source, true));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    if ($source === '__post_title') {
+        $title = trim((string) get_the_title($post_id));
+        if ($title !== '') {
+            return $title;
+        }
+    }
+
+    return function_exists('vc_merchant_display_name')
+        ? trim((string) vc_merchant_display_name($post_id))
+        : trim((string) get_the_title($post_id));
+}
+
+/**
  * The dealstore term for a merchant, created if absent.
  *
  * Matched by name, because that is what a human sees in both systems and
@@ -176,9 +217,7 @@ function vc_rehub_store_term($post_id, $create = true) {
         return null;
     }
 
-    $name = function_exists('vc_merchant_display_name')
-        ? vc_merchant_display_name($post_id) : get_the_title($post_id);
-    $name = trim((string) $name);
+    $name = vc_rehub_store_name($post_id);
     if ($name === '') {
         return null;
     }
@@ -189,6 +228,26 @@ function vc_rehub_store_term($post_id, $create = true) {
     if ($stored) {
         $term = get_term($stored, 'dealstore');
         if ($term && !is_wp_error($term)) {
+            // The name source may have changed since this term was made. Rename
+            // the term we are already linked to rather than creating a second
+            // one -- matching by name would otherwise leave 112 orphans behind.
+            if (trim((string) $term->name) !== $name) {
+                $args = array('name' => $name);
+                // The slug is left alone unless asked for, because it is the
+                // store's URL and 112 of them moving is not a side effect.
+                if (get_option('vc_rehub_rename_slug', '') === '1') {
+                    $args['slug'] = sanitize_title($name);
+                }
+                $updated = wp_update_term($term->term_id, 'dealstore', $args);
+                if (!is_wp_error($updated)) {
+                    $GLOBALS['vc_rehub_renamed'] = ($GLOBALS['vc_rehub_renamed'] ?? 0) + 1;
+                    $refreshed = get_term($term->term_id, 'dealstore');
+                    if ($refreshed && !is_wp_error($refreshed)) {
+                        $term = $refreshed;
+                    }
+                }
+            }
+
             return $term;
         }
     }
@@ -258,6 +317,8 @@ function vc_rehub_sync_merchant($post_id, $overwrite = false) {
             __('ReHub\'s store taxonomy is not registered. Switch on "Enable Affiliate Store taxonomy for posts" in the theme options first.', 'vc-merchant'));
     }
 
+    $GLOBALS['vc_rehub_renamed'] = 0;
+
     $term = vc_rehub_store_term($post_id);
     if (!$term) {
         return new WP_Error('vc_rehub_no_term',
@@ -324,7 +385,8 @@ function vc_rehub_sync_merchant($post_id, $overwrite = false) {
     wp_set_object_terms($post_id, array((int) $term->term_id), 'dealstore', false);
 
     return array('term_id' => (int) $term->term_id, 'fields' => $written,
-                 'offer' => $offer, 'kept' => $kept);
+                 'offer' => $offer, 'kept' => $kept,
+                 'renamed' => (int) ($GLOBALS['vc_rehub_renamed'] ?? 0));
 }
 
 /**
@@ -339,7 +401,7 @@ function vc_rehub_sync_batch($limit = 0, $overwrite = false) {
     ));
 
     $report = array('stores' => 0, 'fields' => 0, 'offer' => 0, 'kept' => 0,
-                    'errors' => array(), 'remaining' => 0);
+                    'renamed' => 0, 'errors' => array(), 'remaining' => 0);
     $done = 0;
 
     foreach ($ids as $post_id) {
@@ -362,6 +424,7 @@ function vc_rehub_sync_batch($limit = 0, $overwrite = false) {
         $report['fields'] += $result['fields'];
         $report['offer']  += $result['offer'];
         $report['kept']   += $result['kept'];
+        $report['renamed'] += $result['renamed'];
     }
 
     return $report;
@@ -399,6 +462,16 @@ function vc_rehub_screen() {
         if (isset($_POST['vc_rehub_options_submit'])) {
             update_option('vc_rehub_embed_coupons',
                 !empty($_POST['embed_coupons']) ? '1' : '');
+
+            $allowed = function_exists('vc_merchant_import_meta_keys')
+                ? vc_merchant_import_meta_keys() : array();
+            $allowed[] = '__post_title';
+            $source = (string) ($_POST['name_source'] ?? '');
+            update_option('vc_rehub_name_source',
+                in_array($source, $allowed, true) ? $source : '');
+
+            update_option('vc_rehub_rename_slug',
+                !empty($_POST['rename_slug']) ? '1' : '');
             $handover_notice = __('Saved. Re-sync to push the change onto stores already synced.', 'vc-merchant');
         } elseif (isset($_POST['vc_rehub_handover_submit'])) {
             $want = !empty($_POST['handover']);
@@ -450,6 +523,14 @@ function vc_rehub_screen() {
                     __('Synced %1$d stores. Store fields written: %2$d. Offer fields written: %3$d. Remaining: %4$d.', 'vc-merchant'),
                     $report['stores'], $report['fields'], $report['offer'], $report['remaining']
                 )); ?></p>
+                <?php if (!empty($report['renamed'])) : ?>
+                    <p><?php echo esc_html(sprintf(
+                        /* translators: %d: number of stores */
+                        _n('%d store was renamed to match the column you chose.',
+                           '%d stores were renamed to match the column you chose.',
+                           $report['renamed'], 'vc-merchant'),
+                        $report['renamed'])); ?></p>
+                <?php endif; ?>
                 <?php if (!empty($report['kept'])) : ?>
                     <p><?php echo esc_html(sprintf(
                         /* translators: %d: number of fields */
@@ -496,6 +577,39 @@ function vc_rehub_screen() {
                 <tr>
                     <th scope="row"><label for="batch"><?php esc_html_e('Batch size', 'vc-merchant'); ?></label></th>
                     <td><input type="number" name="batch" id="batch" value="25" min="1" class="small-text" /></td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="name_source"><?php esc_html_e('Store name from', 'vc-merchant'); ?></label>
+                    </th>
+                    <td>
+                        <?php $current_source = vc_rehub_name_source(); ?>
+                        <select name="name_source" id="name_source">
+                            <option value=""<?php selected($current_source, ''); ?>>
+                                <?php esc_html_e('display_brand_name, else the post title (default)', 'vc-merchant'); ?>
+                            </option>
+                            <option value="__post_title"<?php selected($current_source, '__post_title'); ?>>
+                                <?php esc_html_e('the post title', 'vc-merchant'); ?>
+                            </option>
+                            <?php foreach ((function_exists('vc_merchant_import_meta_keys')
+                                ? vc_merchant_import_meta_keys() : array()) as $key) : ?>
+                                <option value="<?php echo esc_attr($key); ?>"<?php
+                                    selected($current_source, $key); ?>><?php
+                                    echo esc_html($key); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="description">
+                            <?php esc_html_e('This is the ReHub store\'s name, and what its URL was built from. Changing it renames the store you are already linked to rather than creating a second one, so nothing is orphaned.', 'vc-merchant'); ?>
+                        </p>
+                        <label style="display:block;margin-top:8px;">
+                            <input type="checkbox" name="rename_slug" value="1"
+                                <?php checked(get_option('vc_rehub_rename_slug', '') === '1'); ?> />
+                            <?php esc_html_e('Also change the store URL to match the new name', 'vc-merchant'); ?>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Off by default. With it off the visible name changes and every store URL stays where it is. Switching it on moves all of them at once, and anything linking to the old URLs breaks.', 'vc-merchant'); ?>
+                        </p>
+                    </td>
                 </tr>
                 <tr>
                     <th scope="row"><?php esc_html_e('Coupon cards', 'vc-merchant'); ?></th>

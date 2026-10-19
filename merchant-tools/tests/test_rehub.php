@@ -35,7 +35,10 @@ function get_term_by($f, $v, $tax = '') {
 }
 function wp_insert_term($name, $tax, $a = array()) {
     $id = $GLOBALS['next_term']++;
-    $GLOBALS['terms'][$id] = (object) array('term_id' => $id, 'name' => $name, 'taxonomy' => $tax);
+    $GLOBALS['terms'][$id] = (object) array('term_id' => $id, 'name' => $name,
+        // A real term always gets a slug, and the URL check below is
+        // meaningless without one.
+        'slug' => $a['slug'] ?? sanitize_title($name), 'taxonomy' => $tax);
     return array('term_id' => $id);
 }
 function wp_set_object_terms($id, $terms, $tax, $append = false) {
@@ -61,6 +64,16 @@ function esc_html__($v, $d = null) { return $v; }
 function esc_html_e($v, $d = null) { echo $v; }
 function __($v, $d = null) { return $v; }
 function vc_merchant_post_types() { return array('merchant'); }
+function vc_merchant_import_meta_keys() {
+    return array('display_brand_name', 'brand_name_official', 'alternative_brand_names',
+                 'brand_url', 'brand_logo_url', 'coupon_intro');
+}
+function wp_update_term($id, $tax, $args) {
+    if (!isset($GLOBALS['terms'][$id])) { return new WP_Error('x', 'no term'); }
+    if (isset($args['name'])) { $GLOBALS['terms'][$id]->name = $args['name']; }
+    if (isset($args['slug'])) { $GLOBALS['terms'][$id]->slug = $args['slug']; }
+    return array('term_id' => $id);
+}
 function vc_merchant_coupon_shortcode($id = null) {
     return $GLOBALS['coupon_sc'] ?? '[coupon_deals brand="voopoo"]';
 }
@@ -526,6 +539,81 @@ check('a value that pre-dates the sync is not',
     vc_rehub_may_write('was already here', null, false) === false);
 check('overwrite overrules all of that',
     vc_rehub_may_write('was already here', null, true) === true);
+
+/* -------------------------------------------------------------------------
+ * Which column the store name comes from
+ *
+ * The term name is the store's public name and what its URL was built from,
+ * so changing the source must rename the term already linked -- matching by
+ * name instead would leave an orphan behind for every store.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$n = store(600, array(
+    'display_brand_name'  => 'VooPoo',
+    'brand_name_official' => 'VooPoo Technology Co., Ltd',
+));
+$GLOBALS['titles'][600] = 'voopoo-raw-title';
+
+check('the default source is display_brand_name',
+    vc_rehub_store_name($n) === 'VooPoo', vc_rehub_store_name($n));
+
+$res = vc_rehub_sync_merchant($n);
+$nt = $res['term_id'];
+check('the term is created with that name', $GLOBALS['terms'][$nt]->name === 'VooPoo');
+$original_slug = $GLOBALS['terms'][$nt]->slug ?? '';
+
+// Switch the source column.
+$GLOBALS['options']['vc_rehub_name_source'] = 'brand_name_official';
+check('the chosen column is used instead',
+    vc_rehub_store_name($n) === 'VooPoo Technology Co., Ltd', vc_rehub_store_name($n));
+
+$before = count($GLOBALS['terms']);
+$res = vc_rehub_sync_merchant($n);
+check('re-syncing renames the existing term',
+    $GLOBALS['terms'][$nt]->name === 'VooPoo Technology Co., Ltd',
+    $GLOBALS['terms'][$nt]->name);
+check('rather than creating a second one',
+    count($GLOBALS['terms']) === $before, count($GLOBALS['terms']) . " vs $before");
+check('and it still resolves to the same term', $res['term_id'] === $nt);
+check('and the rename is reported', ($res['renamed'] ?? 0) >= 1, json_encode($res));
+
+// The URL must not move unless asked.
+check('the store URL is left where it was',
+    ($GLOBALS['terms'][$nt]->slug ?? '') === $original_slug,
+    ($GLOBALS['terms'][$nt]->slug ?? '') . " vs $original_slug");
+
+$GLOBALS['options']['vc_rehub_rename_slug'] = '1';
+$GLOBALS['options']['vc_rehub_name_source'] = 'display_brand_name';
+vc_rehub_sync_merchant($n);
+check('but it does move when that is switched on',
+    ($GLOBALS['terms'][$nt]->slug ?? '') === 'voopoo',
+    ($GLOBALS['terms'][$nt]->slug ?? ''));
+$GLOBALS['options']['vc_rehub_rename_slug'] = '';
+
+/* --- Falling back rather than skipping -------------------------------- */
+
+$GLOBALS['options']['vc_rehub_name_source'] = 'brand_name_official';
+$blank = store(601, array('display_brand_name' => 'Has Display Only',
+                          'brand_name_official' => ''));
+check('a store with the chosen column blank falls back to the display name',
+    vc_rehub_store_name($blank) === 'Has Display Only', vc_rehub_store_name($blank));
+
+$GLOBALS['options']['vc_rehub_name_source'] = '__post_title';
+$GLOBALS['titles'][602] = 'Title Only Store';
+$GLOBALS['meta'][602] = array();
+check('the post title can be chosen explicitly',
+    vc_rehub_store_name(602) === 'Title Only Store', vc_rehub_store_name(602));
+
+$GLOBALS['options']['vc_rehub_name_source'] = 'alternative_brand_names';
+$none = store(603, array('display_brand_name' => '', 'alternative_brand_names' => ''));
+$GLOBALS['titles'][603] = 'Fallback Title';
+check('with every source blank it falls through to the title',
+    vc_rehub_store_name($none) === 'Fallback Title', vc_rehub_store_name($none));
+
+$GLOBALS['options'] = array();
+check('an unset source returns to the default',
+    vc_rehub_store_name($n) === 'VooPoo', vc_rehub_store_name($n));
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
