@@ -461,7 +461,7 @@ def find_restrictions(text):
 
 def process(row, args, log):
     """Fill blanks on one row. Returns a short status string."""
-    name = (row.get("brand_name") or "").strip()
+    name = (row.get("brand_name") or row.get("display_brand_name") or "").strip()
     base = (row.get("brand_url") or "").strip()
     if not base:
         return "no brand_url"
@@ -611,7 +611,8 @@ def main():
 
     targets = rows
     if args.only:
-        targets = [r for r in rows if args.only.lower() in (r.get("brand_name") or "").lower()]
+        targets = [r for r in rows if args.only.lower() in
+                   ((r.get("brand_name") or "") + " " + (r.get("display_brand_name") or "")).lower()]
     if args.limit > 0:
         targets = targets[:args.limit]
 
@@ -620,7 +621,7 @@ def main():
     total = len(targets)
 
     for index, row in enumerate(targets, 1):
-        name = (row.get("brand_name") or "?")[:34]
+        name = (row.get("brand_name") or row.get("display_brand_name") or "?")[:34]
         print(f"[{index}/{total}] {name:<34} ", end="", flush=True)
         try:
             status = process(row, args, log)

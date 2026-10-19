@@ -234,9 +234,20 @@ function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = 
     // Strip a UTF-8 BOM from the first header cell if present.
     $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]);
 
-    if (!in_array('brand_name', $header, true)) {
+    // Either column can carry the name. Some exports drop brand_name and keep
+    // only display_brand_name, which is the public-facing name anyway -- and
+    // refusing the whole file over that is a bad trade.
+    $name_column = '';
+    foreach (array('brand_name', 'display_brand_name') as $candidate) {
+        if (in_array($candidate, $header, true)) {
+            $name_column = $candidate;
+            break;
+        }
+    }
+    if ($name_column === '') {
         fclose($fh);
-        return new WP_Error('vc_bad_header', 'No brand_name column found - is this the enriched CSV?');
+        return new WP_Error('vc_bad_header',
+            'No brand_name or display_brand_name column found - is this the enriched CSV?');
     }
 
     $tally = array('created' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0,
@@ -271,6 +282,12 @@ function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = 
             if (trim((string) ($row[$column] ?? '')) !== '') {
                 $filled[$column]++;
             }
+        }
+
+        // Hand the row a brand_name when the file only has the display name,
+        // so everything downstream keeps working unchanged.
+        if ($name_column !== 'brand_name' && trim((string) ($row['brand_name'] ?? '')) === '') {
+            $row['brand_name'] = (string) ($row[$name_column] ?? '');
         }
 
         list($action, $post_id, $message) = vc_merchant_import_row($row, $dry_run, $publish, $content_mode);

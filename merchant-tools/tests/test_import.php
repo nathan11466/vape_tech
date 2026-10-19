@@ -348,6 +348,69 @@ check('a populated column reports how many rows carried a value',
 check('and nothing is flagged as absent', empty($res['absent']), json_encode($res['absent']));
 @unlink($good);
 
+/* -------------------------------------------------------------------------
+ * The name column
+ *
+ * A real export arrived with no brand_name at all -- only
+ * display_brand_name, which is the public-facing name anyway. The importer
+ * refused the entire file over that, which is a bad trade for a column that
+ * carries the same thing under another heading.
+ * ---------------------------------------------------------------------- */
+
+$display_only = write_csv(array(
+    array('display_brand_name', 'brand_url', 'ships_to_terms'),
+    array('Zen CBD+', 'https://iwantzen.com', 'United States|Texas'),
+    array('VooPoo', 'https://shop.voopoo.com', 'United States|Utah'),
+));
+
+$res = vc_merchant_import_csv($display_only, true);
+check('a file with only display_brand_name is accepted',
+    !is_wp_error($res), is_wp_error($res) ? $res->get_error_message() : '');
+// Counted as create + update, because earlier tests in this file already
+// created a VooPoo, so the second row matches it.
+$seen = ($res['tally']['would create'] ?? 0) + ($res['tally']['would update'] ?? 0);
+check('and every row is read rather than skipped',
+    $seen === 2 && ($res['tally']['skipped'] ?? 0) === 0,
+    json_encode($res['tally'] ?? null));
+
+// For real, so the title actually comes through.
+$res = vc_merchant_import_csv($display_only, false);
+$titles = array();
+foreach ($GLOBALS['posts'] as $post) { $titles[] = $post['post_title']; }
+check('the display name becomes the store title',
+    in_array('Zen CBD+', $titles, true) && in_array('VooPoo', $titles, true),
+    implode(', ', $titles));
+@unlink($display_only);
+
+// brand_name still wins where both are present, so nothing changes for the
+// files that already worked.
+$both = write_csv(array(
+    array('brand_name', 'display_brand_name', 'brand_url'),
+    array('Official Brand Name', 'Public Name', 'https://x.com'),
+));
+vc_merchant_import_csv($both, false);
+$found = false;
+foreach ($GLOBALS['posts'] as $post) {
+    if ($post['post_title'] === 'Official Brand Name') { $found = true; }
+}
+check('brand_name still wins when both columns are present', $found,
+    'titles: ' . implode(', ', array_column($GLOBALS['posts'], 'post_title')));
+@unlink($both);
+
+// Neither column is still a refusal, with both names in the message.
+$neither = write_csv(array(
+    array('brand_url', 'coupon_intro'),
+    array('https://x.com', 'text'),
+));
+$res = vc_merchant_import_csv($neither, true);
+check('a file with neither column is still refused', is_wp_error($res));
+check('and the message names both columns it would accept',
+    is_wp_error($res)
+    && strpos($res->get_error_message(), 'brand_name') !== false
+    && strpos($res->get_error_message(), 'display_brand_name') !== false,
+    is_wp_error($res) ? $res->get_error_message() : '');
+@unlink($neither);
+
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
 echo "All importer checks passed.\n";

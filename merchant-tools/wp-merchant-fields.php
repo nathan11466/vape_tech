@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VapingCheap Merchant Fields
  * Description: Service-location taxonomy, brand aliases, merchant contact details, and publish-gated display helpers for coupon/merchant pages.
- * Version: 1.12.0
+ * Version: 1.13.0
  * Text Domain: vc-merchant
  *
  * Companion to merchant-tools/enrich_merchants.py. The enrichment script grades
@@ -109,7 +109,7 @@ add_action('init', 'vc_register_merchant_post_type', 5);
  * a version that does not move is a version nobody can check an upload
  * against -- this one sat at 1.0.0 through twenty-one releases.
  */
-const VC_MERCHANT_VERSION = '1.12.0';
+const VC_MERCHANT_VERSION = '1.13.0';
 
 function vc_merchant_link($post_id) {
     return function_exists('vc_merchant_permalink')
