@@ -398,6 +398,18 @@ foreach (array('wp-merchant-archive.php', 'wp-merchant-sections.php',
 check('no merchant link bypasses the handover resolver',
     empty($bypass), implode(', ', $bypass));
 
+$main = file_get_contents(__DIR__ . '/wp-merchant-fields.php');
+preg_match('/^\s*\*\s*Version:\s*([0-9.]+)/m', $main, $vm);
+$header_version = $vm[1] ?? '';
+check('the plugin header carries a version', $header_version !== '');
+check('and the constant matches it',
+    defined('VC_MERCHANT_VERSION') && VC_MERCHANT_VERSION === $header_version,
+    'header ' . $header_version . ' vs constant '
+        . (defined('VC_MERCHANT_VERSION') ? VC_MERCHANT_VERSION : 'undefined'));
+check('and it has moved past the original 1.0.0',
+    $header_version !== '1.0.0',
+    'a version that never moves cannot be checked against an upload');
+
 echo "\nShipped files\n";
 $files = array(
     'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',

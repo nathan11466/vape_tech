@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VapingCheap Merchant Fields
  * Description: Service-location taxonomy, brand aliases, merchant contact details, and publish-gated display helpers for coupon/merchant pages.
- * Version: 1.0.0
+ * Version: 1.9.0
  * Text Domain: vc-merchant
  *
  * Companion to merchant-tools/enrich_merchants.py. The enrichment script grades
@@ -102,6 +102,15 @@ add_action('init', 'vc_register_merchant_post_type', 5);
  * the page actually is. Defined here rather than in the ReHub module so a
  * site without the theme still resolves links.
  */
+/**
+ * The shipped version.
+ *
+ * Must match the Version header above. Preflight fails if they drift, because
+ * a version that does not move is a version nobody can check an upload
+ * against -- this one sat at 1.0.0 through twenty-one releases.
+ */
+const VC_MERCHANT_VERSION = '1.9.0';
+
 function vc_merchant_link($post_id) {
     return function_exists('vc_merchant_permalink')
         ? vc_merchant_permalink($post_id)
@@ -525,3 +534,33 @@ function vc_merchant_info_panel($post_id = null) {
 
     return $html;
 }
+
+/**
+ * Print the shipped version on our own admin screens.
+ *
+ * The Plugins list shows it too, but when the question is "did that upload
+ * take", the answer should be on the screen you are already looking at.
+ */
+add_action('admin_footer', function () {
+    if (!function_exists('get_current_screen')) {
+        return;
+    }
+    $screen = get_current_screen();
+    if (!$screen) {
+        return;
+    }
+
+    $ours = in_array($screen->post_type, vc_merchant_post_types(), true)
+        || strpos((string) $screen->id, 'vc-merchant') !== false
+        || strpos((string) $screen->id, 'vc-coupon') !== false;
+    if (!$ours) {
+        return;
+    }
+
+    printf(
+        '<p style="margin:20px 0 0;color:#787c82;font-size:12px;">%s</p>',
+        esc_html(sprintf(
+            /* translators: %s: version number */
+            __('VapingCheap Merchant Fields %s', 'vc-merchant'), VC_MERCHANT_VERSION))
+    );
+});
