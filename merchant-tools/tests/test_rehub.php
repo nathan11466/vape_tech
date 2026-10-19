@@ -217,12 +217,14 @@ $t = $res['term_id'];
 update_term_meta($t, 'brand_short_description', 'Hand-written by an editor in ReHub.');
 update_post_meta($hand, 'rehub_offer_disclaimer', 'Hand-written disclaimer.');
 
-vc_rehub_sync_merchant($hand);
+$r = vc_rehub_sync_merchant($hand);
 check('a hand-edited store field survives a re-sync',
     get_term_meta($t, 'brand_short_description', true) === 'Hand-written by an editor in ReHub.',
     get_term_meta($t, 'brand_short_description', true));
 check('and a hand-edited offer field survives too',
     get_post_meta($hand, 'rehub_offer_disclaimer', true) === 'Hand-written disclaimer.');
+check('and the sync reports that it left them alone',
+    ($r['kept'] ?? 0) >= 2, json_encode($r));
 
 vc_rehub_sync_merchant($hand, true);
 check('but overwrite=true does replace it, when asked explicitly',
@@ -465,6 +467,65 @@ check('a store with no coupon brand embeds nothing rather than an unscoped list'
 unset($GLOBALS['coupon_sc']);
 
 $GLOBALS['options']['vc_rehub_embed_coupons'] = '';
+
+/* -------------------------------------------------------------------------
+ * Editing a store here and re-syncing must reach ReHub
+ *
+ * The sync records what it wrote, so it can tell its own value from one an
+ * editor changed. Without that it either refused to update anything, or
+ * needed a flag that also wiped hand edits -- all or nothing.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$u = store(400, array('display_brand_name' => 'Update Me',
+                      'coupon_intro' => 'First version of the intro.'));
+$res = vc_rehub_sync_merchant($u);
+$ut = $res['term_id'];
+check('the first sync writes the intro',
+    get_term_meta($ut, 'brand_short_description', true) === 'First version of the intro.');
+
+// The whole point: edit here, re-sync, no flag.
+$GLOBALS['meta'][$u]['coupon_intro'] = 'Second version, edited in the store editor.';
+$res = vc_rehub_sync_merchant($u);
+check('editing the store and re-syncing updates ReHub without any flag',
+    get_term_meta($ut, 'brand_short_description', true)
+        === 'Second version, edited in the store editor.',
+    get_term_meta($ut, 'brand_short_description', true));
+check('and nothing was reported as left alone',
+    ($res['kept'] ?? 0) === 0, json_encode($res));
+
+// But a value changed on the ReHub side is still protected.
+update_term_meta($ut, 'brand_short_description', 'Reworded by hand in ReHub.');
+$GLOBALS['meta'][$u]['coupon_intro'] = 'Third version from the pipeline.';
+$res = vc_rehub_sync_merchant($u);
+check('a value changed in ReHub is not replaced by a later sync',
+    get_term_meta($ut, 'brand_short_description', true) === 'Reworded by hand in ReHub.',
+    get_term_meta($ut, 'brand_short_description', true));
+check('and that is reported rather than silent',
+    ($res['kept'] ?? 0) >= 1, json_encode($res));
+
+// Once overruled, the sync owns it again and later edits flow through.
+vc_rehub_sync_merchant($u, true);
+check('overwrite hands it back to the sync',
+    get_term_meta($ut, 'brand_short_description', true) === 'Third version from the pipeline.');
+$GLOBALS['meta'][$u]['coupon_intro'] = 'Fourth version.';
+vc_rehub_sync_merchant($u);
+check('and the next ordinary sync updates it again',
+    get_term_meta($ut, 'brand_short_description', true) === 'Fourth version.',
+    get_term_meta($ut, 'brand_short_description', true));
+
+/* --- The decision itself ---------------------------------------------- */
+
+check('an empty field is always writable',
+    vc_rehub_may_write('', null, false) === true);
+check('a value the sync wrote and nobody touched is writable',
+    vc_rehub_may_write('abc', md5('abc'), false) === true);
+check('a value changed since the sync wrote it is not',
+    vc_rehub_may_write('changed', md5('abc'), false) === false);
+check('a value that pre-dates the sync is not',
+    vc_rehub_may_write('was already here', null, false) === false);
+check('overwrite overrules all of that',
+    vc_rehub_may_write('was already here', null, true) === true);
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

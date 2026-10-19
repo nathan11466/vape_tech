@@ -213,14 +213,44 @@ function vc_rehub_store_term($post_id, $create = true) {
 }
 
 /**
+ * May the sync write over what is currently on the ReHub side?
+ *
+ * The rule the importer already uses for page bodies, applied here: replace
+ * our own value, never somebody else's.
+ *
+ * @param string      $current   What is there now.
+ * @param string|null $last      md5 of what the last sync wrote, if any.
+ * @param bool        $overwrite Explicitly asked to replace regardless.
+ */
+function vc_rehub_may_write($current, $last, $overwrite) {
+    if ($overwrite) {
+        return true;
+    }
+    if ($current === '') {
+        // Nothing there to lose.
+        return true;
+    }
+    if ($last === null) {
+        // Present, but the sync never wrote it -- so it pre-dates the sync or
+        // was typed in. Leave it.
+        return false;
+    }
+
+    // Ours, and untouched since. Safe to bring up to date.
+    return md5($current) === $last;
+}
+
+/**
  * Mirror one merchant into ReHub.
  *
  * @param int  $post_id   Merchant post.
- * @param bool $overwrite Replace values already present on the ReHub side.
- *                        Off by default: a field someone edited in ReHub is
- *                        their decision, and silently replacing it on the
- *                        next sync would destroy real work.
- * @return array{term_id:int,fields:int,offer:int}|WP_Error
+ * @param bool $overwrite Replace everything, including values an editor
+ *                        changed in ReHub. Rarely needed: without it the
+ *                        sync still updates any value it wrote itself and
+ *                        left untouched, so editing a store and re-syncing
+ *                        works. It only declines to touch a value somebody
+ *                        else changed.
+ * @return array{term_id:int,fields:int,offer:int,kept:int}|WP_Error
  */
 function vc_rehub_sync_merchant($post_id, $overwrite = false) {
     if (!vc_rehub_active()) {
@@ -236,31 +266,55 @@ function vc_rehub_sync_merchant($post_id, $overwrite = false) {
 
     update_post_meta($post_id, 'rehub_dealstore_term_id', (int) $term->term_id);
 
-    $written = 0;
+    // What the last sync wrote, so its own values can be told from an
+    // editor's. Keyed md5s rather than the values themselves, to keep the
+    // record small.
+    $written_log = get_post_meta($post_id, '_vc_rehub_written', true);
+    if (!is_array($written_log)) {
+        $written_log = array();
+    }
+
+    $written = $offer = $kept = 0;
+
     foreach (vc_rehub_term_map() as $key => $source) {
         $value = trim((string) call_user_func($source, $post_id));
         if ($value === '') {
             continue;
         }
-        if (!$overwrite && trim((string) get_term_meta($term->term_id, $key, true)) !== '') {
+
+        $current = trim((string) get_term_meta($term->term_id, $key, true));
+        $last = $written_log['term'][$key] ?? null;
+
+        if (!vc_rehub_may_write($current, $last, $overwrite)) {
+            $kept++;
             continue;
         }
+
         update_term_meta($term->term_id, $key, $value);
+        $written_log['term'][$key] = md5($value);
         $written++;
     }
 
-    $offer = 0;
     foreach (vc_rehub_offer_map() as $key => $source) {
         $value = trim((string) call_user_func($source, $post_id));
         if ($value === '') {
             continue;
         }
-        if (!$overwrite && trim((string) get_post_meta($post_id, $key, true)) !== '') {
+
+        $current = trim((string) get_post_meta($post_id, $key, true));
+        $last = $written_log['offer'][$key] ?? null;
+
+        if (!vc_rehub_may_write($current, $last, $overwrite)) {
+            $kept++;
             continue;
         }
+
         update_post_meta($post_id, $key, $value);
+        $written_log['offer'][$key] = md5($value);
         $offer++;
     }
+
+    update_post_meta($post_id, '_vc_rehub_written', $written_log);
 
     // Assign the merchant post to its store term. This does NOT make it
     // appear in ReHub's store listing -- that query is post_type => 'post'
@@ -269,7 +323,8 @@ function vc_rehub_sync_merchant($post_id, $overwrite = false) {
     // queries can find the pair.
     wp_set_object_terms($post_id, array((int) $term->term_id), 'dealstore', false);
 
-    return array('term_id' => (int) $term->term_id, 'fields' => $written, 'offer' => $offer);
+    return array('term_id' => (int) $term->term_id, 'fields' => $written,
+                 'offer' => $offer, 'kept' => $kept);
 }
 
 /**
@@ -283,7 +338,7 @@ function vc_rehub_sync_batch($limit = 0, $overwrite = false) {
         'fields'         => 'ids',
     ));
 
-    $report = array('stores' => 0, 'fields' => 0, 'offer' => 0,
+    $report = array('stores' => 0, 'fields' => 0, 'offer' => 0, 'kept' => 0,
                     'errors' => array(), 'remaining' => 0);
     $done = 0;
 
@@ -306,6 +361,7 @@ function vc_rehub_sync_batch($limit = 0, $overwrite = false) {
         $report['stores']++;
         $report['fields'] += $result['fields'];
         $report['offer']  += $result['offer'];
+        $report['kept']   += $result['kept'];
     }
 
     return $report;
@@ -343,7 +399,7 @@ function vc_rehub_screen() {
         if (isset($_POST['vc_rehub_options_submit'])) {
             update_option('vc_rehub_embed_coupons',
                 !empty($_POST['embed_coupons']) ? '1' : '');
-            $handover_notice = __('Saved. Re-sync with "Replace values already set" ticked to push the change onto stores already synced.', 'vc-merchant');
+            $handover_notice = __('Saved. Re-sync to push the change onto stores already synced.', 'vc-merchant');
         } elseif (isset($_POST['vc_rehub_handover_submit'])) {
             $want = !empty($_POST['handover']);
 
@@ -394,6 +450,15 @@ function vc_rehub_screen() {
                     __('Synced %1$d stores. Store fields written: %2$d. Offer fields written: %3$d. Remaining: %4$d.', 'vc-merchant'),
                     $report['stores'], $report['fields'], $report['offer'], $report['remaining']
                 )); ?></p>
+                <?php if (!empty($report['kept'])) : ?>
+                    <p><?php echo esc_html(sprintf(
+                        /* translators: %d: number of fields */
+                        _n('%d field was left alone because it was changed in ReHub rather than here.',
+                           '%d fields were left alone because they were changed in ReHub rather than here.',
+                           $report['kept'], 'vc-merchant'),
+                        $report['kept'])); ?>
+                        <?php esc_html_e('Tick "Replace everything" below to overrule that.', 'vc-merchant'); ?></p>
+                <?php endif; ?>
             </div>
             <?php if (!empty($report['errors'])) : ?>
                 <div class="notice notice-warning">
@@ -452,9 +517,9 @@ function vc_rehub_screen() {
                     <td>
                         <label>
                             <input type="checkbox" name="overwrite" value="1" />
-                            <?php esc_html_e('Replace values already set on the ReHub side', 'vc-merchant'); ?>
+                            <?php esc_html_e('Replace everything, including fields changed in ReHub', 'vc-merchant'); ?>
                         </label>
-                        <p class="description"><?php esc_html_e('Off by default. A store field edited in ReHub is a deliberate choice, and replacing it on every sync would destroy that work.', 'vc-merchant'); ?></p>
+                        <p class="description"><?php esc_html_e('You should rarely need this. A normal sync already updates anything it wrote itself, so editing a store here and re-syncing works. It only leaves alone a value somebody changed on the ReHub side.', 'vc-merchant'); ?></p>
                     </td>
                 </tr>
             </table>
