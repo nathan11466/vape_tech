@@ -169,7 +169,7 @@ function vc_merchant_related_shortcode($atts) {
             $name = function_exists('vc_merchant_display_name')
                 ? vc_merchant_display_name($id)
                 : get_the_title($id);
-            $out .= '<li><a href="' . esc_url(get_permalink($id)) . '">'
+            $out .= '<li><a href="' . esc_url(vc_merchant_link($id)) . '">'
                 . esc_html(sprintf(__('%s coupons', 'vc-merchant'), $name)) . '</a></li>';
         }
         $out .= '</ul>';

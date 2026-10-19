@@ -84,6 +84,8 @@ function wp_json_encode($v, $f = 0) { return json_encode($v, $f); }
 function wpautop($s) { return "<p>$s</p>"; }
 function get_posts() { return array(); }
 function vc_merchant_post_types() { return array('merchant'); }
+// Normally resolves to the ReHub store once handed over; here just our own.
+function vc_merchant_link($id) { return get_permalink($id); }
 function vc_merchant_display_name($id = null) {
     $d = trim((string) get_post_meta($id, 'display_brand_name', true));
     return $d !== '' ? $d : get_the_title($id);

@@ -302,10 +302,34 @@ function vc_rehub_screen() {
     }
 
     $report = null;
+    $handover_notice = '';
+
     if (!empty($_POST['vc_rehub_nonce'])
         && wp_verify_nonce($_POST['vc_rehub_nonce'], 'vc_rehub_sync')) {
-        $limit = isset($_POST['batch']) ? max(1, (int) $_POST['batch']) : 25;
-        $report = vc_rehub_sync_batch($limit, !empty($_POST['overwrite']));
+
+        if (isset($_POST['vc_rehub_handover_submit'])) {
+            $want = !empty($_POST['handover']);
+
+            // Refuse to hand over before the stores exist, which would 301
+            // every merchant page to a term that is not there -- i.e. leave
+            // the pages reachable but pointing nowhere useful.
+            $unmatched = vc_rehub_unmatched_count();
+            if ($want && $unmatched > 0) {
+                $handover_notice = sprintf(
+                    /* translators: %d: number of stores */
+                    __('Not switched on: %d stores have no ReHub store to point at yet. Sync first, then try again.', 'vc-merchant'),
+                    $unmatched);
+            } else {
+                update_option('vc_rehub_handover', $want ? '1' : '');
+                flush_rewrite_rules();
+                $handover_notice = $want
+                    ? __('Handover is on. Store pages now redirect to ReHub and internal links point there.', 'vc-merchant')
+                    : __('Handover is off. Store pages serve their own content again.', 'vc-merchant');
+            }
+        } else {
+            $limit = isset($_POST['batch']) ? max(1, (int) $_POST['batch']) : 25;
+            $report = vc_rehub_sync_batch($limit, !empty($_POST['overwrite']));
+        }
     }
 
     $active = vc_rehub_active();
@@ -385,8 +409,87 @@ function vc_rehub_screen() {
             <?php submit_button(__('Sync to ReHub', 'vc-merchant'), 'primary', 'submit', true,
                 $active ? array() : array('disabled' => 'disabled')); ?>
         </form>
+
+        <hr />
+
+        <h2><?php esc_html_e('Hand the store page over to ReHub', 'vc-merchant'); ?></h2>
+
+        <?php if ($handover_notice) : ?>
+            <div class="notice notice-info"><p><?php echo esc_html($handover_notice); ?></p></div>
+        <?php endif; ?>
+
+        <?php $unmatched = vc_rehub_unmatched_count(); ?>
+
+        <p class="description" style="max-width:700px;">
+            <?php esc_html_e('With ReHub rendering the store page, our own store pages become a second URL for the same shop, which is duplicate content. Switching this on redirects each of our pages to its ReHub store with a 301, points every internal link there, and drops them from the sitemap.', 'vc-merchant'); ?>
+        </p>
+        <p class="description" style="max-width:700px;">
+            <?php esc_html_e('The pages are redirected rather than deleted, so whatever links and ranking they have passes to the page taking over, and the posts stay editable - they are still what the CSV pipeline writes to. Switching it back off restores them.', 'vc-merchant'); ?>
+        </p>
+
+        <?php if ($unmatched > 0) : ?>
+            <div class="notice notice-warning inline" style="max-width:700px;">
+                <p><?php echo esc_html(sprintf(
+                    _n('%d store has no ReHub store to point at. Sync before handing over, or that page would redirect nowhere.',
+                       '%d stores have no ReHub store to point at. Sync before handing over, or those pages would redirect nowhere.',
+                       $unmatched, 'vc-merchant'),
+                    $unmatched)); ?></p>
+            </div>
+        <?php endif; ?>
+
+        <form method="post">
+            <?php wp_nonce_field('vc_rehub_sync', 'vc_rehub_nonce'); ?>
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row"><?php esc_html_e('Status', 'vc-merchant'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="handover" value="1"
+                                <?php checked(vc_rehub_handover()); ?> />
+                            <?php esc_html_e('Redirect our store pages to ReHub', 'vc-merchant'); ?>
+                        </label>
+                        <p class="description">
+                            <?php echo vc_rehub_handover()
+                                ? esc_html__('Currently on.', 'vc-merchant')
+                                : esc_html__('Currently off - both sets of pages are live.', 'vc-merchant'); ?>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button(__('Save handover setting', 'vc-merchant'), 'secondary',
+                'vc_rehub_handover_submit', false,
+                $active ? array() : array('disabled' => 'disabled')); ?>
+        </form>
     </div>
     <?php
+}
+
+/**
+ * How many merchants have no ReHub store to point at.
+ *
+ * Checked before the handover is allowed on, because a page redirecting to a
+ * store that does not exist is worse than two pages that do.
+ */
+function vc_rehub_unmatched_count() {
+    if (!vc_rehub_active()) {
+        return 0;
+    }
+
+    $ids = get_posts(array(
+        'post_type'      => vc_merchant_post_types(),
+        'post_status'    => 'publish',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+    ));
+
+    $missing = 0;
+    foreach ($ids as $post_id) {
+        if (!vc_rehub_store_term($post_id, false)) {
+            $missing++;
+        }
+    }
+
+    return $missing;
 }
 
 /* -------------------------------------------------------------------------
@@ -417,3 +520,119 @@ if (defined('WP_CLI') && WP_CLI) {
         WP_CLI::success('ReHub sync finished.');
     });
 }
+
+/* -------------------------------------------------------------------------
+ * Handover: let ReHub's store page be the only one
+ *
+ * With ReHub rendering the store page, our merchant pages become a second
+ * indexable URL for the same shop. This hands the page over: every internal
+ * link points at ReHub's store, and our URL 301s there.
+ *
+ * Deliberately a redirect rather than unregistering the post type. Making it
+ * non-public would 404 all 112 URLs and throw away whatever links and
+ * ranking they have; a 301 passes that to the page taking over. The posts
+ * also stay editable, which is what the whole pipeline writes to.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Is the handover switched on?
+ *
+ * Off unless ReHub is actually present, so flipping the option on a site
+ * without the theme cannot strand every store page.
+ */
+function vc_rehub_handover() {
+    if (!vc_rehub_active()) {
+        return false;
+    }
+
+    return (bool) apply_filters('vc_rehub_handover',
+        get_option('vc_rehub_handover', '') === '1');
+}
+
+/**
+ * Where a store's page lives.
+ *
+ * The ReHub store archive once handed over, our own permalink otherwise.
+ * Every internal link goes through this, so the two can never disagree.
+ */
+function vc_merchant_permalink($post_id) {
+    $own = get_permalink($post_id);
+
+    if (!vc_rehub_handover()) {
+        return $own;
+    }
+
+    $term = vc_rehub_store_term($post_id, false);
+    if (!$term) {
+        // No store to point at. Keep our own URL rather than linking nowhere.
+        return $own;
+    }
+
+    $link = get_term_link($term);
+
+    return is_wp_error($link) ? $own : $link;
+}
+
+/**
+ * Send a merchant page to the ReHub store that replaced it.
+ *
+ * Only once handed over, and only when there is somewhere to go.
+ */
+add_action('template_redirect', function () {
+    if (!is_singular() || !vc_rehub_handover()) {
+        return;
+    }
+    if (!in_array(get_post_type(), vc_merchant_post_types(), true)) {
+        return;
+    }
+
+    $post_id = get_the_ID();
+    $term = vc_rehub_store_term($post_id, false);
+    if (!$term) {
+        return;
+    }
+
+    $link = get_term_link($term);
+    if (is_wp_error($link)) {
+        return;
+    }
+
+    wp_safe_redirect($link, 301);
+    exit;
+}, 1);
+
+/**
+ * Belt and braces: keep a handed-over page out of the index even if
+ * something upstream stops the redirect from firing.
+ */
+add_filter('rank_math/frontend/robots', function ($robots) {
+    if (!is_singular() || !vc_rehub_handover()) {
+        return $robots;
+    }
+    if (!in_array(get_post_type(), vc_merchant_post_types(), true)) {
+        return $robots;
+    }
+
+    $robots['index'] = 'noindex';
+    $robots['follow'] = 'follow';
+
+    return $robots;
+});
+
+/**
+ * Drop our store pages from the sitemap once ReHub owns them.
+ */
+add_filter('wp_sitemaps_post_types', function ($post_types) {
+    if (!vc_rehub_handover()) {
+        return $post_types;
+    }
+    foreach (vc_merchant_post_types() as $type) {
+        unset($post_types[$type]);
+    }
+
+    return $post_types;
+});
+add_filter('rank_math/sitemap/exclude_post_type', function ($exclude, $type) {
+    return vc_rehub_handover() && in_array($type, vc_merchant_post_types(), true)
+        ? true : $exclude;
+}, 10, 2);

@@ -273,7 +273,8 @@ $required = array(
     'vc_layout_heading', 'vc_layout_heading_defaults', 'vc_layout_custom_content',
     'vc_block_heading', 'vc_merchant_custom_block',
     'vc_rehub_active', 'vc_rehub_sync_merchant', 'vc_rehub_term_map',
-    'vc_rehub_offer_map',
+    'vc_rehub_offer_map', 'vc_rehub_handover', 'vc_merchant_permalink',
+    'vc_merchant_link', 'vc_rehub_unmatched_count',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
@@ -379,7 +380,23 @@ if (function_exists('vc_rehub_term_map')) {
 
     check('the adapter does nothing when ReHub is absent', vc_rehub_active() === false,
         'taxonomy_exists() is stubbed false here, so this must be false');
+    check('the handover cannot engage without ReHub', vc_rehub_handover() === false,
+        'it would 301 every store page to a term that does not exist');
 }
+
+$bypass = array();
+foreach (array('wp-merchant-archive.php', 'wp-merchant-sections.php',
+               'wp-merchant-render.php') as $file) {
+    $src = @file_get_contents(__DIR__ . '/' . $file);
+    if ($src === false) { continue; }
+    // get_permalink() on a merchant id bypasses vc_merchant_link(), so a
+    // handed-over site would link at pages that 301 straight back out.
+    if (preg_match('/get_permalink\(\s*\$(post_id|id|post->ID)\s*\)/', $src)) {
+        $bypass[] = $file;
+    }
+}
+check('no merchant link bypasses the handover resolver',
+    empty($bypass), implode(', ', $bypass));
 
 echo "\nShipped files\n";
 $files = array(

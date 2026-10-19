@@ -422,7 +422,7 @@ function vc_archive_schema_graph() {
             $items[] = array(
                 '@type'    => 'ListItem',
                 'position' => $position++,
-                'url'      => get_permalink($post->ID),
+                'url'      => vc_merchant_link($post->ID),
                 'name'     => function_exists('vc_merchant_display_name')
                     ? vc_merchant_display_name($post->ID)
                     : get_the_title($post->ID),
@@ -500,7 +500,7 @@ function vc_archive_merchant_card($post_id) {
     $offer = trim((string) get_post_meta($post_id, 'best_offer_summary', true));
     $ship  = trim((string) get_post_meta($post_id, 'free_shipping_info', true));
     $badge = function_exists('vc_merchant_offer_badge') ? vc_merchant_offer_badge($post_id) : '';
-    $url   = get_permalink($post_id);
+    $url   = vc_merchant_link($post_id);
 
     $out  = '<li class="vc-archive-card">';
     $out .= '<div class="vc-archive-card__body">';
@@ -633,7 +633,7 @@ function vc_archive_excluded_html($term = null) {
     foreach ($ids as $id) {
         $name = function_exists('vc_merchant_display_name')
             ? vc_merchant_display_name($id) : get_the_title($id);
-        $items .= '<li><a href="' . esc_url(get_permalink($id)) . '">'
+        $items .= '<li><a href="' . esc_url(vc_merchant_link($id)) . '">'
             . esc_html($name) . '</a></li>';
     }
 

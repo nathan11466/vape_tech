@@ -94,6 +94,20 @@ add_action('init', 'vc_register_merchant_post_type', 5);
  * Load the rest of the plugin. Each file is optional, so a partial upload
  * degrades rather than fataling the site.
  */
+/**
+ * The URL for a store's page.
+ *
+ * Normally its own permalink. Once the ReHub handover is on, the ReHub store
+ * that replaced it -- so every internal link in the plugin agrees with where
+ * the page actually is. Defined here rather than in the ReHub module so a
+ * site without the theme still resolves links.
+ */
+function vc_merchant_link($post_id) {
+    return function_exists('vc_merchant_permalink')
+        ? vc_merchant_permalink($post_id)
+        : get_permalink($post_id);
+}
+
 foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
                'wp-merchant-seo.php', 'wp-merchant-archive.php',
                'wp-merchant-sections.php', 'wp-merchant-editor.php',

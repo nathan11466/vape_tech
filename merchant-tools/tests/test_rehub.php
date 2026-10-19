@@ -48,7 +48,8 @@ function apply_filters($tag, $value) {
     return $value;
 }
 function add_filter($t, $fn, $p = 10, $n = 1) { $GLOBALS['filters'][$t][] = $fn; }
-function add_action() {}
+$GLOBALS['options'] = array();
+function add_action($t, $fn = null, $p = 10, $n = 1) { $GLOBALS['hooks'][$t][] = $fn; }
 function add_submenu_page() {}
 function current_user_can() { return true; }
 function wp_verify_nonce() { return false; }
@@ -60,6 +61,24 @@ function esc_html__($v, $d = null) { return $v; }
 function esc_html_e($v, $d = null) { echo $v; }
 function __($v, $d = null) { return $v; }
 function vc_merchant_post_types() { return array('merchant'); }
+function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
+function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
+function get_permalink($id = null) { return 'https://vapingcheap.com/stores/store-' . $id . '/'; }
+function get_term_link($t) {
+    $t = is_object($t) ? $t : ($GLOBALS['terms'][$t] ?? null);
+    return $t ? 'https://vapingcheap.com/coupon-codes/' . sanitize_title($t->name) . '/' : new WP_Error();
+}
+function sanitize_title($v) { return strtolower(trim(preg_replace('/[^a-z0-9]+/i','-',$v),'-')); }
+function is_singular() { return !empty($GLOBALS['is_singular']); }
+function get_post_type($id = null) { return $GLOBALS['current_type'] ?? 'merchant'; }
+function get_the_ID() { return $GLOBALS['current_id'] ?? 0; }
+function flush_rewrite_rules() { $GLOBALS['flushed'] = ($GLOBALS['flushed'] ?? 0) + 1; }
+function checked($a, $b = true, $e = true) { return ''; }
+function wp_safe_redirect($url, $code = 302) { throw new Redirected($url, $code); }
+class Redirected extends Exception {
+    public $url, $code;
+    function __construct($u, $c) { parent::__construct('r'); $this->url = $u; $this->code = $c; }
+}
 function vc_merchant_display_name($id = null) {
     $d = trim((string) get_post_meta($id, 'display_brand_name', true));
     return $d !== '' ? $d : get_the_title($id);
@@ -282,6 +301,114 @@ $theme_offer_keys = array('rehub_offer_btn_text', 'rehub_offer_coupon_date',
 $unknown = array_diff(array_keys(vc_rehub_offer_map()), $theme_offer_keys);
 check('every offer field written is one ReHub defines',
     empty($unknown), implode(', ', $unknown));
+
+/* -------------------------------------------------------------------------
+ * The handover
+ *
+ * Our store pages and ReHub's are two URLs for the same shop. Handing over
+ * must redirect rather than delete -- 404ing 112 pages would throw away
+ * whatever links and ranking they have -- and every internal link has to
+ * agree with where the page actually is.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$h = store(200);
+$res = vc_rehub_sync_merchant($h);
+$hterm = $res['term_id'];
+
+check('handover is off by default', !vc_rehub_handover());
+check('and a link points at our own page while it is off',
+    strpos(vc_merchant_permalink($h), '/stores/') !== false, vc_merchant_permalink($h));
+
+$GLOBALS['options']['vc_rehub_handover'] = '1';
+check('handover reads as on once set', vc_rehub_handover());
+check('and every link now points at the ReHub store',
+    strpos(vc_merchant_permalink($h), '/coupon-codes/voopoo/') !== false,
+    vc_merchant_permalink($h));
+
+// A store with nowhere to go must keep its own URL rather than link nowhere.
+$GLOBALS['titles'][201] = 'Never Synced';
+$GLOBALS['meta'][201] = array('display_brand_name' => 'Never Synced');
+check('an unsynced store keeps its own URL rather than linking nowhere',
+    strpos(vc_merchant_permalink(201), '/stores/') !== false,
+    vc_merchant_permalink(201));
+
+// With ReHub absent the switch must be inert, however the option is set.
+$GLOBALS['taxes'] = array();
+check('handover is inert when ReHub is not installed', !vc_rehub_handover());
+check('so links fall back to our own pages',
+    strpos(vc_merchant_permalink($h), '/stores/') !== false);
+$GLOBALS['taxes'] = array('dealstore');
+
+/* --- The redirect ------------------------------------------------------ */
+
+function fire_redirect() {
+    foreach ($GLOBALS['hooks']['template_redirect'] ?? array() as $fn) {
+        try { $fn(); } catch (Redirected $r) { return array($r->url, $r->code); }
+    }
+    return null;
+}
+
+$GLOBALS['is_singular'] = true;
+$GLOBALS['current_id'] = $h;
+$GLOBALS['current_type'] = 'merchant';
+$r = fire_redirect();
+check('a handed-over store page 301s to its ReHub store',
+    $r && $r[1] === 301 && strpos($r[0], '/coupon-codes/voopoo/') !== false, json_encode($r));
+
+$GLOBALS['current_id'] = 201;
+check('a store with no ReHub store is NOT redirected',
+    fire_redirect() === null);
+
+$GLOBALS['current_id'] = $h;
+$GLOBALS['current_type'] = 'post';
+check('an unrelated post type is never redirected', fire_redirect() === null);
+$GLOBALS['current_type'] = 'merchant';
+
+$GLOBALS['is_singular'] = false;
+check('an archive is never redirected', fire_redirect() === null);
+$GLOBALS['is_singular'] = true;
+
+$GLOBALS['options']['vc_rehub_handover'] = '';
+check('nothing is redirected while handover is off', fire_redirect() === null);
+$GLOBALS['options']['vc_rehub_handover'] = '1';
+
+/* --- Noindex and sitemap, as belt and braces -------------------------- */
+
+function robots_now() {
+    $r = array('index' => 'index', 'follow' => 'follow');
+    foreach ($GLOBALS['filters']['rank_math/frontend/robots'] ?? array() as $fn) {
+        $r = $fn($r);
+    }
+    return $r;
+}
+$rb = robots_now();
+check('a handed-over page is noindexed even if the redirect fails',
+    ($rb['index'] ?? '') === 'noindex', json_encode($rb));
+check('but still followed, so link equity moves on',
+    ($rb['follow'] ?? '') === 'follow', json_encode($rb));
+
+$GLOBALS['options']['vc_rehub_handover'] = '';
+check('and it is indexable again once handover is off',
+    (robots_now()['index'] ?? '') === 'index');
+$GLOBALS['options']['vc_rehub_handover'] = '1';
+
+$types = array('merchant' => true, 'post' => true);
+foreach ($GLOBALS['filters']['wp_sitemaps_post_types'] ?? array() as $fn) {
+    $types = $fn($types);
+}
+check('handed-over pages leave the sitemap',
+    !isset($types['merchant']) && isset($types['post']), json_encode(array_keys($types)));
+
+/* --- The guard against handing over too early ------------------------- */
+
+$GLOBALS['query_ids'] = array($h, 201);
+check('unmatched stores are counted before handover is allowed',
+    vc_rehub_unmatched_count() === 1, (string) vc_rehub_unmatched_count());
+
+$GLOBALS['query_ids'] = array($h);
+check('and the count is zero once everything is synced',
+    vc_rehub_unmatched_count() === 0, (string) vc_rehub_unmatched_count());
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
