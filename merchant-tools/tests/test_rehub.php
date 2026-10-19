@@ -61,6 +61,9 @@ function esc_html__($v, $d = null) { return $v; }
 function esc_html_e($v, $d = null) { echo $v; }
 function __($v, $d = null) { return $v; }
 function vc_merchant_post_types() { return array('merchant'); }
+function vc_merchant_coupon_shortcode($id = null) {
+    return $GLOBALS['coupon_sc'] ?? '[coupon_deals brand="voopoo"]';
+}
 function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
 function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
 function get_permalink($id = null) { return 'https://vapingcheap.com/stores/store-' . $id . '/'; }
@@ -409,6 +412,59 @@ check('unmatched stores are counted before handover is allowed',
 $GLOBALS['query_ids'] = array($h);
 check('and the count is zero once everything is synced',
     vc_rehub_unmatched_count() === 0, (string) vc_rehub_unmatched_count());
+
+/* -------------------------------------------------------------------------
+ * Getting coupon cards onto a ReHub store page
+ *
+ * ReHub's store listing queries post_type => 'post' only, so neither the
+ * coupon plugin's wcd_coupon posts nor our merchant posts can ever appear in
+ * it. Both store descriptions do run through do_shortcode, which is the one
+ * route in.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$e = store(300, array('best_ways_to_save' => 'Sign up for the newsletter.'));
+
+check('no coupon shortcode is embedded while the option is off',
+    vc_rehub_coupon_embed($e) === '', vc_rehub_coupon_embed($e));
+
+$res = vc_rehub_sync_merchant($e);
+check('so the bottom description is just our savings text',
+    get_term_meta($res['term_id'], 'brand_second_description', true)
+        === 'Sign up for the newsletter.',
+    get_term_meta($res['term_id'], 'brand_second_description', true));
+
+$GLOBALS['options']['vc_rehub_embed_coupons'] = '1';
+check('the shortcode is embedded once the option is on',
+    strpos(vc_rehub_coupon_embed($e), '[coupon_deals') === 0, vc_rehub_coupon_embed($e));
+
+$e2 = store(301, array('display_brand_name' => 'Embed Store',
+                       'best_ways_to_save' => 'Watch for seasonal sales.'));
+$res2 = vc_rehub_sync_merchant($e2);
+$desc = get_term_meta($res2['term_id'], 'brand_second_description', true);
+check('the description keeps our text AND gains the shortcode',
+    strpos($desc, 'Watch for seasonal sales.') !== false
+    && strpos($desc, '[coupon_deals') !== false, $desc);
+check('with the text first, so the cards sit below the prose',
+    strpos($desc, 'Watch') < strpos($desc, '[coupon_deals'), $desc);
+
+// A store with no savings text should still get the cards.
+$e3 = store(302, array('display_brand_name' => 'Bare Store', 'best_ways_to_save' => ''));
+$res3 = vc_rehub_sync_merchant($e3);
+check('a store with no prose still gets the coupon cards',
+    strpos(get_term_meta($res3['term_id'], 'brand_second_description', true), '[coupon_deals') === 0,
+    get_term_meta($res3['term_id'], 'brand_second_description', true));
+
+// An unscoped shortcode would list every coupon on the site on every page.
+$GLOBALS['coupon_sc'] = '';
+$e4 = store(303, array('display_brand_name' => 'No Brand Link'));
+$res4 = vc_rehub_sync_merchant($e4);
+check('a store with no coupon brand embeds nothing rather than an unscoped list',
+    strpos(get_term_meta($res4['term_id'], 'brand_second_description', true), '[coupon_deals') === false,
+    get_term_meta($res4['term_id'], 'brand_second_description', true));
+unset($GLOBALS['coupon_sc']);
+
+$GLOBALS['options']['vc_rehub_embed_coupons'] = '';
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

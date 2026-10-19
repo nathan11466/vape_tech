@@ -63,7 +63,19 @@ function vc_rehub_term_map() {
                 : trim((string) get_post_meta($post_id, 'brand_summary', true));
         },
         'brand_second_description' => function ($post_id) {
-            return trim((string) get_post_meta($post_id, 'best_ways_to_save', true));
+            $text = trim((string) get_post_meta($post_id, 'best_ways_to_save', true));
+
+            // ReHub runs both store descriptions through do_shortcode
+            // (taxonomy-dealstore.php:60 and :201), which is the only way to
+            // get coupon cards onto a ReHub store page: its own listing is
+            // post_type => 'post', so neither wcd_coupon posts nor our
+            // merchant posts can ever appear in it.
+            $embed = vc_rehub_coupon_embed($post_id);
+            if ($embed !== '') {
+                $text = $text === '' ? $embed : $text . "\n\n" . $embed;
+            }
+
+            return $text;
         },
     ));
 }
@@ -133,6 +145,24 @@ function vc_rehub_offer_map() {
             return implode(' ', $parts);
         },
     ));
+}
+
+/**
+ * The coupon shortcode to embed on a ReHub store page, if any.
+ *
+ * Returns '' when the option is off, the coupon plugin is absent, or this
+ * store has no brand to scope the shortcode to -- an unscoped one would list
+ * every coupon on the site on every store page.
+ */
+function vc_rehub_coupon_embed($post_id) {
+    if (get_option('vc_rehub_embed_coupons', '') !== '1') {
+        return '';
+    }
+    if (!function_exists('vc_merchant_coupon_shortcode')) {
+        return '';
+    }
+
+    return trim((string) vc_merchant_coupon_shortcode($post_id));
 }
 
 /**
@@ -232,8 +262,11 @@ function vc_rehub_sync_merchant($post_id, $overwrite = false) {
         $offer++;
     }
 
-    // Assign the merchant post to its own store term, so it appears in
-    // ReHub's store archive and its filter panel.
+    // Assign the merchant post to its store term. This does NOT make it
+    // appear in ReHub's store listing -- that query is post_type => 'post'
+    // only (module_shortcodes.php, the default branch), so a custom post type
+    // can never show there. It is done for the admin column and so our own
+    // queries can find the pair.
     wp_set_object_terms($post_id, array((int) $term->term_id), 'dealstore', false);
 
     return array('term_id' => (int) $term->term_id, 'fields' => $written, 'offer' => $offer);
@@ -307,7 +340,11 @@ function vc_rehub_screen() {
     if (!empty($_POST['vc_rehub_nonce'])
         && wp_verify_nonce($_POST['vc_rehub_nonce'], 'vc_rehub_sync')) {
 
-        if (isset($_POST['vc_rehub_handover_submit'])) {
+        if (isset($_POST['vc_rehub_options_submit'])) {
+            update_option('vc_rehub_embed_coupons',
+                !empty($_POST['embed_coupons']) ? '1' : '');
+            $handover_notice = __('Saved. Re-sync with "Replace values already set" ticked to push the change onto stores already synced.', 'vc-merchant');
+        } elseif (isset($_POST['vc_rehub_handover_submit'])) {
             $want = !empty($_POST['handover']);
 
             // Refuse to hand over before the stores exist, which would 301
@@ -394,6 +431,21 @@ function vc_rehub_screen() {
                 <tr>
                     <th scope="row"><label for="batch"><?php esc_html_e('Batch size', 'vc-merchant'); ?></label></th>
                     <td><input type="number" name="batch" id="batch" value="25" min="1" class="small-text" /></td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Coupon cards', 'vc-merchant'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="embed_coupons" value="1"
+                                <?php checked(get_option('vc_rehub_embed_coupons', '') === '1'); ?> />
+                            <?php esc_html_e('Embed the coupon shortcode on each ReHub store page', 'vc-merchant'); ?>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('ReHub\'s own store listing queries ordinary posts only, so neither the coupon plugin\'s coupons nor our store records can appear in it. ReHub does run both store descriptions through the shortcode parser, which is how the coupon cards get there. Save this, then sync.', 'vc-merchant'); ?>
+                        </p>
+                        <?php submit_button(__('Save option', 'vc-merchant'), 'secondary',
+                            'vc_rehub_options_submit', false); ?>
+                    </td>
                 </tr>
                 <tr>
                     <th scope="row"><?php esc_html_e('Existing values', 'vc-merchant'); ?></th>
