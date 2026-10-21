@@ -16,17 +16,33 @@ alone, so it is safe to re-run as your data improves.
     python fetch_merchant_data.py merchants-enriched.csv --out merchants-filled.csv
 
     --limit 10          try ten merchants first
+    --start 40          skip the first forty; with --limit, one chunk
     --only "VooPoo"     a single merchant by name
     --delay 2.0         seconds between merchants (default 1.5)
     --skip-policies     homepage only; much faster, finds links but no states
     --skip-logos        do not look for brand_logo_url
+    --resume            carry on where the last run stopped
+
+The full policy pass reads up to eight pages per store, so a 110-store run
+takes a while and may not survive the machine going to sleep. The output is
+therefore rewritten after every merchant, and each one finished is recorded
+in a sidecar file next to it. Re-run the same command with --resume and the
+ones already done are skipped:
+
+    python fetch_merchant_data.py merchants.csv --out filled.csv --resume
+
+That is safe to repeat as often as you like. Point --resume runs at the same
+--out each time, and the file is replaced whole, so an interrupted run leaves
+the previous version intact rather than a half-written one.
 """
 
 import argparse
 import csv
 import gzip
+import hashlib
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -34,7 +50,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-VERSION = "1.3 (logo discovery)"
+VERSION = "1.4 (resumable policy pass)"
 
 BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -54,6 +70,17 @@ SOCIAL_DOMAINS = {
     "reddit.com": "Reddit", "pinterest.com": "Pinterest",
     "linkedin.com": "LinkedIn", "discord.gg": "Discord", "t.me": "Telegram",
     "threads.net": "Threads",
+}
+
+# Review sites, for trust_source_url. Only ever read from a link the store
+# publishes itself -- see find_review_pages.
+REVIEW_DOMAINS = {
+    "trustpilot.com": "Trustpilot",
+    "sitejabber.com": "Sitejabber",
+    "resellerratings.com": "ResellerRatings",
+    "bbb.org": "BBB",
+    "reviews.io": "Reviews.io",
+    "yotpo.com": "Yotpo",
 }
 
 # Policy pages, matched on URL path first and link text second.
@@ -95,12 +122,69 @@ US_STATES = [
     "Washington", "West Virginia", "Wisconsin", "Wyoming",
 ]
 
+# Most stores write their exclusions as codes, not names: "We cannot ship to
+# AR, HI, SD, UT, VT". Reading only full names missed nearly all of them.
+STATE_ABBR = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut",
+    "DE": "Delaware", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
+    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
+    "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan",
+    "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
+    "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+    "NY": "New York", "NC": "North Carolina", "ND": "North Dakota",
+    "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania",
+    "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
+    "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming",
+}
+
 # Sentences that introduce places a merchant will NOT serve.
-EXCLUSION_CUE = re.compile(
+#
+# Two tiers, because the loose words cost more than they earn. "ban" with no
+# boundaries matched Albany, banner and urban; it put Pennsylvania into one
+# store's exclusions out of a nav link reading "Pennsylvania Vape Ban 2026".
+# So ban/prohibit/restrict now need both word boundaries and a sentence that
+# is actually about shipping or selling.
+STRONG_CUE = re.compile(
     r"(cannot|can't|do not|don't|unable to|not)\s+ship|"
-    r"\bexcept\b|not available in|no longer ship|restrict|prohibit|ban",
+    r"\bexcept\b|not available in|no longer ship|"
+    r"(do not|don't|cannot|can't|unable to)\s+(sell|deliver)",
     re.I,
 )
+
+WEAK_CUE = re.compile(
+    r"\brestrict(ed|ions?|s)?\b|\bprohibit(ed|ion|s)?\b|\bban(ned|s)?\b",
+    re.I,
+)
+
+WEAK_CUE_CONTEXT = re.compile(
+    r"\bship(ping|ped|ment)?\b|\bdeliver(y|ed|ies)?\b|\bsell\b|\bsold\b|"
+    r"\bsale\b|\bavailable\b|\border(s|ed)?\b",
+    re.I,
+)
+
+# A page that yields more than this many states is not one exclusion list.
+# It is a state-by-state legality table, or several per-product lists run
+# together -- one store's page reads "All cannabinoid products: not available
+# in Alabama, California, Idaho, New Jersey. THCa: not available in [38 more]"
+# and merging those says the store ships nowhere, which is false and would
+# pull it off every state page on the site.
+MAX_PLAUSIBLE_EXCLUSIONS = 30
+
+# Worth a human look, even though it is kept: at this size the list may be
+# for one product line rather than the whole store.
+CHECK_EXCLUSIONS_OVER = 14
+
+# What the enrichment step writes into shipping_restrictions when nothing was
+# known. Once a real exclusion list turns up, that sentence is not merely
+# incomplete -- it contradicts restricted_states, and it is the sentence
+# derive_shipping reads to decide which state pages a store belongs on.
+STALE_NO_RESTRICTIONS = re.compile(
+    r"could not confirm any state shipping restrictions", re.I)
 
 ADULT_SIG = re.compile(
     r"adult signature|signature required|21\+?\s*signature|"
@@ -109,8 +193,38 @@ ADULT_SIG = re.compile(
 )
 
 
+# Set by --cache. Every page fetched is kept here, and read from here on the
+# next run, so improving the parser costs one re-run of the parser rather
+# than a second hour of requests to 110 shops. Delete the directory to go
+# back to the live sites.
+CACHE_DIR = ""
+
+
+def _cache_path(url):
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:40]
+    return os.path.join(CACHE_DIR, digest)
+
+
 def fetch(url, timeout=20):
     """GET a URL as a browser would. Returns text, or None."""
+    if CACHE_DIR:
+        path = _cache_path(url)
+        if os.path.exists(path):
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                body = fh.read()
+            # An empty cache entry records a page that did not load, which is
+            # as much a result as a body and should not be retried.
+            return body or None
+
+    body = _fetch_live(url, timeout)
+
+    if CACHE_DIR:
+        with open(_cache_path(url), "w", encoding="utf-8") as fh:
+            fh.write(body or "")
+    return body
+
+
+def _fetch_live(url, timeout=20):
     request = urllib.request.Request(url, headers={
         "User-Agent": BROWSER_UA,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -158,17 +272,37 @@ def find_socials(links):
     return found
 
 
+# Never a policy page, however the link happens to be labelled. A nav item
+# reading "Free shipping over $50" pointing at a product collection used to
+# win the shipping_policy_url slot, and that URL is published on the page as
+# the source for the shipping facts.
+NOT_A_POLICY = re.compile(
+    r"/(collections|products|blogs|blog|cart|account|search|checkout)(/|$)",
+    re.I)
+
+
 def find_policies(links, base_url):
     found = {}
     for field, (path_re, text_re) in POLICY_PATTERNS.items():
+        by_path, by_text = "", ""
         for url, text in links:
             parsed = urllib.parse.urlparse(url)
             # Same-site links only.
             if parsed.netloc and parsed.netloc.replace("www.", "") not in base_url:
                 continue
-            if path_re.search(parsed.path) or text_re.search(text):
-                found[field] = url
+            if NOT_A_POLICY.search(parsed.path):
+                continue
+            if path_re.search(parsed.path):
+                by_path = url
                 break
+            if text_re.search(text) and not by_text:
+                by_text = url
+        # A URL that looks like a policy beats a link that merely reads like
+        # one. Link text is written for shoppers; paths are written by the
+        # platform.
+        chosen = by_path or by_text
+        if chosen:
+            found[field] = chosen
     return found
 
 
@@ -443,20 +577,121 @@ def find_logo(html, base_url, brand_name=""):
     return "", ""
 
 
+def abbrevs_in(sentence):
+    """
+    State codes in a sentence -- but only from a list of three or more.
+
+    Taken alone, half the codes are ordinary English words: OR, IN, ME, OK,
+    HI, DE, LA, MS, MD, PA, AL, CO, ID, MI, MO, NE, OH, SC. And "CA" in
+    "we do not ship to the US, UK or CA" is Canada, not California. Writing
+    a state into restricted_states takes a store off that state's page, so a
+    false positive costs real traffic and states something untrue about a
+    business.
+
+    Three or more codes together is a list, and a list is unambiguous. One
+    or two are not worth the risk, so they are dropped -- a genuine
+    single-state exclusion is almost always spelled out in full anyway, and
+    the full-name scan catches that.
+    """
+    # A lone code in brackets qualifies a city or county -- "Denver (CO)" --
+    # rather than naming an excluded state. A bracketed list of several, as
+    # in "(AR, HI, SD)", is a real list and is left alone.
+    sentence = re.sub(r"\(\s*[A-Z]{2}\s*\)", " ", sentence)
+
+    found = []
+    for code in re.findall(r"\b([A-Z]{2})\b", sentence):
+        state = STATE_ABBR.get(code)
+        if state and state not in found:
+            found.append(state)
+    return found if len(found) >= 3 else []
+
+
+def visible_text(html):
+    """
+    Page text with the code stripped out first.
+
+    Stripping tags alone leaves every line of inline JavaScript behind as
+    prose, and a theme's scripts are full of words like "return", "ban" and
+    state names in option lists. Scripts and styles have to go before the
+    tags do.
+    """
+    plain = re.sub(r"(?is)<(script|style|noscript)\b.*?</\1\s*>", " ", html)
+    # Each link's text is its own unit. A nav bar carries no punctuation, so
+    # forty unrelated link labels flatten into one enormous "sentence" --
+    # which is how the blog headline "Pennsylvania Vape Ban 2026" came to
+    # sit in the same sentence as the words "Free Shipping" and put
+    # Pennsylvania into a store's exclusions. A pipe is a sentence break.
+    plain = re.sub(r"(?i)</a\s*>", " | ", plain)
+    plain = re.sub(r"<[^>]+>", " ", plain)
+    return re.sub(r"\s+", " ", plain)
+
+
+# "Sarasota County (FL)", "Union County, Florida" -- a restriction on one
+# county is not a restriction on the state. Reading those as states took one
+# store off the whole of Florida, North Carolina, Colorado, California,
+# Illinois and Mississippi over six counties and towns.
+SUBSTATE_QUALIFIER = re.compile(r"\b(county|parish|city of|cities of)\b"
+                                r"[\s,of]*$", re.I)
+
+
+def is_exclusion(sentence):
+    """Does this sentence introduce places the store will not serve?"""
+    if STRONG_CUE.search(sentence):
+        return True
+    # The loose words only count where the sentence is about shipping.
+    return bool(WEAK_CUE.search(sentence)
+                and WEAK_CUE_CONTEXT.search(sentence))
+
+
 def find_restrictions(text):
     """States named in a sentence that reads like an exclusion."""
-    plain = re.sub(r"<[^>]+>", " ", text)
-    plain = re.sub(r"\s+", " ", plain)
+    plain = visible_text(text)
     restricted = []
-    for sentence in re.split(r"(?<=[.;!?])\s+", plain):
-        if not EXCLUSION_CUE.search(sentence):
+
+    def add(state):
+        if state not in restricted:
+            restricted.append(state)
+
+    for sentence in re.split(r"(?<=[.;!?|])\s+", plain):
+        if not is_exclusion(sentence):
             continue
-        if len(sentence) > 600:
+        # An exclusion list runs long -- a bulleted list of twenty states
+        # flattens into one sentence of well over a thousand characters, and
+        # the old 600-character cap threw exactly those away. The cap is here
+        # only to stop a whole untagged page counting as one sentence.
+        if len(sentence) > 2500:
             continue
         for state in US_STATES:
-            if re.search(r"\b" + re.escape(state) + r"\b", sentence) and state not in restricted:
-                restricted.append(state)
+            for match in re.finditer(r"\b" + re.escape(state) + r"\b", sentence):
+                if SUBSTATE_QUALIFIER.search(sentence[:match.start()][-30:]):
+                    continue
+                add(state)
+                break
+        for state in abbrevs_in(sentence):
+            add(state)
+
+    if len(restricted) > MAX_PLAUSIBLE_EXCLUSIONS:
+        return []
     return restricted
+
+
+def find_review_pages(links):
+    """
+    Review-site profiles the store links to itself.
+
+    Only a page the merchant publishes counts. A Trustpilot URL guessed from
+    the domain cannot be verified from here -- Trustpilot returns 403 to
+    anything that is not a browser -- and an unverified profile link is a
+    claim nobody checked. A link in the store's own footer is the store
+    saying the profile is theirs.
+    """
+    found = {}
+    for url, _ in links:
+        host = (urllib.parse.urlparse(url).netloc or "").lower().replace("www.", "")
+        for domain, label in REVIEW_DOMAINS.items():
+            if host == domain or host.endswith("." + domain):
+                found.setdefault(label, url)
+    return found
 
 
 def process(row, args, log):
@@ -506,6 +741,17 @@ def process(row, args, log):
 
     put("contact_email", find_email(html, urllib.parse.urlparse(base).netloc))
 
+    reviews = find_review_pages(links)
+    if reviews:
+        # Whichever the store links to. Trustpilot first if they have one,
+        # since that is the one the Company Information section expects.
+        for label in ("Trustpilot", "BBB", "Sitejabber", "ResellerRatings",
+                      "Reviews.io", "Yotpo"):
+            if label in reviews:
+                put("trust_source_url", reviews[label], f"trust({label})")
+                put("trust_verified_at", time.strftime("%Y-%m-%d"))
+                break
+
     if not args.skip_logos and not (row.get("brand_logo_url") or "").strip():
         logo, logo_source = find_logo(html, base, name)
         if logo:
@@ -531,10 +777,16 @@ def process(row, args, log):
             (row.get("returns_policy_url") or "").strip(),
         ]
         for path in ("/pages/shipping-restrictions", "/pages/restricted-states",
-                     "/pages/pact-act", "/pages/shipping-information"):
+                     "/pages/pact-act", "/pages/shipping-information",
+                     "/pages/pact-act-compliance", "/pages/shipping",
+                     "/pages/shipping-and-returns", "/pages/faq",
+                     "/pages/faqs", "/pages/shipping-faq",
+                     "/policies/shipping-policy"):
             candidates.append(urllib.parse.urljoin(base, path))
 
         seen = set()
+        first_loaded = ""
+        restriction_page = ""
         for url in candidates:
             if not url or url in seen:
                 continue
@@ -543,38 +795,89 @@ def process(row, args, log):
             policy = fetch(url)
             if not policy:
                 continue
+            if not first_loaded:
+                first_loaded = url
 
             if args.debug:
-                plain = re.sub(r"<[^>]+>", " ", policy)
-                plain = re.sub(r"\s+", " ", plain)
+                plain = visible_text(policy)
                 named = [st for st in US_STATES if re.search(r"\b" + st + r"\b", plain)]
-                cues = len(EXCLUSION_CUE.findall(plain))
+                cues = len(STRONG_CUE.findall(plain))
                 print(f"\n    [debug] {url}")
-                print(f"    [debug] {len(plain)} chars, {cues} exclusion cue(s), "
+                print(f"    [debug] {len(plain)} chars, {cues} strong cue(s), "
                       f"states named: {named or 'none'}")
-                for m in list(EXCLUSION_CUE.finditer(plain))[:3]:
+                for m in list(STRONG_CUE.finditer(plain))[:3]:
                     lo, hi = max(0, m.start() - 90), min(len(plain), m.end() + 220)
                     print(f"    [debug] ...{plain[lo:hi]}...")
 
             restricted = find_restrictions(policy)
+            if len(restricted) > CHECK_EXCLUSIONS_OVER:
+                log.append(f"{name}: CHECK {len(restricted)} states excluded "
+                           f"on {url} - long lists are often per-product "
+                           f"rather than store-wide")
             if restricted and not (row.get("restricted_states") or "").strip():
                 page = urllib.parse.urlparse(url).path or url
+                restriction_page = url
                 put("restricted_states", "|".join(restricted),
                     f"restricted({len(restricted)} from {page})")
                 # A named exclusion list implies nationwide coverage otherwise
-                # -- phrase it the way derive_shipping reads.
-                put("shipping_restrictions",
-                    "Ships nationwide except " + ", ".join(restricted))
+                # -- phrase it the way derive_shipping reads. This one is
+                # allowed to replace the "could not confirm" placeholder,
+                # which is now demonstrably wrong; anything else in the cell
+                # was written by hand and is left alone.
+                summary = "Ships nationwide except " + ", ".join(restricted)
+                current = (row.get("shipping_restrictions") or "").strip()
+                if not current:
+                    put("shipping_restrictions", summary)
+                elif STALE_NO_RESTRICTIONS.search(current):
+                    row["shipping_restrictions"] = summary
+                    filled.append("shipping_restrictions(replaced)")
 
             if ADULT_SIG.search(policy):
                 put("do_they_id_on_delivery", "Yes - adult signature required")
 
-            put("fact_source_url", url)
+        # The page the exclusion list was actually read from, if there was
+        # one. fact_source_url is published on the merchant page as the
+        # source for these facts, so it has to point at the page that states
+        # them -- not at whichever policy page happened to load first.
+        source = restriction_page or first_loaded
+        if source:
+            put("fact_source_url", source)
+            # No date without a page to go with it: the page template prints
+            # "last verified" as a link, and a date on its own is a claim
+            # with nothing behind it.
             put("fact_last_verified", time.strftime("%Y-%m-%d"))
 
     log.append(f"{name}: {', '.join(filled) if filled else 'nothing new'}")
 
     return "ok" if filled else "no new data"
+
+
+def row_key(row):
+    """What identifies a merchant in the progress file."""
+    for field in ("externalMerchantKey", "brand_url", "display_brand_name",
+                  "brand_name"):
+        value = (row.get(field) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def write_csv(path, fieldnames, rows):
+    """
+    Replace the output file whole.
+
+    Written to a temporary name and moved into place, so a run killed
+    mid-write leaves the previous version readable rather than a file
+    truncated halfway through a row. That also makes it safe to pass the
+    same file as both input and output on a --resume run, since the input
+    has already been read into memory by then.
+    """
+    temp = path + ".tmp"
+    with open(temp, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    os.replace(temp, path)
 
 
 def main():
@@ -583,6 +886,16 @@ def main():
     parser.add_argument("input")
     parser.add_argument("--out", required=True)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--start", type=int, default=0,
+                        help="skip this many merchants before starting; with "
+                             "--limit, runs one chunk of the file")
+    parser.add_argument("--cache", default="",
+                        help="keep every page fetched in this directory, and "
+                             "read from it next time. Delete the directory "
+                             "to fetch the live sites again.")
+    parser.add_argument("--resume", action="store_true",
+                        help="skip merchants already recorded as done in "
+                             "<out>.done, and keep appending to it")
     parser.add_argument("--only", default="")
     parser.add_argument("--delay", type=float, default=1.5)
     parser.add_argument("--skip-policies", action="store_true")
@@ -593,6 +906,12 @@ def main():
     args = parser.parse_args()
 
     print(f"fetch_merchant_data {VERSION}")
+    if args.cache:
+        global CACHE_DIR
+        CACHE_DIR = args.cache
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        print(f"page cache: {CACHE_DIR} "
+              f"({len(os.listdir(CACHE_DIR))} page(s) held)")
     print()
 
     with open(args.input, newline="", encoding="utf-8-sig") as fh:
@@ -603,7 +922,8 @@ def main():
     for column in ("social_links", "useful_links", "shipping_policy_url",
                    "returns_policy_url", "age_policy_url", "do_they_id_on_delivery",
                    "restricted_states", "shipping_restrictions", "contact_email",
-                   "contact_page_url", "fact_source_url", "fact_last_verified"):
+                   "contact_page_url", "fact_source_url", "fact_last_verified",
+                   "trust_source_url", "trust_verified_at"):
         if column not in fieldnames:
             fieldnames.append(column)
         for row in rows:
@@ -613,8 +933,23 @@ def main():
     if args.only:
         targets = [r for r in rows if args.only.lower() in
                    ((r.get("brand_name") or "") + " " + (r.get("display_brand_name") or "")).lower()]
+    if args.start > 0:
+        targets = targets[args.start:]
     if args.limit > 0:
         targets = targets[:args.limit]
+
+    done_path = args.out + ".done"
+    already = set()
+    if args.resume and os.path.exists(done_path):
+        with open(done_path, encoding="utf-8") as fh:
+            already = {line.strip() for line in fh if line.strip()}
+        print(f"resuming - {len(already)} merchant(s) already recorded in "
+              f"{done_path}")
+        print()
+    elif not args.resume and os.path.exists(done_path):
+        # Without this the next --resume run would skip everything this run
+        # was about to redo.
+        os.remove(done_path)
 
     log = []
     stats = {"ok": 0, "no new data": 0, "homepage unreachable": 0, "no brand_url": 0}
@@ -622,6 +957,10 @@ def main():
 
     for index, row in enumerate(targets, 1):
         name = (row.get("brand_name") or row.get("display_brand_name") or "?")[:34]
+        key = row_key(row)
+        if key and key in already:
+            print(f"[{index}/{total}] {name:<34} already done")
+            continue
         print(f"[{index}/{total}] {name:<34} ", end="", flush=True)
         try:
             status = process(row, args, log)
@@ -632,13 +971,19 @@ def main():
             status = f"error: {exc.__class__.__name__}"
         stats[status] = stats.get(status, 0) + 1
         print(status)
+
+        # Write after every merchant, not at the end. A full policy pass runs
+        # for the better part of an hour, and a run that dies at merchant 45
+        # used to lose all 45.
+        write_csv(args.out, fieldnames, rows)
+        if key:
+            with open(done_path, "a", encoding="utf-8") as fh:
+                fh.write(key + "\n")
+
         if index < total:
             time.sleep(args.delay)
 
-    with open(args.out, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(args.out, fieldnames, rows)
 
     print()
     print(f"Wrote {args.out}")

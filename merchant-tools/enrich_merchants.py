@@ -480,7 +480,14 @@ def main():
 
         if status != "Ready":
             review_rows.append({
-                "brand_name": row.get("brand_name", ""),
+                # display_brand_name is filled above from brand_name when
+                # it is blank, so it is the one column certain to hold a
+                # name. Reading brand_name directly left this report, and
+                # the whole review queue, with a blank name column for any
+                # file exported without that column -- which is every file
+                # exported from the live site.
+                "brand_name": (row.get("display_brand_name")
+                               or row.get("brand_name", "")),
                 "content_score": score,
                 "publish_status": status,
                 "content_confidence": confidence,
