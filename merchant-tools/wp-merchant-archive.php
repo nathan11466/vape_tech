@@ -409,13 +409,68 @@ function vc_archive_sibling_links($term = null, $limit = 12) {
  * Inject intro, FAQs and sibling links into the archive description, which is
  * where themes already print term copy -- no template file required.
  */
+/**
+ * Has the editorial block already been printed on this request?
+ *
+ * Two hooks can print it and only one of them should. Call with true to
+ * claim the slot; whichever fires first wins and the other stands down.
+ */
+function vc_archive_intro_claimed($claim = false) {
+    // A global rather than a static so a test can render two different
+    // pages in one process, which is the only way to check that the two
+    // hooks do not both print.
+    if ($claim) {
+        $was = !empty($GLOBALS['vc_archive_intro_claimed']);
+        $GLOBALS['vc_archive_intro_claimed'] = true;
+
+        return $was;
+    }
+
+    return !empty($GLOBALS['vc_archive_intro_claimed']);
+}
+
+/**
+ * Whether the editorial block belongs on this view at all.
+ *
+ * Page one only. A paginated archive is noindex, follow by design, and
+ * repeating the intro across eight pages of Texas listings would be eight
+ * copies of it.
+ */
+function vc_archive_wants_intro() {
+    return vc_is_merchant_archive() && !is_paged();
+}
+
 add_filter('get_the_archive_description', function ($description) {
-    if (!vc_is_merchant_archive()) {
+    if (!vc_archive_wants_intro() || vc_archive_intro_claimed(true)) {
         return $description;
     }
 
     return vc_archive_intro() . $description;
 });
+
+/**
+ * Print the editorial block above the listing when the theme never asked
+ * for the archive description.
+ *
+ * get_the_archive_description() is the hook themes are supposed to use for
+ * term copy, and most do. ReHub does not call it on a taxonomy archive at
+ * all -- which meant the intro, the local-rules note and the explainer
+ * link were written to the database by the importer and then rendered
+ * nowhere, with no error to go on. The only visible symptom was a page
+ * that looked exactly like one where the import had not been run.
+ *
+ * loop_start fires in any theme that runs a WordPress loop, so this is the
+ * fallback. The claim flag stops the two from both printing.
+ */
+add_action('loop_start', function ($query) {
+    if (!$query instanceof WP_Query || !$query->is_main_query()) {
+        return;
+    }
+    if (!vc_archive_wants_intro() || vc_archive_intro_claimed(true)) {
+        return;
+    }
+    echo vc_archive_intro();
+}, 5);
 
 /**
  * Append FAQs and internal links after the loop.

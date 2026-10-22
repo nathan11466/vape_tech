@@ -33,6 +33,7 @@ function get_queried_object() { return $GLOBALS['queried']; }
 function is_tax($t = '') { return $GLOBALS['queried'] !== null; }
 function is_singular() { return false; }
 function is_main_query() { return true; }
+function is_paged() { return !empty($GLOBALS['is_paged']); }
 function get_terms($a = array()) {
     $out = array();
     foreach ($GLOBALS['sibling_terms'] as $t) {
@@ -95,6 +96,7 @@ class WP_Error { function get_error_message() { return 'err'; } }
 class WP_Query {
     public $posts = array();
     function __construct($a = array()) { $this->posts = $GLOBALS['query_posts']; }
+    function is_main_query() { return true; }
 }
 
 require __DIR__ . '/../wp-merchant-archive.php';
@@ -180,6 +182,86 @@ check('and is singular for one store',
 
 $GLOBALS['query_posts'] = array();
 check('no exclusions renders no block', vc_archive_excluded_html($texas) === '');
+
+/* -------------------------------------------------------------------------
+ * The editorial block has to render in a theme that never asks for the
+ * archive description
+ *
+ * get_the_archive_description() is where themes are supposed to print term
+ * copy, and most do. ReHub does not call it on a taxonomy archive, so the
+ * intro, the local-rules note and the explainer link were being written to
+ * the database and rendered nowhere -- with no error, and a page that
+ * looked identical to one where the import had never been run.
+ * ---------------------------------------------------------------------- */
+
+function vc_test_description_hook($description = '') {
+    foreach ($GLOBALS['filters']['get_the_archive_description'] ?? array() as $fn) {
+        $description = $fn($description);
+    }
+    return $description;
+}
+function vc_test_loop_start() {
+    ob_start();
+    foreach ($GLOBALS['filters']['loop_start'] ?? array() as $fn) {
+        $fn(new WP_Query());
+    }
+    return ob_get_clean();
+}
+function vc_test_fresh_request() {
+    unset($GLOBALS['vc_archive_intro_claimed']);
+    $GLOBALS['is_paged'] = false;
+}
+
+$GLOBALS['queried'] = $texas;
+$GLOBALS['term_meta'][12] = array('vc_intro' => 'Texas copy of its own.');
+
+// A theme that does ask for the description: it prints there, once.
+vc_test_fresh_request();
+$from_filter = vc_test_description_hook('');
+$from_loop = vc_test_loop_start();
+check('a theme that asks for the description gets the intro',
+    strpos($from_filter, 'Texas copy of its own.') !== false);
+check('and loop_start then prints nothing',
+    trim($from_loop) === '', $from_loop);
+
+// A theme that never asks -- ReHub. The loop has to print it.
+vc_test_fresh_request();
+$from_loop = vc_test_loop_start();
+check('a theme that never asks still gets the intro at loop_start',
+    strpos($from_loop, 'Texas copy of its own.') !== false, $from_loop);
+check('and it is the whole block, not just the text',
+    strpos($from_loop, 'vc-archive-intro') !== false);
+
+// Having printed at loop_start, a later description call must not repeat it.
+$from_filter = vc_test_description_hook('theme description');
+check('a later description call does not repeat it',
+    strpos($from_filter, 'Texas copy of its own.') === false, $from_filter);
+check('and the theme description survives untouched',
+    $from_filter === 'theme description', $from_filter);
+
+// Page two of eight must not carry a second copy of the intro.
+vc_test_fresh_request();
+$GLOBALS['is_paged'] = true;
+check('a paginated page gets no intro from the loop',
+    trim(vc_test_loop_start()) === '');
+vc_test_fresh_request();
+$GLOBALS['is_paged'] = true;
+check('nor from the description filter',
+    vc_test_description_hook('d') === 'd');
+$GLOBALS['is_paged'] = false;
+
+// Somewhere that is not a merchant archive gets nothing either way.
+vc_test_fresh_request();
+$GLOBALS['queried'] = null;
+check('a non-merchant archive gets no intro from the loop',
+    trim(vc_test_loop_start()) === '');
+vc_test_fresh_request();
+check('nor from the description filter',
+    vc_test_description_hook('blog description') === 'blog description');
+$GLOBALS['queried'] = $texas;
+
+$GLOBALS['term_meta'][12] = array();
+vc_test_fresh_request();
 
 /* -------------------------------------------------------------------------
  * A legal note never appears without a citation
