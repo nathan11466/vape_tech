@@ -128,6 +128,14 @@ function vc_storepage_claimed($claim = false) {
  * The sections for the current store page, or ''.
  */
 function vc_storepage_html() {
+    // Not before the body has started. get_the_archive_description() is
+    // called during wp_head by SEO and page-builder code, and answering
+    // one of those with a page of HTML put this entire profile inside
+    // <head>, which the browser then showed above the site header.
+    if (function_exists('vc_body_started') && !vc_body_started()) {
+        return '';
+    }
+
     $post_id = vc_storepage_current_merchant();
     if (!$post_id || is_paged()) {
         // Page two of a store's offers does not want the whole profile

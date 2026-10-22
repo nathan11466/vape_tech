@@ -29,6 +29,9 @@ $GLOBALS['rendered_for'] = array();
 
 function vc_merchant_post_types() { return array('merchant'); }
 
+/** The archive module owns this in production; stubbed here. */
+function vc_body_started() { return !empty($GLOBALS['vc_body_started']); }
+
 /** The real renderer is exercised by test_fields; here we record the id. */
 function vc_merchant_render_page($atts = array()) {
     $id = (int) ($atts['id'] ?? 0);
@@ -106,6 +109,7 @@ function fresh($term = null) {
     $GLOBALS['rendered_for'] = array();
     $GLOBALS['is_tax'] = 'dealstore';
     $GLOBALS['is_paged'] = false;
+    $GLOBALS['vc_body_started'] = true;
     $GLOBALS['queried'] = $term;
 }
 function fire($tag) {
@@ -199,6 +203,28 @@ fresh($humidors);
 $GLOBALS['is_tax'] = '';
 check('an ordinary page prints nothing',
     trim(fire('loop_start')) === '');
+
+/* --- Nothing is printed before the body starts ------------------------- */
+//
+// get_the_archive_description() is called during wp_head by SEO plugins and
+// page builders. Answering one of those with a page of HTML put the whole
+// profile inside <head>, and the text showed up above the site header,
+// outside the theme template.
+
+fresh($humidors);
+$GLOBALS['vc_body_started'] = false;
+check('nothing prints at loop_start before the body starts',
+    trim(fire('loop_start')) === '');
+check('and the description filter adds nothing in head',
+    description_hook('term desc') === 'term desc');
+check('nor the no-results hook',
+    trim(fire('loop_no_results')) === '');
+check('and the slot is left unclaimed for the body',
+    !vc_storepage_claimed());
+
+$GLOBALS['vc_body_started'] = true;
+check('once the body starts it prints normally',
+    strpos(fire('loop_start'), 'profile of 1st Class') !== false);
 
 /* --- The off switch ---------------------------------------------------- */
 

@@ -410,6 +410,26 @@ function vc_archive_sibling_links($term = null, $limit = 12) {
  * where themes already print term copy -- no template file required.
  */
 /**
+ * Has the document body started?
+ *
+ * get_the_archive_description() is not only a display function. SEO
+ * plugins, schema builders and page builders all call it while wp_head is
+ * running, to work out a meta description or to stash the term copy in a
+ * data attribute. Returning a page of HTML to one of those callers put the
+ * whole store profile inside <head> on the ReHub store pages -- the text
+ * appeared above the site header, outside the theme template entirely.
+ *
+ * So nothing this plugin renders is emitted until wp_head has finished.
+ */
+function vc_body_started() {
+    return !empty($GLOBALS['vc_body_started']);
+}
+
+add_action('wp_head', function () {
+    $GLOBALS['vc_body_started'] = true;
+}, PHP_INT_MAX);
+
+/**
  * Has the editorial block already been printed on this request?
  *
  * Two hooks can print it and only one of them should. Call with true to
@@ -437,7 +457,7 @@ function vc_archive_intro_claimed($claim = false) {
  * copies of it.
  */
 function vc_archive_wants_intro() {
-    return vc_is_merchant_archive() && !is_paged();
+    return vc_is_merchant_archive() && !is_paged() && vc_body_started();
 }
 
 add_filter('get_the_archive_description', function ($description) {

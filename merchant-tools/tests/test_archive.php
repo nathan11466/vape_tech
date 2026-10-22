@@ -34,6 +34,7 @@ function is_tax($t = '') { return $GLOBALS['queried'] !== null; }
 function is_singular() { return false; }
 function is_main_query() { return true; }
 function is_paged() { return !empty($GLOBALS['is_paged']); }
+function did_action($tag) { return 0; }
 function get_terms($a = array()) {
     $out = array();
     foreach ($GLOBALS['sibling_terms'] as $t) {
@@ -210,6 +211,7 @@ function vc_test_loop_start() {
 function vc_test_fresh_request() {
     unset($GLOBALS['vc_archive_intro_claimed']);
     $GLOBALS['is_paged'] = false;
+    $GLOBALS['vc_body_started'] = true;
 }
 
 $GLOBALS['queried'] = $texas;
@@ -238,6 +240,16 @@ check('a later description call does not repeat it',
     strpos($from_filter, 'Texas copy of its own.') === false, $from_filter);
 check('and the theme description survives untouched',
     $from_filter === 'theme description', $from_filter);
+
+// Nothing before the body starts: an SEO plugin asking for the archive
+// description during wp_head must not be handed a block of HTML.
+vc_test_fresh_request();
+$GLOBALS['vc_body_started'] = false;
+check('no intro before the body starts',
+    trim(vc_test_loop_start()) === '');
+check('and the description filter adds nothing in head',
+    vc_test_description_hook('d') === 'd');
+vc_test_fresh_request();
 
 // Page two of eight must not carry a second copy of the intro.
 vc_test_fresh_request();
