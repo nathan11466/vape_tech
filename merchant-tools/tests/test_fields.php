@@ -444,6 +444,69 @@ check('Title Case is accepted, since that is how a spreadsheet reads',
 check('content with no braces is returned untouched',
     vc_merchant_expand_tokens('Plain text only.') === 'Plain text only.');
 
+// --- Square brackets --------------------------------------------------
+//
+// Square brackets are shortcode syntax, so a field name typed in them was
+// handed to do_shortcode, found to be no shortcode at all, and printed
+// raw. "[brand_dot_com] [brand_url]" went out that way on 112 live store
+// pages. The two bracket styles are impossible to keep straight while
+// writing, so a known field name in either now resolves.
+
+check('a field name in square brackets resolves too',
+    vc_merchant_expand_tokens('Visit [brand_dot_com] today.') === 'Visit voopoo.com today.',
+    vc_merchant_expand_tokens('Visit [brand_dot_com] today.'));
+
+check('both bracket styles in one line',
+    vc_merchant_expand_tokens('{display_brand_name} at [brand_dot_com]')
+        === 'VooPoo at voopoo.com',
+    vc_merchant_expand_tokens('{display_brand_name} at [brand_dot_com]'));
+
+// A registered shortcode must survive untouched even if its name happens
+// to match a field -- eating somebody else's shortcode would break their
+// plugin, not ours.
+$GLOBALS['shortcodes']['brand_dot_com'] = true;
+check('a registered shortcode of the same name is left alone',
+    vc_merchant_expand_tokens('[brand_dot_com]') === '[brand_dot_com]',
+    vc_merchant_expand_tokens('[brand_dot_com]'));
+unset($GLOBALS['shortcodes']['brand_dot_com']);
+
+check('a real shortcode is never touched',
+    vc_merchant_expand_tokens('[coupon_deals brand="VooPoo"]')
+        === '[coupon_deals brand="VooPoo"]');
+
+check('square brackets in ordinary prose survive',
+    vc_merchant_expand_tokens('Sizes [small] and [large] only.')
+        === 'Sizes [small] and [large] only.');
+
+// --- A name with spaces in it ------------------------------------------
+
+check('a token name with spaces resolves',
+    vc_merchant_expand_tokens('{Display Brand Name}') === 'VooPoo',
+    vc_merchant_expand_tokens('{Display Brand Name}'));
+
+// --- What a visitor sees vs what an editor sees ------------------------
+//
+// An unresolved token shown to a shopper is worse than a gap: the page
+// reads as broken and the claim it was meant to make is missing anyway.
+// The editor still needs to see it, because they are the one who can fix
+// the typo.
+
+$GLOBALS['can_edit'] = false;
+check('a visitor never sees an unresolved token',
+    trim(vc_merchant_expand_tokens('{not_a_field_at_all}')) === '',
+    vc_merchant_expand_tokens('{not_a_field_at_all}'));
+check('nor one in square brackets that is not a field',
+    vc_merchant_expand_tokens('[not_a_field_at_all]') === '[not_a_field_at_all]',
+    'a non-field in square brackets is prose or a shortcode, not ours to strip');
+check('the rest of the sentence survives for a visitor',
+    vc_merchant_expand_tokens('Shop {not_a_field} at {display_brand_name}.')
+        === 'Shop  at VooPoo.',
+    vc_merchant_expand_tokens('Shop {not_a_field} at {display_brand_name}.'));
+
+$GLOBALS['can_edit'] = true;
+check('an editor still sees it, so the typo is fixable',
+    vc_merchant_expand_tokens('{not_a_field_at_all}') === '{not_a_field_at_all}');
+
 // Values are escaped, because they come from scraped sites.
 $GLOBALS['meta'][1]['coupon_intro'] = '<script>alert(1)</script>';
 check('a token value is escaped',

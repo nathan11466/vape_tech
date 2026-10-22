@@ -1208,26 +1208,59 @@ function vc_merchant_token_map($post_id = null) {
 /**
  * Replace {token} with its value, leaving unknown tokens untouched.
  */
+/**
+ * Find a field in the token map however the name was typed.
+ *
+ * Column names come off a spreadsheet and get typed back by hand, so
+ * "display_brand_name", "Display Brand Name" and "2nd_Display Name" all
+ * have to land on the same field. Returns the map key, or ''.
+ */
+function vc_token_lookup($name, array $map) {
+    if (array_key_exists($name, $map)) {
+        return $name;
+    }
+
+    $tries = array(
+        strtolower($name),
+        str_replace(array(' ', '-'), '_', strtolower($name)),
+        str_replace('_', ' ', strtolower($name)),
+    );
+    foreach ($tries as $try) {
+        if (array_key_exists($try, $map)) {
+            return $try;
+        }
+    }
+
+    // Last resort: compare with everything but letters and digits removed,
+    // which makes "2nd_Display Name" and "2ndDisplayName" the same field.
+    $flat = preg_replace('/[^a-z0-9]/', '', strtolower($name));
+    foreach (array_keys($map) as $key) {
+        if (preg_replace('/[^a-z0-9]/', '', strtolower($key)) === $flat) {
+            return $key;
+        }
+    }
+
+    return '';
+}
+
 function vc_merchant_expand_tokens($text, $post_id = null) {
     $text = (string) $text;
-    if (strpos($text, '{') === false) {
+    if (strpos($text, '{') === false && strpos($text, '[') === false) {
         return $text;
     }
 
     $map = vc_merchant_token_map($post_id);
+    // Editors get to see a token that resolved to nothing, so a typo is
+    // visible to the person who can fix it. Visitors never do: a page
+    // reading "[brand_dot_com]" at a shopper is worse than a gap.
+    $show_unknown = function_exists('current_user_can') && current_user_can('edit_posts');
 
-    return preg_replace_callback('/\{([a-zA-Z0-9_]+)\}/', function ($match) use ($map) {
-        $key = $match[1];
+    $resolve = function ($match) use ($map, $show_unknown) {
+        $name = trim($match[1]);
+        $key = vc_token_lookup($name, $map);
 
-        // Case-insensitive, because a field list reads as Title Case in a
-        // spreadsheet and gets typed back that way.
-        if (!array_key_exists($key, $map)) {
-            $lower = strtolower($key);
-            if (!array_key_exists($lower, $map)) {
-                // Unknown: hand back exactly what was typed.
-                return $match[0];
-            }
-            $key = $lower;
+        if ($key === '') {
+            return $show_unknown ? $match[0] : '';
         }
 
         $value = trim((string) $map[$key]);
@@ -1235,7 +1268,34 @@ function vc_merchant_expand_tokens($text, $post_id = null) {
         // An empty field resolves to nothing rather than leaving the token
         // visible, since the field being blank is the answer.
         return $value === '' ? '' : esc_html($value);
-    }, $text);
+    };
+
+    // {field_name}, and names with spaces or hyphens in them, because that
+    // is how they read in the spreadsheet the values came from.
+    $text = preg_replace_callback(
+        '/\{([a-zA-Z0-9][a-zA-Z0-9_ \-]*)\}/', $resolve, $text);
+
+    // [field_name] as well. Square brackets are shortcode syntax, so this
+    // only ever touches a name that is a known field AND is not a
+    // registered shortcode -- otherwise a real shortcode somebody else
+    // registered would be eaten here. Supported because the two bracket
+    // styles are impossible to keep straight while writing, and a field
+    // name in the wrong brackets printed raw on 112 live pages.
+    return preg_replace_callback(
+        '/\[([a-zA-Z0-9][a-zA-Z0-9_ \-]*)\]/',
+        function ($match) use ($map, $resolve) {
+            $name = trim($match[1]);
+            if (function_exists('shortcode_exists') && shortcode_exists($name)) {
+                return $match[0];
+            }
+            if (vc_token_lookup($name, $map) === '') {
+                // Not one of ours. Leave it for do_shortcode or for the
+                // reader -- plenty of prose has square brackets in it.
+                return $match[0];
+            }
+
+            return $resolve($match);
+        }, $text);
 }
 
 // Runs before do_shortcode (priority 11), so a token inside a shortcode
