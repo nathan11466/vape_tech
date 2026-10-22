@@ -336,10 +336,28 @@ function vc_merchant_import_csv($path, $dry_run = false, $limit = 0, $publish = 
 }
 
 /* -------------------------------------------------------------------------
- * Admin screen: Tools -> Import Merchants
+ * Admin screen: Stores -> Import Merchants, and Tools -> Import Merchants
+ *
+ * This was the only screen in the plugin under Tools while the other six
+ * sat under Stores, which is a daft place to hide the one you need first.
+ * It is now registered in both places: under Stores with everything else,
+ * and still under Tools so an existing bookmark or a half-remembered path
+ * does not dead-end.
  * ---------------------------------------------------------------------- */
 
 add_action('admin_menu', function () {
+    $types = function_exists('vc_merchant_post_types')
+        ? vc_merchant_post_types() : array('merchant');
+
+    add_submenu_page(
+        'edit.php?post_type=' . reset($types),
+        __('Import Merchants', 'vc-merchant'),
+        __('Import Merchants', 'vc-merchant'),
+        'manage_options',
+        'vc-merchant-import',
+        'vc_merchant_import_screen'
+    );
+
     add_management_page(
         __('Import Merchants', 'vc-merchant'),
         __('Import Merchants', 'vc-merchant'),
@@ -347,7 +365,7 @@ add_action('admin_menu', function () {
         'vc-merchant-import',
         'vc_merchant_import_screen'
     );
-});
+}, 19);
 
 function vc_merchant_import_screen() {
     if (!current_user_can('manage_options')) {
