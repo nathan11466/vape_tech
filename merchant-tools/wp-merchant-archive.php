@@ -268,7 +268,9 @@ function vc_archive_intro($term = null) {
 
     $out .= '</div>';
 
-    return $out;
+    // Filterable so a module can append to the editorial block without
+    // reaching into this function -- the shipping explainer link uses it.
+    return apply_filters('vc_archive_intro_html', $out, $term);
 }
 
 /**

@@ -416,8 +416,12 @@ $files = array(
     'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
     'wp-merchant-settings.php', 'wp-merchant-editor.php', 'wp-merchant-coupons.php',
     'wp-merchant-logos.php', 'wp-merchant-freshness.php', 'wp-merchant-rehub.php',
-    'wp-merchant-import.php',
+    'wp-merchant-import.php', 'wp-merchant-intros.php',
+    'wp-merchant-explainer.php',
     'assets/merchant-pages.css',
+    // The explainer page is created from this file. Shipping the module
+    // without it leaves a button that can only fail.
+    'templates/shipping-explainer.html',
 );
 foreach ($files as $f) {
     check("$f present", file_exists(__DIR__ . '/' . $f));

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VapingCheap Merchant Fields
  * Description: Service-location taxonomy, brand aliases, merchant contact details, and publish-gated display helpers for coupon/merchant pages.
- * Version: 1.15.0
+ * Version: 1.16.0
  * Text Domain: vc-merchant
  *
  * Companion to merchant-tools/enrich_merchants.py. The enrichment script grades
@@ -109,7 +109,7 @@ add_action('init', 'vc_register_merchant_post_type', 5);
  * a version that does not move is a version nobody can check an upload
  * against -- this one sat at 1.0.0 through twenty-one releases.
  */
-const VC_MERCHANT_VERSION = '1.15.0';
+const VC_MERCHANT_VERSION = '1.16.0';
 
 function vc_merchant_link($post_id) {
     return function_exists('vc_merchant_permalink')
@@ -122,7 +122,8 @@ foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merch
                'wp-merchant-sections.php', 'wp-merchant-editor.php',
                'wp-merchant-coupons.php', 'wp-merchant-logos.php',
                'wp-merchant-freshness.php', 'wp-merchant-rehub.php',
-               'wp-merchant-import.php', 'wp-merchant-intros.php') as $vc_module) {
+               'wp-merchant-import.php', 'wp-merchant-intros.php',
+               'wp-merchant-explainer.php') as $vc_module) {
     $vc_path = __DIR__ . '/' . $vc_module;
     if (file_exists($vc_path)) {
         require_once $vc_path;
