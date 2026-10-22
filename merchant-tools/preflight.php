@@ -417,7 +417,7 @@ $files = array(
     'wp-merchant-settings.php', 'wp-merchant-editor.php', 'wp-merchant-coupons.php',
     'wp-merchant-logos.php', 'wp-merchant-freshness.php', 'wp-merchant-rehub.php',
     'wp-merchant-import.php', 'wp-merchant-intros.php',
-    'wp-merchant-explainer.php',
+    'wp-merchant-explainer.php', 'wp-merchant-storepage.php',
     'assets/merchant-pages.css',
     // The explainer page is created from this file. Shipping the module
     // without it leaves a button that can only fail.
