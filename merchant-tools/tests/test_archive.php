@@ -182,6 +182,63 @@ $GLOBALS['query_posts'] = array();
 check('no exclusions renders no block', vc_archive_excluded_html($texas) === '');
 
 /* -------------------------------------------------------------------------
+ * A legal note never appears without a citation
+ *
+ * These notes are the only copy on the site that says anything about law.
+ * Published with no source and no date behind it, a summary of a state's
+ * statute is just an assertion -- so the rule is that the note does not
+ * render at all unless a source URL is there to render with it.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['term_meta'][12] = array(
+    'vc_legal_note' => 'Texas requires delivery-sale registration.',
+);
+$html = vc_archive_intro($texas);
+check('a legal note with no source URL prints no source line',
+    strpos($html, 'vc-archive-legal__source') === false, $html);
+check('and the note itself still shows',
+    strpos($html, 'delivery-sale registration') !== false);
+
+$GLOBALS['term_meta'][12]['vc_legal_source_url'] =
+    'https://www.publichealthlawcenter.org/resources/us-e-cigarette-regulations-50-state-review/tx';
+$GLOBALS['term_meta'][12]['vc_legal_checked'] = '2026-10-22';
+$html = vc_archive_intro($texas);
+check('with a source URL the citation renders',
+    strpos($html, 'publichealthlawcenter.org') !== false);
+check('the source is named, not just linked',
+    strpos($html, 'Public Health Law Center') !== false);
+check('the date checked is shown',
+    strpos($html, '2026-10-22') !== false);
+check('the link does not pass equity to the source',
+    strpos($html, 'rel="nofollow noopener"') !== false, $html);
+check('and it carries the not-legal-advice line',
+    strpos($html, 'not legal advice') !== false, $html);
+
+// The disclaimer is filterable, so a site can reword it -- but it cannot
+// be emptied out of existence by leaving the field blank.
+add_filter('vc_archive_legal_disclaimer', function ($text) {
+    return 'Check with your state before relying on this.';
+});
+$html = vc_archive_intro($texas);
+check('the disclaimer wording is filterable',
+    strpos($html, 'Check with your state') !== false);
+$GLOBALS['filters']['vc_archive_legal_disclaimer'] = array();
+
+// A source URL with no note is not a reason to print anything.
+$GLOBALS['term_meta'][12] = array(
+    'vc_legal_source_url' => 'https://example.org/law',
+);
+check('a source with no note prints nothing',
+    strpos(vc_archive_intro($texas), 'vc-archive-legal') === false);
+
+// The source fields are not themselves editorial content: a page carrying
+// only a URL has not earned its way into the index.
+check('a source URL alone does not make a page indexable',
+    !vc_archive_has_unique_content($texas));
+
+$GLOBALS['term_meta'][12] = array();
+
+/* -------------------------------------------------------------------------
  * Near-duplicate pages must stay out of the index until they differ
  * ---------------------------------------------------------------------- */
 

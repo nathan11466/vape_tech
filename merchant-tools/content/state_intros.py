@@ -369,10 +369,11 @@ INTROS = {
         "with Vape Juice Depot the only one that does not. Both halves of "
         "the market are effectively wide open: every hemp and CBD retailer "
         "in this directory ships here, as does every nicotine shop bar that "
-        "one. The address, then, is almost never what blocks an order. What "
-        "does is the payment stage -- a card whose billing address does not "
-        "match the one you are shipping to is declined by a good number of "
-        "these retailers as a fraud precaution, regardless of state."
+        "one. Read the local rules note below before you order, though, "
+        "because Nebraska is the one state on this site where what the "
+        "shops say and what the statute says point in opposite directions, "
+        "and the count above is a tally of retailer shipping pages rather "
+        "than a statement that the sale is permitted."
     ),
 
     "Nevada": (
@@ -597,9 +598,12 @@ INTROS = {
     "Virginia": (
         "102 of the online vape shops we track deliver to Virginia. Three "
         "do not: Mellow Fellow and Smilyn Wellness on the hemp side, and "
-        "Vape Juice Depot on the nicotine side. That leaves the list wide "
-        "open on both counts, so availability is unlikely to decide your "
-        "order. If you have shopped from a DC or Maryland address before, "
+        "Vape Juice Depot on the nicotine side. On the retailers' own "
+        "accounts that leaves the list wide open -- but read the local "
+        "rules note below first, because Virginia's statute on posting "
+        "nicotine vapor products to a consumer reaches considerably further "
+        "than those three shops do. If you have shopped from a DC or "
+        "Maryland address before, "
         "note that those are tracked as separate destinations here with "
         "different exclusion lists, so what a store did for one tells you "
         "nothing reliable about another. All three Virginia exclusions are "

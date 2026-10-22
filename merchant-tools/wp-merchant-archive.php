@@ -51,6 +51,8 @@ function vc_archive_term_fields() {
     return array(
         'vc_intro'        => __('Intro paragraph', 'vc-merchant'),
         'vc_legal_note'   => __('Local rules / legal note', 'vc-merchant'),
+        'vc_legal_source_url' => __('Local rules: source URL', 'vc-merchant'),
+        'vc_legal_checked'    => __('Local rules: date checked', 'vc-merchant'),
         'vc_faq_q1'       => __('FAQ 1 question', 'vc-merchant'),
         'vc_faq_a1'       => __('FAQ 1 answer', 'vc-merchant'),
         'vc_faq_q2'       => __('FAQ 2 question', 'vc-merchant'),
@@ -260,12 +262,67 @@ function vc_archive_intro($term = null) {
     }
 
     if ($legal !== '') {
-        $out .= '<div class="vc-archive-legal">' . wpautop(wp_kses_post($legal)) . '</div>';
+        $out .= '<div class="vc-archive-legal">' . wpautop(wp_kses_post($legal))
+             . vc_archive_legal_source($term) . '</div>';
     }
 
     $out .= '</div>';
 
     return $out;
+}
+
+/**
+ * The line under a local-rules note: where it came from, when, and that it
+ * is a summary rather than advice.
+ *
+ * Rendered here rather than written into each note for two reasons. It
+ * cannot be forgotten on one state out of fifty-one, and the same sentence
+ * typed into fifty-one terms is fifty-one copies of boilerplate in the
+ * field whose whole purpose is to carry something the other pages do not.
+ *
+ * Nothing is printed without a source. A summary of a state's law with no
+ * citation and no date behind it is an assertion, and this field is the
+ * one place on the site making claims about law rather than about shops.
+ */
+function vc_archive_legal_source($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return '';
+    }
+
+    $url = trim((string) get_term_meta($term->term_id, 'vc_legal_source_url', true));
+    $checked = trim((string) get_term_meta($term->term_id, 'vc_legal_checked', true));
+
+    if ($url === '') {
+        return '';
+    }
+
+    $disclaimer = apply_filters(
+        'vc_archive_legal_disclaimer',
+        __('This is a plain-language summary of published law, not legal advice, and the rules change. Check the source before relying on it.', 'vc-merchant'),
+        $term
+    );
+
+    $line = '<p class="vc-archive-legal__source"><small>'
+        . sprintf(
+            /* translators: %s: link to the source */
+            esc_html__('Source: %s', 'vc-merchant'),
+            '<a href="' . esc_url($url) . '" rel="nofollow noopener" target="_blank">'
+            . esc_html__('Public Health Law Center, U.S. E-Cigarette Regulation: A 50-State Review', 'vc-merchant')
+            . '</a>'
+        );
+
+    if ($checked !== '') {
+        $line .= ' &middot; ' . sprintf(
+            /* translators: %s: date the note was checked */
+            esc_html__('checked %s', 'vc-merchant'),
+            esc_html($checked)
+        );
+    }
+
+    $line .= ' &middot; ' . esc_html($disclaimer) . '</small></p>';
+
+    return $line;
 }
 
 /**

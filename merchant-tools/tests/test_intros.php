@@ -28,6 +28,8 @@ function vc_archive_term_fields() {
     return array(
         'vc_intro'          => 'Intro paragraph',
         'vc_legal_note'     => 'Local rules / legal note',
+        'vc_legal_source_url' => 'Local rules: source URL',
+        'vc_legal_checked'    => 'Local rules: date checked',
         'vc_faq_q1'         => 'FAQ 1 question',
         'vc_faq_a1'         => 'FAQ 1 answer',
         'vc_faq_q2'         => 'FAQ 2 question',
@@ -319,6 +321,27 @@ vc_intro_import_csv($nasty);
 check('script tags are stripped before storage',
       strpos(get_term_meta(1, 'vc_intro', true), '<script') === false,
       get_term_meta(1, 'vc_intro', true));
+
+/* --- A legal note arrives with its source, or not at all -------------- */
+
+reset_store();
+$legal = write_csv(array(
+    array('term', 'vc_legal_note', 'vc_legal_source_url', 'vc_legal_checked'),
+    array('Alabama', 'Alabama requires a delivery-sale permit.',
+          'https://www.publichealthlawcenter.org/resources/us-e-cigarette-regulations-50-state-review/al',
+          '2026-10-22'),
+));
+$result = vc_intro_import_csv($legal);
+check('a legal note imports', get_term_meta(1, 'vc_legal_note', true)
+      === 'Alabama requires a delivery-sale permit.');
+check('its source URL imports alongside it',
+      get_term_meta(1, 'vc_legal_source_url', true)
+      === 'https://www.publichealthlawcenter.org/resources/us-e-cigarette-regulations-50-state-review/al',
+      get_term_meta(1, 'vc_legal_source_url', true));
+check('and the date it was checked',
+      get_term_meta(1, 'vc_legal_checked', true) === '2026-10-22');
+check('a legal note makes the page indexable too', $result['indexable'] === 1,
+      (string) $result['indexable']);
 
 /* --- Re-running changes nothing --------------------------------------- */
 
