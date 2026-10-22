@@ -179,16 +179,11 @@ def derive(row, assume_nationwide=True):
             states = [s for s in US_STATES if s not in known]
             return ["United States"] + states, known, "stated"
 
-    # An explicit ships_to_countries value always wins -- it was entered
-    # deliberately rather than parsed out of prose.
-    if declared:
-        names = [n.strip() for n in re.split(r"[|,]", declared) if n.strip()]
-        if names:
-            return names, [], "stated"
-
     haystack = " ".join([restrictions, free_ship])
 
-    # Pull out anything named after an exclusion phrase.
+    # Pull out anything named after an exclusion phrase. Parsed before the
+    # declared-countries branch below, which needs it to know what to leave
+    # out when it expands a country into its states.
     restricted = []
     for pattern in _EXCLUSION_RES:
         for match in pattern.finditer(haystack):
@@ -196,6 +191,25 @@ def derive(row, assume_nationwide=True):
             for state in _find_states(fragment):
                 if state not in restricted:
                     restricted.append(state)
+
+    # An explicit ships_to_countries value always wins -- it was entered
+    # deliberately rather than parsed out of prose.
+    if declared:
+        names = [n.strip() for n in re.split(r"[|,]", declared) if n.strip()]
+        names = [_COUNTRY_ALIASES.get(n.lower(), n) for n in names]
+        if "United States" in names:
+            # "United States" is a country, not a destination list. Returned
+            # as-is it tags only the parent term, and since a state archive
+            # cannot see merchants tagged on the parent, the merchant then
+            # appears on no state page at all -- which is how 81 of 111
+            # merchants came to be missing from every state page, the pages
+            # this whole project is built to rank. Expand it the way every
+            # other branch here does, honouring anything stated as excluded.
+            states = [s for s in US_STATES if s not in restricted]
+            others = [n for n in names if n != "United States"]
+            return ["United States"] + states + others, restricted, "stated"
+        if names:
+            return names, [], "stated"
 
     is_non_statement = bool(_NON_STATEMENT_RE.search(restrictions))
     claims_nationwide = bool(_NATIONWIDE_RE.search(haystack))

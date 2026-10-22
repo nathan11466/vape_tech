@@ -84,6 +84,55 @@ names = [n for n in r["service_locations"].split("|") if n]
 check("every service_location is a known country",
       all(n in derive_shipping.COUNTRIES for n in names), repr(names))
 
+# --- A declared country must still reach the state pages ---------------
+#
+# ships_to_countries="United States" used to be returned as-is, tagging only
+# the parent term. A state archive cannot see merchants tagged on the parent,
+# so 81 of 111 merchants appeared on no state page -- the pages this project
+# exists to rank. The country has to expand into its states.
+
+r = row(ships_to_countries="United States")
+conf = derive_shipping.apply_to_row(r)
+terms = [t for t in r["ships_to_terms"].split("|") if t]
+check("a declared United States is more than the parent term",
+      len(terms) > 1, repr(r["ships_to_terms"]))
+check("it expands to every state plus the parent",
+      len(terms) == len(derive_shipping.US_STATES) + 1,
+      f"{len(terms)} terms, wanted {len(derive_shipping.US_STATES) + 1}")
+check("the parent term is still there", terms[0] == "United States", terms[0])
+check("a named state is among them", "Texas" in terms and "Ohio" in terms)
+check("and it counts as stated, not assumed", conf == "stated", conf)
+check("service_locations stays country-level",
+      r["service_locations"] == "United States", repr(r["service_locations"]))
+
+r = row(ships_to_countries="United States",
+        shipping_restrictions="We cannot ship to Utah or Vermont.")
+derive_shipping.apply_to_row(r)
+terms = [t for t in r["ships_to_terms"].split("|") if t]
+check("exclusions stated in prose are left out of the expansion",
+      "Utah" not in terms and "Vermont" not in terms, repr(terms))
+check("but the rest of the states are still there",
+      len(terms) == len(derive_shipping.US_STATES) - 1, len(terms))
+check("and the exclusions are recorded",
+      r["restricted_states"] == "Utah|Vermont", repr(r["restricted_states"]))
+
+r = row(ships_to_countries="USA")
+derive_shipping.apply_to_row(r)
+check("an alias expands too",
+      "Texas" in r["ships_to_terms"], repr(r["ships_to_terms"][:60]))
+
+r = row(ships_to_countries="United States|Canada")
+derive_shipping.apply_to_row(r)
+terms = [t for t in r["ships_to_terms"].split("|") if t]
+check("a second country is kept alongside the states",
+      "Canada" in terms and "Texas" in terms, repr(terms[-3:]))
+
+r = row(brand_url="https://vapeshop.co.uk", primary_market="United Kingdom",
+        ships_to_countries="United Kingdom")
+derive_shipping.apply_to_row(r)
+check("a declared non-US country is never expanded into US states",
+      r["ships_to_terms"] == "United Kingdom", repr(r["ships_to_terms"]))
+
 # --- brand_dot_com -----------------------------------------------------
 from enrich_merchants import bare_domain  # noqa: E402
 
