@@ -84,6 +84,14 @@ function vc_merchant_render_page($atts = array()) {
         return '';
     }
 
+    // The stylesheet is registered but only enqueued where this plugin is
+    // known to render. A shortcode dropped on an ordinary page is the case
+    // that cannot be predicted from the query, so claim it here -- enqueued
+    // this late, WordPress prints it in the footer rather than dropping it.
+    if (function_exists('wp_style_is') && !wp_style_is('vc-merchant-pages', 'enqueued')) {
+        wp_enqueue_style('vc-merchant-pages');
+    }
+
     // Review notes, for editors only.
     $notice = '';
     if (current_user_can('edit_posts')) {

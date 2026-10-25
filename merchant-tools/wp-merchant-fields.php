@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VapingCheap Merchant Fields
  * Description: Service-location taxonomy, brand aliases, merchant contact details, and publish-gated display helpers for coupon/merchant pages.
- * Version: 1.19.0
+ * Version: 1.20.0
  * Text Domain: vc-merchant
  *
  * Companion to merchant-tools/enrich_merchants.py. The enrichment script grades
@@ -109,7 +109,7 @@ add_action('init', 'vc_register_merchant_post_type', 5);
  * a version that does not move is a version nobody can check an upload
  * against -- this one sat at 1.0.0 through twenty-one releases.
  */
-const VC_MERCHANT_VERSION = '1.19.0';
+const VC_MERCHANT_VERSION = '1.20.0';
 
 function vc_merchant_link($post_id) {
     return function_exists('vc_merchant_permalink')
@@ -134,18 +134,65 @@ unset($vc_module, $vc_path);
 /**
  * Front-end stylesheet. Scoped to .vc-* classes so it does not fight the theme.
  */
+/**
+ * Does this request actually render anything of ours?
+ *
+ * The stylesheet used to load on every page on the site -- 22KB of
+ * render-blocking CSS on the homepage, on every blog post, on the cart,
+ * styling nothing. That is the same fault as a plugin that ships a hundred
+ * kilobytes of assets to pages with none of its output on them, and an
+ * affiliate site lives on search, so it is not free.
+ *
+ * Registered always, enqueued only where it is needed. The render
+ * functions enqueue it themselves as well, which covers a shortcode
+ * dropped somewhere this cannot predict: a style enqueued during the loop
+ * is printed in the footer rather than dropped.
+ */
+function vc_merchant_needs_styles() {
+    if (function_exists('is_singular') && is_singular(vc_merchant_post_types())) {
+        return true;
+    }
+
+    $taxonomies = function_exists('vc_archive_taxonomies')
+        ? vc_archive_taxonomies() : array();
+    if ($taxonomies && function_exists('is_tax') && is_tax($taxonomies)) {
+        return true;
+    }
+
+    // ReHub store pages: a dealstore term that resolves to a merchant.
+    if (function_exists('vc_storepage_current_merchant') && vc_storepage_current_merchant()) {
+        return true;
+    }
+
+    // Our shortcode on an ordinary page or post.
+    if (function_exists('is_singular') && is_singular()) {
+        $post = get_post();
+        if ($post && function_exists('has_shortcode')
+            && has_shortcode((string) $post->post_content, 'merchant_page')) {
+            return true;
+        }
+    }
+
+    return (bool) apply_filters('vc_merchant_needs_styles', false);
+}
+
 add_action('wp_enqueue_scripts', function () {
     $rel = 'assets/merchant-pages.css';
     $path = __DIR__ . '/' . $rel;
     if (!file_exists($path)) {
         return;
     }
-    wp_enqueue_style(
+
+    wp_register_style(
         'vc-merchant-pages',
         plugins_url($rel, __FILE__),
         array(),
         (string) filemtime($path)
     );
+
+    if (vc_merchant_needs_styles()) {
+        wp_enqueue_style('vc-merchant-pages');
+    }
 });
 
 /* -------------------------------------------------------------------------
