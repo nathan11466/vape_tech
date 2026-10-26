@@ -1,0 +1,876 @@
+/**
+ * Merchant and destination-archive styling.
+ *
+ * Scoped under .vc-* so it does not fight the theme. Colours are custom
+ * properties -- override them in the Customiser to rebrand without editing
+ * this file.
+ */
+
+:root {
+  --vc-accent: #137a4e;
+  --vc-accent-dark: #0f6340;
+  --vc-accent-soft: #e8f5ee;
+  --vc-deal: #1565a5;
+  --vc-deal-soft: #e8f1f8;
+  --vc-muted-badge: #717a85;
+  --vc-text: #16191d;
+  --vc-text-soft: #59616b;
+  --vc-border: #e4e7eb;
+  --vc-border-strong: #d2d7dd;
+  --vc-surface: #ffffff;
+  --vc-surface-alt: #f7f9fa;
+  --vc-warn-bg: #fff6e3;
+  --vc-warn-border: #d99413;
+  /* Content width. The theme usually sets this; the plugin constrains its own
+     wrappers too, so pages are not full-bleed on a wide theme. Override with
+     :root { --vc-max-width: 1280px; } in Additional CSS. */
+  --vc-max-width: 1100px;
+  --vc-sidebar-width: 320px;
+  --vc-figure-size: 3.1rem;
+  --vc-radius: 10px;
+  --vc-radius-lg: 14px;
+  --vc-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .06);
+}
+
+.vc-merchant-page {
+  color: var(--vc-text);
+  line-height: 1.65;
+  font-size: 16px;
+  max-width: var(--vc-max-width);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Archive pieces share the width so listings line up with merchant pages. */
+.vc-archive-intro,
+.vc-archive-list,
+.vc-archive-faqs,
+.vc-archive-siblings {
+  max-width: var(--vc-max-width);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- Hero ---------- */
+
+.vc-hero {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  padding: 1.5rem;
+  margin: 0 0 1.25rem;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+  box-shadow: var(--vc-shadow);
+}
+
+.vc-hero__logo {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: var(--vc-radius);
+  border: 1px solid var(--vc-border);
+  background: var(--vc-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.vc-hero__logo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Lettered tile for stores with no logo on file. */
+.vc-hero__logo--letter {
+  background: linear-gradient(140deg, var(--vc-accent), var(--vc-accent-dark));
+  border-color: transparent;
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.vc-hero__body { flex: 1; min-width: 0; }
+
+.vc-hero__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.vc-hero__offer {
+  margin: 0 0 1rem;
+  font-size: 1.22rem;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.vc-hero__cta {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.vc-btn {
+  display: inline-block;
+  padding: 0.7em 1.5em;
+  background: var(--vc-accent);
+  color: #fff !important;
+  border-radius: var(--vc-radius);
+  text-decoration: none !important;
+  font-weight: 650;
+  font-size: 0.97rem;
+  box-shadow: var(--vc-shadow);
+  transition: background .15s ease, transform .15s ease;
+}
+
+.vc-btn:hover {
+  background: var(--vc-accent-dark);
+  transform: translateY(-1px);
+}
+
+.vc-hero__checked { font-size: 0.85rem; color: var(--vc-text-soft); }
+
+/* ---------- Offer badge ---------- */
+
+.vc-badge {
+  display: inline-block;
+  padding: 0.35em 0.85em;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--vc-muted-badge);
+}
+
+.vc-badge--verified { background: var(--vc-accent); }
+.vc-badge--deal     { background: var(--vc-deal); }
+
+/* No confirmed code: deliberately quiet, not dressed up as a win. */
+.vc-badge--none {
+  background: var(--vc-surface-alt);
+  color: var(--vc-text-soft);
+  border: 1px solid var(--vc-border-strong);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.vc-checked { font-size: 0.85rem; color: var(--vc-text-soft); }
+
+.vc-offer-status { margin: 0 0 1.25rem; display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+
+/* ---------- Quick facts ---------- */
+
+.vc-quickfacts {
+  list-style: none;
+  margin: 0 0 1.75rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--vc-border);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  overflow: hidden;
+}
+
+.vc-quickfact {
+  background: var(--vc-surface-alt);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.vc-quickfact__label {
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vc-text-soft);
+  font-weight: 600;
+}
+
+.vc-quickfact__value {
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--vc-text);
+}
+
+/* ---------- Sections as cards ---------- */
+
+.vc-merchant-page .vc-section {
+  padding: 1.15rem 1.35rem;
+  margin: 0 0 0.85rem;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+}
+
+.vc-merchant-page .vc-section h2 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vc-text-soft);
+  margin: 0 0 0.45rem;
+}
+
+.vc-merchant-page .vc-section p {
+  margin: 0 0 0.5rem;
+  color: var(--vc-text);
+}
+
+.vc-merchant-page .vc-section p:last-child { margin-bottom: 0; }
+
+.vc-coupon-widget { margin: 0 0 1.5rem; }
+
+/* ---------- Merchant info panel ---------- */
+
+.vc-merchant-info {
+  margin: 1.75rem 0;
+  padding: 1.35rem 1.5rem;
+  background: var(--vc-surface-alt);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+}
+
+.vc-merchant-info h2 {
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vc-text-soft);
+  font-weight: 700;
+}
+
+.vc-merchant-info dl {
+  display: grid;
+  grid-template-columns: minmax(110px, 170px) 1fr;
+  gap: 0.6rem 1.25rem;
+  margin: 0;
+}
+
+.vc-merchant-info dt { font-weight: 600; color: var(--vc-text-soft); font-size: 0.9rem; }
+.vc-merchant-info dd { margin: 0; font-size: 0.95rem; }
+
+.vc-disclaimer, .vc-aliases {
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-restricted {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem;
+  background: var(--vc-warn-bg);
+  border-left: 3px solid var(--vc-warn-border);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: var(--vc-text);
+}
+
+/* ---------- FAQs ---------- */
+
+.vc-faqs { margin: 1.75rem 0; }
+
+.vc-faqs h2, .vc-archive-faqs h2 {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+  letter-spacing: -0.01em;
+}
+
+.vc-faq {
+  padding: 1.05rem 1.35rem;
+  margin-bottom: 0.6rem;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+}
+
+.vc-faq h3, .vc-archive-faqs h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  margin: 0 0 0.35rem;
+}
+
+.vc-faq p, .vc-archive-faqs p { margin: 0; color: var(--vc-text-soft); }
+
+/* ---------- Trust + editorial ---------- */
+
+.vc-trust-section { margin: 1.75rem 0; }
+.vc-trust-section h2 { font-size: 1.1rem; margin: 0 0 0.6rem; }
+.vc-trust__source { font-size: 0.85rem; color: var(--vc-text-soft); }
+
+.vc-editorial {
+  margin: 1.75rem 0 0;
+  padding: 1.1rem 1.35rem;
+  background: var(--vc-surface-alt);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  font-size: 0.88rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-editorial p { margin: 0 0 0.3rem; }
+.vc-editorial p:last-child { margin-bottom: 0; }
+
+/* ---------- Links out ---------- */
+
+.vc-related { margin: 1.75rem 0 0; }
+
+.vc-related ul {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.6rem;
+}
+
+.vc-related a {
+  display: inline-block;
+  padding: 0.5em 1em;
+  border: 1px solid var(--vc-border-strong);
+  border-radius: 999px;
+  font-size: 0.88rem;
+  text-decoration: none;
+  color: var(--vc-deal);
+  background: var(--vc-surface);
+}
+
+.vc-related a:hover { border-color: var(--vc-deal); background: var(--vc-deal-soft); }
+
+/* ---------- Editor-only notice ---------- */
+
+.vc-editor-notice {
+  background: var(--vc-warn-bg);
+  border-left: 4px solid var(--vc-warn-border);
+  padding: 0.75rem 1rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+
+/* ---------- Destination archive ---------- */
+
+.vc-archive-intro { margin: 0 0 1.75rem; font-size: 1.03rem; }
+.vc-archive-intro p { margin: 0 0 0.75rem; }
+
+.vc-archive-legal {
+  margin-top: 1rem;
+  padding: 1rem 1.2rem;
+  background: var(--vc-deal-soft);
+  border-left: 3px solid var(--vc-deal);
+  border-radius: 4px;
+  font-size: 0.93rem;
+}
+
+.vc-archive-legal p { margin: 0 0 0.5rem; }
+.vc-archive-legal p:last-child { margin-bottom: 0; }
+
+.vc-archive-list {
+  list-style: none; margin: 0 0 2rem; padding: 0;
+  display: grid; gap: 0.75rem;
+}
+
+.vc-archive-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.15rem 1.35rem;
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  background: var(--vc-surface);
+  box-shadow: var(--vc-shadow);
+  transition: border-color .15s ease, transform .15s ease;
+}
+
+.vc-archive-card:hover { border-color: var(--vc-accent); transform: translateY(-1px); }
+
+.vc-archive-card__body { flex: 1; min-width: 0; }
+
+.vc-archive-card__name { font-size: 1.08rem; font-weight: 700; margin: 0 0 0.3rem; }
+.vc-archive-card__name a { color: var(--vc-text); text-decoration: none; }
+.vc-archive-card__name a:hover { color: var(--vc-accent); }
+
+.vc-archive-card__offer { margin: 0 0 0.45rem; color: var(--vc-text-soft); font-size: 0.95rem; }
+
+.vc-archive-card__meta {
+  font-size: 0.84rem; color: var(--vc-text-soft);
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+}
+
+.vc-archive-card__cta { flex-shrink: 0; }
+
+.vc-archive-card__cta a {
+  display: inline-block;
+  padding: 0.6em 1.25em;
+  background: var(--vc-accent);
+  color: #fff;
+  border-radius: var(--vc-radius);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.vc-archive-card__cta a:hover { background: var(--vc-accent-dark); }
+
+/* ---------- Related stores + siblings ---------- */
+
+.vc-related-stores, .vc-archive-siblings {
+  margin: 2.25rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-related-stores h2, .vc-archive-siblings h2 {
+  font-size: 1.15rem; margin: 0 0 0.9rem; letter-spacing: -0.01em;
+}
+
+.vc-related-links, .vc-archive-siblings ul {
+  list-style: none; margin: 0; padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.45rem 1.25rem;
+}
+
+.vc-related-links a, .vc-archive-siblings a {
+  color: var(--vc-deal); text-decoration: none; font-size: 0.93rem;
+}
+
+.vc-related-links a:hover, .vc-archive-siblings a:hover { text-decoration: underline; }
+
+.vc-count { color: var(--vc-text-soft); font-size: 0.85rem; }
+
+/* ---------- Narrow columns (sidebar / widget) ---------- */
+
+.vc-sidebar .vc-related-links,
+.widget .vc-related-links { grid-template-columns: 1fr; }
+
+.vc-sidebar .vc-merchant-info dl,
+.widget .vc-merchant-info dl { grid-template-columns: 1fr; gap: 0.15rem; }
+
+.vc-sidebar .vc-merchant-info dd,
+.widget .vc-merchant-info dd { margin-bottom: 0.6rem; }
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 640px) {
+  .vc-hero { flex-direction: column; gap: 1rem; padding: 1.25rem; }
+  .vc-hero__logo { width: 60px; height: 60px; }
+  .vc-hero__offer { font-size: 1.1rem; }
+  .vc-btn { display: block; text-align: center; }
+
+  .vc-merchant-info dl { grid-template-columns: 1fr; gap: 0.15rem; }
+  .vc-merchant-info dd { margin-bottom: 0.6rem; }
+
+  .vc-archive-card { flex-direction: column; align-items: stretch; gap: 0.85rem; }
+  .vc-archive-card__cta a { display: block; text-align: center; }
+}
+
+/* ---------- Dark mode, when the theme opts in ---------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --vc-text: #e9ecef;
+    --vc-text-soft: #a6aeb8;
+    --vc-border: #2f353c;
+    --vc-border-strong: #3c434b;
+    --vc-surface: #1a1e23;
+    --vc-surface-alt: #21262c;
+    --vc-accent-soft: #1530240;
+    --vc-deal-soft: #15283a;
+    --vc-warn-bg: #2f2718;
+    --vc-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+  }
+}
+
+/* ---------- Merchant links ---------- */
+
+.vc-links {
+  margin: 1.75rem 0;
+  padding: 1.35rem 1.5rem;
+  background: var(--vc-surface-alt);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+  max-width: var(--vc-max-width);
+}
+
+.vc-links > h2 {
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vc-text-soft);
+  font-weight: 700;
+}
+
+.vc-links__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem 2rem;
+}
+
+.vc-links__group h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vc-text-soft);
+  font-weight: 650;
+  margin: 0 0 0.5rem;
+}
+
+.vc-links__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.vc-links__list a {
+  color: var(--vc-deal);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.vc-links__list a:hover { text-decoration: underline; }
+
+/* Social reads better as chips than a stack. */
+.vc-links__list--social {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.vc-links__list--social a {
+  display: inline-block;
+  padding: 0.35em 0.85em;
+  border: 1px solid var(--vc-border-strong);
+  border-radius: 999px;
+  background: var(--vc-surface);
+  font-size: 0.85rem;
+}
+
+.vc-links__list--social a:hover {
+  border-color: var(--vc-deal);
+  background: var(--vc-deal-soft);
+  text-decoration: none;
+}
+
+/* ---------- Policies as one compact grid ---------- */
+
+.vc-policies {
+  margin: 1.75rem 0;
+  padding: 1.35rem 1.5rem;
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-lg);
+  max-width: var(--vc-max-width);
+}
+
+.vc-policies > h2 {
+  font-size: 1.15rem;
+  margin: 0 0 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.vc-policies__grid { margin: 0; display: grid; gap: 0; }
+
+.vc-policy {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr;
+  gap: 0 1.5rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-policy:first-child { border-top: 0; padding-top: 0; }
+
+.vc-policy dt {
+  font-weight: 650;
+  font-size: 0.88rem;
+  color: var(--vc-text-soft);
+}
+
+.vc-policy dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--vc-text);
+}
+
+@media (max-width: 640px) {
+  .vc-policy { grid-template-columns: 1fr; gap: 0.2rem; }
+  .vc-policy dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+}
+
+/* ---------- Two-column layout ---------- */
+
+.vc-merchant-page--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--vc-sidebar-width);
+  gap: 2.5rem;
+  align-items: start;
+}
+
+.vc-col-main { min-width: 0; }
+
+.vc-col-side {
+  min-width: 0;
+  position: sticky;
+  top: 1.5rem;
+}
+
+/* The notice spans both columns when present. */
+.vc-merchant-page--split > .vc-editor-notice { grid-column: 1 / -1; }
+
+/* Sidebar blocks sit closer together than full-width ones. */
+.vc-col-side > * { margin-top: 0; margin-bottom: 1.25rem; }
+.vc-col-side > *:last-child { margin-bottom: 0; }
+.vc-col-side .vc-related-stores,
+.vc-col-side .vc-links { padding-top: 1.25rem; }
+
+@media (max-width: 960px) {
+  .vc-merchant-page--split { grid-template-columns: 1fr; gap: 1.5rem; }
+  .vc-col-side { position: static; }
+}
+
+/* ---------- Headline discount figure ---------- */
+
+.vc-hero__figure {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+  line-height: 1;
+}
+
+.vc-hero__figure-prefix {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--vc-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.vc-hero__figure-value {
+  font-size: var(--vc-figure-size);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--vc-accent);
+}
+
+.vc-hero__figure-suffix {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--vc-accent);
+}
+
+/* With a figure present the restated offer is supporting text, not the lead. */
+.vc-hero__figure + .vc-hero__offer {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--vc-text-soft);
+}
+
+@media (max-width: 640px) {
+  .vc-hero__figure-value { font-size: 2.5rem; }
+}
+
+/* ---------- Page title ---------- */
+
+.vc-page-title {
+  font-size: 2rem;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin: 0 0 1.25rem;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .vc-page-title { font-size: 1.6rem; }
+}
+
+/* ---------- Stores that cannot ship here ---------- */
+
+.vc-archive-excluded {
+  margin: 2rem 0 0;
+  padding: 1.25rem 1.4rem;
+  background: var(--vc-warn-bg);
+  border-left: 3px solid var(--vc-warn-border);
+  border-radius: var(--vc-radius);
+  max-width: var(--vc-max-width);
+}
+
+.vc-archive-excluded h2 { font-size: 1.05rem; margin: 0 0 0.35rem; }
+.vc-archive-excluded > p { margin: 0 0 0.8rem; font-size: 0.92rem; color: var(--vc-text-soft); }
+
+/* ---------- Coupon cards inside the merchant page ----------
+ *
+ * WP Coupon & Deals sets --wcd-columns as an inline style on .wcd-grid, and
+ * its own breakpoints respond to the VIEWPORT. Inside the main column of a
+ * two-column page that is the wrong measurement: on a wide screen it still
+ * renders three cards into roughly 740px.
+ *
+ * Container queries measure the space the grid is actually in. !important is
+ * required because the inline style would otherwise win.
+ */
+
+.vc-coupon-widget {
+  container-type: inline-size;
+  container-name: vc-coupons;
+}
+
+/* Fallback for browsers without container queries: a two-column page never
+   has room for three cards, so cap it there. */
+.vc-merchant-page--split .vc-coupon-widget .wcd-grid {
+  --wcd-columns: 2 !important;
+}
+
+@supports (container-type: inline-size) {
+  /* Let the container decide in every layout, split or not. */
+  .vc-merchant-page--split .vc-coupon-widget .wcd-grid {
+    --wcd-columns: 3 !important;
+  }
+
+  /* The plugin's own breakpoints set grid-template-columns directly, which
+     would beat a change to --wcd-columns alone, so set both. */
+  @container vc-coupons (max-width: 900px) {
+    .wcd-grid {
+      --wcd-columns: 2 !important;
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+  }
+
+  @container vc-coupons (max-width: 560px) {
+    .wcd-grid {
+      --wcd-columns: 1 !important;
+      grid-template-columns: 1fr !important;
+    }
+  }
+}
+
+/* The sidebar is far too narrow for a multi-column grid, whatever the
+   viewport says. */
+.vc-col-side .vc-coupon-widget .wcd-grid,
+.vc-sidebar .vc-coupon-widget .wcd-grid,
+.widget .vc-coupon-widget .wcd-grid {
+  --wcd-columns: 1 !important;
+  grid-template-columns: 1fr !important;
+}
+
+/* Cards should not spill out of the column on long unbroken strings such as
+   a URL in a coupon description. */
+.vc-coupon-widget .wcd-card { min-width: 0; }
+.vc-coupon-widget .wcd-card * { overflow-wrap: anywhere; }
+
+/* ---------- Destination index hub ---------- */
+
+.vc-destination-index__group { margin: 0 0 2rem; }
+.vc-destination-index__heading { font-size: 1.3rem; margin: 0 0 .75rem; }
+.vc-destination-index__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Fits the container it is dropped into, whatever the theme's width. */
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: .4rem 1rem;
+}
+.vc-destination-index__item { font-size: .95rem; line-height: 1.5; }
+.vc-destination-index__item a { text-decoration: none; }
+.vc-destination-index__item a:hover { text-decoration: underline; }
+.vc-destination-index__count { color: #666; font-size: .82rem; }
+
+/* The coupon plugin's empty state, toned down so a store with no live
+   coupons does not look like a rendering failure. */
+.vc-coupon-widget .wcd-empty {
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed #ddd;
+  border-radius: 6px;
+  background: #fafafa;
+  font-size: .9rem;
+}
+
+/* ---------- Recently expired coupons ----------
+ *
+ * Visually subordinate to the live ones: present as evidence the page is
+ * maintained, but never competing with an offer that still works.
+ */
+
+.vc-coupon-expired {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e5e7eb;
+}
+.vc-coupon-expired__heading {
+  font-size: 1.05rem;
+  margin: 0 0 .35rem;
+  color: #555;
+}
+.vc-coupon-expired__note {
+  margin: 0 0 .75rem;
+  font-size: .85rem;
+  color: #6b7280;
+}
+/* The plugin already marks expired cards; this just damps them further so
+   the live grid above stays the obvious place to look. */
+.vc-coupon-expired .wcd-card { opacity: .72; }
+.vc-coupon-expired .wcd-card:hover { opacity: 1; }
+.vc-coupon-expired .wcd-card .wcd-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(0, 0, 0, .35);
+}
+
+/* ---------- Where this store ships ---------- */
+
+.vc-destinations__list { list-style: none; margin: 0 0 .75rem; padding: 0; }
+.vc-destinations__item { margin: 0 0 .4rem; line-height: 1.6; }
+.vc-destinations__except { margin: .5rem 0 0; }
+.vc-destinations__note {
+  margin: .6rem 0 0;
+  font-size: .85rem;
+  color: #6b7280;
+}
+.vc-tags__row { margin: 0 0 .4rem; font-size: .92rem; line-height: 1.6; }
+
+/* ---------- Tokens the Page Layout screen can override ----------
+ *
+ * Declared here with the shipped values so the settings screen only has to
+ * emit the ones that were actually changed. A token left alone keeps its
+ * value here, including under dark mode.
+ */
+:root {
+  --vc-heading-size: 1.35rem;
+  --vc-text-size: 1rem;
+  --vc-section-gap: 1.75rem;
+}
+
+.vc-merchant-page .vc-section > h2,
+.vc-merchant-page .vc-trust-section > h2,
+.vc-merchant-page .vc-destinations > h2 {
+  font-size: var(--vc-heading-size);
+}
+.vc-merchant-page { font-size: var(--vc-text-size); }
+.vc-merchant-page .vc-section { margin-bottom: var(--vc-section-gap); }
+
+/* ---------- Custom blocks ---------- */
+
+.vc-custom__body > :first-child { margin-top: 0; }
+.vc-custom__body > :last-child { margin-bottom: 0; }
+.vc-custom__body img { max-width: 100%; height: auto; }
+.vc-custom__body ul,
+.vc-custom__body ol { margin: 0 0 .75rem 1.25rem; }

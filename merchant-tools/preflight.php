@@ -1,0 +1,447 @@
+<?php
+/**
+ * Pre-flight integrity check. Run before packaging or importing.
+ *
+ * Loads the plugin against a stubbed WordPress and asserts the structural
+ * things that unit tests miss and that fail silently in production:
+ *
+ *   - every taxonomy the code references is actually registered
+ *   - activation seeding is reachable from the main plugin file
+ *   - cross-module functions all exist
+ *   - shortcodes are registered
+ *   - the shipping assignment cannot silently drop terms
+ *   - shipped assets are present
+ *
+ * Usage: php preflight.php
+ */
+
+error_reporting(E_ALL & ~E_DEPRECATED);
+define('ABSPATH', __DIR__ . '/');
+define('HOUR_IN_SECONDS', 3600);
+define('DAY_IN_SECONDS', 86400);
+
+$GLOBALS['registered_taxonomies'] = array();
+$GLOBALS['registered_shortcodes'] = array();
+$GLOBALS['activation_hooks'] = array();
+$GLOBALS['actions'] = array();
+$GLOBALS['meta'] = array();
+$GLOBALS['termmeta'] = array();
+$GLOBALS['inserted_terms'] = array();
+$GLOBALS['assigned'] = array();
+$GLOBALS['current_id'] = 1;
+$GLOBALS['queried'] = null;
+
+$GLOBALS['registered_post_types'] = array();
+function register_post_type($name, $args = array()) { $GLOBALS['registered_post_types'][$name] = $args; }
+function post_type_exists($name) { return isset($GLOBALS['registered_post_types'][$name]); }
+function taxonomy_exists($name) { return isset($GLOBALS['registered_taxonomies'][$name]); }
+function delete_post_meta($i, $k) { return true; }
+function current_time($f) { return date($f); }
+function register_taxonomy($name, $types, $args = array()) {
+    $GLOBALS['registered_taxonomies'][$name] = $args;
+}
+function add_shortcode($tag, $cb) { $GLOBALS['registered_shortcodes'][$tag] = true; }
+function register_activation_hook($file, $cb) { $GLOBALS['activation_hooks'][] = array($file, $cb); }
+function register_deactivation_hook($file, $cb) { $GLOBALS['deactivation_hooks'][] = array($file, $cb); }
+function wp_next_scheduled($h) { return $GLOBALS['scheduled'][$h] ?? false; }
+function wp_schedule_event($t, $r, $h) { $GLOBALS['scheduled'][$h] = $t; return true; }
+function wp_unschedule_event($t, $h) { unset($GLOBALS['scheduled'][$h]); return true; }
+function has_action($t, $f = false) { return false; }
+function do_action() {}
+function wp_get_post_terms($i, $t, $a = array()) { return array(); }
+function add_action($tag, $cb = null, $p = 10, $a = 1) { $GLOBALS['actions'][$tag][] = $cb; }
+function add_filter($tag, $cb = null, $p = 10, $a = 1) { $GLOBALS['actions'][$tag][] = $cb; }
+function apply_filters($tag, $value) { return $value; }
+function register_post_meta() {}
+function get_post_meta($id, $k, $s = false) { return $GLOBALS['meta'][$id][$k] ?? ''; }
+function update_post_meta($id, $k, $v) { $GLOBALS['meta'][$id][$k] = $v; return true; }
+function get_term_meta($id, $k, $s = false) { return $GLOBALS['termmeta'][$id][$k] ?? ''; }
+function update_term_meta($id, $k, $v) { $GLOBALS['termmeta'][$id][$k] = $v; return true; }
+function get_the_ID() { return $GLOBALS['current_id']; }
+function get_the_title($id = null) { return 'Test Merchant'; }
+function get_permalink($id = null) { return 'https://example.com/m/'; }
+function get_post_type($p = null) { return 'merchant'; }
+function get_post_status($id = null) { return 'publish'; }
+function is_singular() { return true; }
+function is_tax($t = '') { return false; }
+function is_main_query() { return true; }
+function get_queried_object() { return $GLOBALS['queried']; }
+function get_terms($a = array()) { return array(); }
+function get_term_link($t) { return '#'; }
+function term_exists($name, $tax = '') { return false; }
+function wp_insert_term($name, $tax, $args = array()) {
+    static $next = 100;
+    $id = $next++;
+    $GLOBALS['inserted_terms'][] = array('name' => $name, 'tax' => $tax, 'id' => $id,
+        'slug' => $args['slug'] ?? '');
+    return array('term_id' => $id);
+}
+function get_the_terms($id, $tax) { return false; }
+function get_term($id, $tax = '') {
+    foreach ($GLOBALS['inserted_terms'] as $t) {
+        if ($t['id'] === $id) {
+            return (object) array('term_id' => $id, 'name' => $t['name'], 'taxonomy' => $t['tax']);
+        }
+    }
+    return null;
+}
+function get_term_by($field, $value, $tax = '') {
+    foreach ($GLOBALS['inserted_terms'] as $t) {
+        if ($t['tax'] === $tax && ($t['name'] === $value || sanitize_title($t['name']) === $value)) {
+            return (object) array('term_id' => $t['id'], 'name' => $t['name'], 'taxonomy' => $tax);
+        }
+    }
+    return false;
+}
+function wp_set_object_terms($post_id, $ids, $tax, $append = false) {
+    $GLOBALS['assigned'][$tax] = $ids;
+}
+function is_wp_error($t) { return false; }
+function flush_rewrite_rules() {}
+function current_user_can() { return true; }
+function wpautop($s) { return "<p>$s</p>"; }
+function wp_kses_post($s) { return $s; }
+function esc_html($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
+function esc_attr($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
+function esc_textarea($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
+function esc_url($v) { return (string) $v; }
+function esc_html__($v, $d = null) { return htmlspecialchars((string) $v, ENT_QUOTES); }
+function esc_html_e($v, $d = null) { echo $v; }
+function __($v, $d = null) { return $v; }
+function _e($v, $d = null) { echo $v; }
+function _n($s, $p, $n, $d = null) { return $n === 1 ? $s : $p; }
+function is_email($v) { return (bool) filter_var($v, FILTER_VALIDATE_EMAIL); }
+function date_i18n($f) { return date($f); }
+function wp_json_encode($v, $f = 0) { return json_encode($v, $f); }
+function sanitize_title($v) { return strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $v), '-')); }
+function add_management_page() {}
+function wp_nonce_field() {}
+function submit_button() {}
+function wp_verify_nonce() { return false; }
+function get_posts() { return array(); }
+function wp_insert_post() { return 1; }
+function wp_update_post() { return 1; }
+function plugins_url($p, $f = '') { return $p; }
+function wp_enqueue_style() {}
+function get_option($k, $d = false) { return $d; }
+function delete_option($k) {}
+function update_option($k, $v) { return true; }
+function add_submenu_page() {}
+function add_meta_box() {}
+function esc_js($v) { return $v; }
+function esc_attr_e($v, $d = null) { echo $v; }
+function sanitize_textarea_field($v) { return trim((string) $v); }
+function selected($a, $b, $e = true) { return ''; }
+function sanitize_hex_color($c) { return $c; }
+function sanitize_text_field($v) { return trim(strip_tags((string) $v)); }
+function do_shortcode($s) { return ''; }
+function shortcode_exists($t) { return isset($GLOBALS['registered_shortcodes'][$t]); }
+function wp_get_object_terms($id, $tax, $args = array()) { return array(); }
+class WP_Query { public $posts = array(); public function __construct($a = array()) {} }
+function shortcode_atts($pairs, $atts, $sc = '') { return array_merge($pairs, (array) $atts); }
+class WP_Error { public function get_error_message() { return ''; } }
+
+$mainFile = __DIR__ . '/wp-merchant-fields.php';
+require $mainFile;
+
+// Fire the init callbacks, since that is where taxonomies register. Running
+// them here also proves they are callable, not merely hooked.
+foreach ($GLOBALS['actions']['init'] ?? array() as $cb) {
+    if (is_callable($cb)) {
+        $cb();
+    }
+}
+
+$fail = 0;
+$warn = 0;
+function ok($label)            { echo "  ok    $label\n"; }
+function bad($label, $d = '')  { global $fail; $fail++; echo "  FAIL  $label" . ($d ? " -- $d" : '') . "\n"; }
+function warn($label, $d = '') { global $warn; $warn++; echo "  warn  $label" . ($d ? " -- $d" : '') . "\n"; }
+function check($label, $cond, $d = '') { $cond ? ok($label) : bad($label, $d); }
+
+echo "\nTaxonomies\n";
+$registered = array_keys($GLOBALS['registered_taxonomies']);
+foreach (array('service_location', 'ships_to', 'merchant_category') as $tax) {
+    check("$tax is registered", in_array($tax, $registered, true));
+}
+
+// Anything the archive module claims to handle must actually exist.
+foreach (vc_archive_taxonomies() as $tax) {
+    check("archive taxonomy '$tax' is registered", in_array($tax, $registered, true),
+        'referenced by vc_archive_taxonomies() but never registered');
+}
+
+// Public + rewrite, or the archive URLs will not resolve.
+foreach (array('ships_to', 'merchant_category') as $tax) {
+    $args = $GLOBALS['registered_taxonomies'][$tax] ?? array();
+    check("$tax is public (archives reachable)", !empty($args['public']));
+    check("$tax has a rewrite slug", !empty($args['rewrite']['slug']));
+}
+
+echo "\nPost type\n";
+$pts = $GLOBALS['registered_post_types'];
+check('a merchant post type is registered', !empty($pts),
+    'nothing registers it - imported posts would be orphaned with no admin menu');
+if (!empty($pts)) {
+    $args = reset($pts);
+    check('post type is public', !empty($args['public']));
+    check('post type has an archive', !empty($args['has_archive']));
+    check('post type supports custom-fields',
+        in_array('custom-fields', $args['supports'] ?? array(), true));
+    check('post type has a rewrite slug', !empty($args['rewrite']['slug']));
+}
+
+echo "\nActivation\n";
+check('exactly one activation hook is registered', count($GLOBALS['activation_hooks']) === 1,
+    count($GLOBALS['activation_hooks']) . ' found');
+if (!empty($GLOBALS['activation_hooks'])) {
+    list($file, $cb) = $GLOBALS['activation_hooks'][0];
+    check('activation hook is bound to the main plugin file', $file === $mainFile, "got: $file");
+    check('activation callback exists', is_string($cb) && function_exists($cb));
+}
+
+// Run activation and confirm the taxonomies actually get populated.
+if (function_exists('vc_merchant_activate')) {
+    vc_merchant_activate();
+    $byTax = array();
+    foreach ($GLOBALS['inserted_terms'] as $t) {
+        $byTax[$t['tax']] = ($byTax[$t['tax']] ?? 0) + 1;
+    }
+    check('activation seeds service_location', ($byTax['service_location'] ?? 0) > 0);
+    check('activation seeds ships_to', ($byTax['ships_to'] ?? 0) > 0,
+        'no destination terms created - every import would assign nothing');
+    check('ships_to includes all 50 states + DC',
+        ($byTax['ships_to'] ?? 0) >= 51, ($byTax['ships_to'] ?? 0) . ' terms');
+
+    // The destination pages exist to rank for "ships to <state>", so the
+    // state has to be the memorable part of the URL. A regression back to
+    // parent-namespaced slugs would bury it.
+    $prefixed = array();
+    foreach ($GLOBALS['inserted_terms'] as $t) {
+        if ($t['tax'] === 'ships_to' && $t['slug'] !== ''
+            && strpos($t['slug'], 'united-states-') === 0) {
+            $prefixed[] = $t['slug'];
+        }
+    }
+    check('state slugs are not prefixed with the country',
+        empty($prefixed), implode(', ', array_slice($prefixed, 0, 3)));
+
+    $texas = '';
+    foreach ($GLOBALS['inserted_terms'] as $t) {
+        if ($t['tax'] === 'ships_to' && $t['name'] === 'Texas') { $texas = $t['slug']; }
+    }
+    check('a state seeds at its own slug', $texas === 'texas', "got '$texas'");
+
+    check('old destination URLs can be migrated and redirected',
+        function_exists('vc_shipping_migrate_slugs')
+        && function_exists('vc_shipping_preferred_slug'));
+}
+
+echo "\nShipping assignment\n";
+if (function_exists('vc_assign_ships_to')) {
+    // Terms already seeded above.
+    $n = vc_assign_ships_to(1, 'United States|California|Texas');
+    check('assigns known destinations', $n >= 3, "assigned $n");
+
+    // An unseeded destination must be created, not silently dropped.
+    $before = count($GLOBALS['inserted_terms']);
+    vc_assign_ships_to(2, 'Narnia');
+    check('creates an unknown destination rather than dropping it silently',
+        count($GLOBALS['inserted_terms']) > $before);
+}
+
+echo "\nCross-module functions\n";
+$required = array(
+    'vc_layout_get', 'vc_layout_blocks', 'vc_merchant_block',
+    'vc_merchant_post_types', 'vc_merchant_display_name', 'vc_merchant_offer_badge',
+    'vc_merchant_info_panel', 'vc_merchant_trust_info', 'vc_merchant_render_page',
+    'vc_merchant_seo_title', 'vc_merchant_meta_description', 'vc_merchant_schema_graph',
+    'vc_merchant_freshness_stamp', 'vc_archive_title', 'vc_archive_intro',
+    'vc_archive_schema_graph', 'vc_archive_merchant_card', 'vc_assign_ships_to',
+    'vc_merchant_restricted_line', 'vc_merchant_import_csv', 'vc_seed_ships_to',
+    'vc_merchant_offer_mode', 'vc_coupons_active', 'vc_merchant_brand_term',
+    'vc_merchant_coupon_status', 'vc_merchant_live_coupons',
+    'vc_logo_sideload', 'vc_logo_sideload_batch', 'vc_logo_is_local',
+    'vc_merchant_coupon_shortcode', 'vc_coupons_registered_shortcodes',
+    'vc_coupons_meta_probe', 'vc_coupons_link_report',
+    'vc_merchant_coupon_section', 'vc_merchant_expired_coupons',
+    'vc_merchant_max_discount', 'vc_merchant_brand_figures',
+    'vc_merchant_render_tokens', 'vc_merchant_seo_tokens',
+    'vc_freshness_check', 'vc_freshness_purge_caches', 'vc_freshness_unschedule',
+    'vc_merchant_destinations', 'vc_merchant_taxonomy_tags',
+    'vc_merchant_fact_rows', 'vc_merchant_fact_keys',
+    'vc_layout_heading', 'vc_layout_heading_defaults', 'vc_layout_custom_content',
+    'vc_block_heading', 'vc_merchant_custom_block',
+    'vc_rehub_active', 'vc_rehub_sync_merchant', 'vc_rehub_term_map',
+    'vc_rehub_offer_map', 'vc_rehub_handover', 'vc_merchant_permalink',
+    'vc_merchant_link', 'vc_rehub_unmatched_count',
+);
+foreach ($required as $fn) {
+    check("$fn() exists", function_exists($fn));
+}
+
+echo "\nLayout blocks\n";
+$blocks = array_keys(vc_layout_defaults());
+foreach (array('title', 'hero', 'coupon', 'quickfacts', 'about', 'save', 'policies',
+               'faqs', 'info', 'trust', 'links', 'related', 'internal', 'editorial') as $b) {
+    check("block '$b' is registered", in_array($b, $blocks, true));
+}
+// Every registered block must actually render something or return a string.
+$GLOBALS['meta'][1] = array(
+    'display_brand_name' => 'Test Store', 'brand_review_url' => '/review/',
+    'deals_hub_url' => '/deals/', 'seasonal_deals_url' => '/seasonal/',
+    'best_offer_summary' => '20% off', 'brand_url' => 'https://example.com',
+);
+$GLOBALS['current_id'] = 1;
+foreach ($blocks as $b) {
+    $out = vc_merchant_block($b, 1, array());
+    check("block '$b' returns a string", is_string($out));
+}
+check('title block emits an H1 using the display name',
+    strpos(vc_merchant_block('title', 1, array()), '<h1') !== false
+    && strpos(vc_merchant_block('title', 1, array()), 'Test Store') !== false,
+    vc_merchant_block('title', 1, array()));
+check('internal block renders review/deals/seasonal links',
+    substr_count(vc_merchant_block('internal', 1, array()), '<li>') === 3,
+    vc_merchant_block('internal', 1, array()));
+check('internal links are NOT nofollow (they are ours)',
+    strpos(vc_merchant_block('internal', 1, array()), 'nofollow') === false);
+
+echo "\nShortcodes\n";
+foreach (array('merchant_page', 'merchant_list', 'merchant_related', 'merchant_offer',
+               'merchant_about', 'merchant_policies', 'merchant_faqs', 'merchant_info',
+               'merchant_trust', 'merchant_editorial', 'merchant_field',
+               'merchant_name', 'merchant_hero', 'merchant_quickfacts', 'merchant_links',
+               'destination_index', 'merchant_destinations', 'merchant_tags',
+               'merchant_fact', 'merchant_discount', 'merchant_offer_label') as $sc) {
+    check("[$sc] is registered", isset($GLOBALS['registered_shortcodes'][$sc]));
+}
+
+echo "\nEditor panel\n";
+if (function_exists('vc_editor_field_groups')) {
+    $editor_keys = array();
+    foreach (vc_editor_field_groups() as $group => $fields) {
+        $editor_keys = array_merge($editor_keys, array_keys($fields));
+    }
+    check('editor panel exposes fields', count($editor_keys) > 30, count($editor_keys) . ' fields');
+
+    // Anything editable must be a column the importer round-trips, or a hand
+    // edit would be silently lost on the next import.
+    $importer = vc_merchant_import_meta_keys();
+    $orphans = array_diff($editor_keys, $importer);
+    check('every editable field is one the importer carries',
+        empty($orphans), 'orphans: ' . implode(', ', $orphans));
+
+    // And the shortcode allowlist must accept them, or [merchant_field] would
+    // warn "unknown key" for a field the panel offers.
+    $virtual = function_exists('vc_section_virtual_fields') ? vc_section_virtual_fields() : array();
+    $unreachable = array_diff($editor_keys, array_merge($importer, $virtual));
+    check('every editable field is reachable via [merchant_field]',
+        empty($unreachable), 'unreachable: ' . implode(', ', $unreachable));
+}
+
+check('a deactivation hook is registered',
+    !empty($GLOBALS['deactivation_hooks']),
+    'nothing would unschedule the freshness check');
+
+if (function_exists('vc_layout_heading_defaults') && function_exists('vc_layout_defaults')) {
+    $known = array_merge(array_keys(vc_layout_defaults()), array('expired'));
+    $orphans = array_diff(array_keys(vc_layout_heading_defaults()), $known);
+    check('every configurable heading belongs to a real block',
+        empty($orphans), implode(', ', $orphans));
+
+    foreach (array('custom1', 'custom2', 'custom3') as $slot) {
+        $blocks = vc_layout_defaults();
+        check("$slot is hidden by default", ($blocks[$slot]['where'] ?? '') === 'off',
+            'a new block visible by default would change every existing page');
+    }
+}
+
+if (function_exists('vc_rehub_term_map')) {
+    // Read from ReHub's meta_for_brand_cat() and Post Offer section. A key
+    // outside these lists would be written and never read.
+    $rehub_term_keys = array('brand_heading', 'brand_short_description', 'brand_url',
+        'cashback_notice', 'brand_second_description', 'brandimage');
+    $rehub_offer_keys = array('rehub_offer_btn_text', 'rehub_offer_coupon_date',
+        'rehub_offer_coupon_mask', 'rehub_offer_disclaimer', 'rehub_offer_discount',
+        'rehub_offer_logo_url', 'rehub_offer_name', 'rehub_offer_product_coupon',
+        'rehub_offer_product_desc', 'rehub_offer_product_price',
+        'rehub_offer_product_price_old', 'rehub_offer_product_thumb',
+        'rehub_offer_product_url', 'rehub_offer_shortcode_generate',
+        'rehub_offer_verify_label');
+
+    $stray = array_diff(array_keys(vc_rehub_term_map()), $rehub_term_keys);
+    check('every ReHub store field written is one the theme defines',
+        empty($stray), implode(', ', $stray));
+
+    $stray = array_diff(array_keys(vc_rehub_offer_map()), $rehub_offer_keys);
+    check('every ReHub offer field written is one the theme defines',
+        empty($stray), implode(', ', $stray));
+
+    check('the adapter does nothing when ReHub is absent', vc_rehub_active() === false,
+        'taxonomy_exists() is stubbed false here, so this must be false');
+    check('the handover cannot engage without ReHub', vc_rehub_handover() === false,
+        'it would 301 every store page to a term that does not exist');
+}
+
+$bypass = array();
+foreach (array('wp-merchant-archive.php', 'wp-merchant-sections.php',
+               'wp-merchant-render.php') as $file) {
+    $src = @file_get_contents(__DIR__ . '/' . $file);
+    if ($src === false) { continue; }
+    // get_permalink() on a merchant id bypasses vc_merchant_link(), so a
+    // handed-over site would link at pages that 301 straight back out.
+    if (preg_match('/get_permalink\(\s*\$(post_id|id|post->ID)\s*\)/', $src)) {
+        $bypass[] = $file;
+    }
+}
+check('no merchant link bypasses the handover resolver',
+    empty($bypass), implode(', ', $bypass));
+
+$main = file_get_contents(__DIR__ . '/wp-merchant-fields.php');
+preg_match('/^\s*\*\s*Version:\s*([0-9.]+)/m', $main, $vm);
+$header_version = $vm[1] ?? '';
+check('the plugin header carries a version', $header_version !== '');
+check('and the constant matches it',
+    defined('VC_MERCHANT_VERSION') && VC_MERCHANT_VERSION === $header_version,
+    'header ' . $header_version . ' vs constant '
+        . (defined('VC_MERCHANT_VERSION') ? VC_MERCHANT_VERSION : 'undefined'));
+check('and it has moved past the original 1.0.0',
+    $header_version !== '1.0.0',
+    'a version that never moves cannot be checked against an upload');
+
+echo "\nShipped files\n";
+$files = array(
+    'wp-merchant-fields.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
+    'wp-merchant-seo.php', 'wp-merchant-archive.php', 'wp-merchant-sections.php',
+    'wp-merchant-settings.php', 'wp-merchant-editor.php', 'wp-merchant-coupons.php',
+    'wp-merchant-logos.php', 'wp-merchant-freshness.php', 'wp-merchant-rehub.php',
+    'wp-merchant-import.php', 'wp-merchant-intros.php',
+    'wp-merchant-explainer.php', 'wp-merchant-storepage.php',
+    'assets/merchant-pages.css',
+    // The explainer page is created from this file. Shipping the module
+    // without it leaves a button that can only fail.
+    'templates/shipping-explainer.html',
+);
+foreach ($files as $f) {
+    check("$f present", file_exists(__DIR__ . '/' . $f));
+}
+
+echo "\nImporter coverage\n";
+if (function_exists('vc_merchant_import_meta_keys')) {
+    $keys = vc_merchant_import_meta_keys();
+    foreach (array('ships_to_terms', 'restricted_states', 'brand_category',
+                   'offer_display_mode', 'section_origins', 'social_links',
+                   'useful_links', 'do_they_id_on_delivery', 'shipping_policy_url') as $k) {
+        check("importer carries '$k'", in_array($k, $keys, true));
+    }
+}
+
+echo "\n";
+if ($fail) {
+    echo "$fail check(s) FAILED";
+    if ($warn) { echo ", $warn warning(s)"; }
+    echo "\n";
+    exit(1);
+}
+echo "Preflight clean" . ($warn ? " ($warn warning(s))" : '') . ".\n";

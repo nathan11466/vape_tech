@@ -1,0 +1,1024 @@
+<?php
+/**
+ * Destination archive pages -- "online vape shops that ship to X".
+ *
+ * These are landing pages in their own right, not a byproduct of the taxonomy.
+ * A default WordPress archive (bare title + excerpt list) will not rank for a
+ * commercial query like that, so this module gives each destination term a
+ * query-aligned title, a real intro, a useful merchant listing, ItemList
+ * schema, and links out to neighbouring destinations.
+ *
+ * Per-term editorial copy lives in term meta and is editable in wp-admin, so
+ * state-specific legal detail is written by a human rather than generated.
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Taxonomies this module dresses up.
+ */
+function vc_archive_taxonomies() {
+    return apply_filters('vc_archive_taxonomies', array('ships_to', 'merchant_category'));
+}
+
+function vc_is_merchant_archive() {
+    foreach (vc_archive_taxonomies() as $tax) {
+        if (is_tax($tax)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * How many merchants are in this term.
+ */
+function vc_archive_merchant_count($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term) || !isset($term->count)) {
+        return 0;
+    }
+    return (int) $term->count;
+}
+
+/* -------------------------------------------------------------------------
+ * Per-term editorial fields
+ * ---------------------------------------------------------------------- */
+
+function vc_archive_term_fields() {
+    return array(
+        'vc_intro'        => __('Intro paragraph', 'vc-merchant'),
+        'vc_legal_note'   => __('Local rules / legal note', 'vc-merchant'),
+        'vc_legal_source_url' => __('Local rules: source URL', 'vc-merchant'),
+        'vc_legal_checked'    => __('Local rules: date checked', 'vc-merchant'),
+        'vc_faq_q1'       => __('FAQ 1 question', 'vc-merchant'),
+        'vc_faq_a1'       => __('FAQ 1 answer', 'vc-merchant'),
+        'vc_faq_q2'       => __('FAQ 2 question', 'vc-merchant'),
+        'vc_faq_a2'       => __('FAQ 2 answer', 'vc-merchant'),
+        'vc_title_override' => __('SEO title override', 'vc-merchant'),
+    );
+}
+
+/**
+ * Render the editorial fields on the term edit screen.
+ */
+function vc_archive_term_edit_fields($term) {
+    foreach (vc_archive_term_fields() as $key => $label) {
+        $value = get_term_meta($term->term_id, $key, true);
+        $multiline = in_array($key, array('vc_intro', 'vc_legal_note', 'vc_faq_a1', 'vc_faq_a2'), true);
+        ?>
+        <tr class="form-field">
+            <th scope="row"><label for="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></label></th>
+            <td>
+                <?php if ($multiline) : ?>
+                    <textarea name="<?php echo esc_attr($key); ?>" id="<?php echo esc_attr($key); ?>"
+                              rows="4" class="large-text"><?php echo esc_textarea($value); ?></textarea>
+                <?php else : ?>
+                    <input type="text" name="<?php echo esc_attr($key); ?>" id="<?php echo esc_attr($key); ?>"
+                           value="<?php echo esc_attr($value); ?>" class="large-text" />
+                <?php endif; ?>
+            </td>
+        </tr>
+        <?php
+    }
+}
+
+function vc_archive_save_term_fields($term_id) {
+    if (!current_user_can('manage_categories')) {
+        return;
+    }
+    foreach (array_keys(vc_archive_term_fields()) as $key) {
+        if (isset($_POST[$key])) {
+            update_term_meta($term_id, $key, wp_kses_post(wp_unslash($_POST[$key])));
+        }
+    }
+}
+
+add_action('init', function () {
+    foreach (vc_archive_taxonomies() as $tax) {
+        add_action("{$tax}_edit_form_fields", 'vc_archive_term_edit_fields');
+        add_action("edited_{$tax}", 'vc_archive_save_term_fields');
+        add_action("created_{$tax}", 'vc_archive_save_term_fields');
+    }
+}, 20);
+
+/* -------------------------------------------------------------------------
+ * Titles and descriptions
+ * ---------------------------------------------------------------------- */
+
+/**
+ * The query people actually type.
+ *
+ * Filterable, because the right phrasing depends on the niche -- change it
+ * once here rather than editing 50 terms.
+ */
+function vc_archive_title_template($term) {
+    $niche = function_exists('vc_merchant_niche_label') ? trim(vc_merchant_niche_label()) : 'Vape';
+
+    if ($term && $term->taxonomy === 'ships_to') {
+        // "Online Vape Shops That Ship to %s", or "Online Shops That Ship to
+        // %s" when no niche is set.
+        $template = $niche !== ''
+            ? sprintf(__('Online %s Shops That Ship to %%s', 'vc-merchant'), $niche)
+            : __('Online Shops That Ship to %s', 'vc-merchant');
+    } else {
+        $template = $niche !== ''
+            ? sprintf(__('%%s %s Deals & Coupons', 'vc-merchant'), $niche)
+            : __('%s Deals & Coupons', 'vc-merchant');
+    }
+
+    return apply_filters('vc_archive_title_template', $template, $term);
+}
+
+function vc_archive_title($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return '';
+    }
+
+    $override = trim((string) get_term_meta($term->term_id, 'vc_title_override', true));
+    if ($override !== '') {
+        return $override;
+    }
+
+    return sprintf(vc_archive_title_template($term), $term->name);
+}
+
+/**
+ * Title with a freshness stamp, for the <title> tag only. The on-page H1 keeps
+ * the clean form.
+ */
+function vc_archive_seo_title($term = null) {
+    $term = $term ?: get_queried_object();
+    $base = vc_archive_title($term);
+    if ($base === '') {
+        return '';
+    }
+
+    $stamp = function_exists('vc_merchant_freshness_stamp')
+        ? vc_merchant_freshness_stamp()
+        : date_i18n('F Y');
+
+    return sprintf('%s (%s)', $base, $stamp);
+}
+
+function vc_archive_meta_description($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return '';
+    }
+
+    $count = vc_archive_merchant_count($term);
+    $stamp = function_exists('vc_merchant_freshness_stamp')
+        ? vc_merchant_freshness_stamp()
+        : date_i18n('F Y');
+
+    if ($term->taxonomy === 'ships_to') {
+        return sprintf(
+            /* translators: 1: count, 2: destination, 3: month year */
+            _n(
+                '%1$d online vape shop that ships to %2$s, with current deals and shipping details. Updated %3$s.',
+                '%1$d online vape shops that ship to %2$s, compared on deals, shipping and returns. Updated %3$s.',
+                max(1, $count),
+                'vc-merchant'
+            ),
+            $count, $term->name, $stamp
+        );
+    }
+
+    return sprintf(
+        __('%1$d %2$s retailers with current deals and coupon codes. Updated %3$s.', 'vc-merchant'),
+        $count, $term->name, $stamp
+    );
+}
+
+// Replace the theme's archive title ("Ships To: California") with the query form.
+add_filter('get_the_archive_title', function ($title) {
+    if (!vc_is_merchant_archive()) {
+        return $title;
+    }
+    $custom = vc_archive_title();
+
+    return $custom !== '' ? $custom : $title;
+});
+
+// Feed Rank Math.
+add_filter('rank_math/frontend/title', function ($title) {
+    if (!vc_is_merchant_archive()) {
+        return $title;
+    }
+    $custom = vc_archive_seo_title();
+
+    return $custom !== '' ? $custom : $title;
+});
+
+add_filter('rank_math/frontend/description', function ($description) {
+    if (!vc_is_merchant_archive()) {
+        return $description;
+    }
+    $custom = vc_archive_meta_description();
+
+    return $custom !== '' ? $custom : $description;
+});
+
+/* -------------------------------------------------------------------------
+ * Archive intro content
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Build the intro shown above the merchant list.
+ *
+ * The generated part states only what the data supports -- how many merchants,
+ * and how many were confirmed versus inferred. Anything about local law comes
+ * from the term's own editorial field, written by a human.
+ */
+function vc_archive_intro($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return '';
+    }
+
+    $count = vc_archive_merchant_count($term);
+    $intro = trim((string) get_term_meta($term->term_id, 'vc_intro', true));
+    $legal = trim((string) get_term_meta($term->term_id, 'vc_legal_note', true));
+
+    $out = '<div class="vc-archive-intro">';
+
+    if ($intro !== '') {
+        $out .= wpautop(wp_kses_post($intro));
+    } elseif ($term->taxonomy === 'ships_to') {
+        // Data-only fallback. Deliberately makes no claim about local law.
+        $out .= '<p>' . esc_html(sprintf(
+            _n(
+                'We track %1$d online vape shop confirmed to ship to %2$s. Each listing below shows its current deal, shipping threshold and any product restrictions we could verify.',
+                'We track %1$d online vape shops confirmed to ship to %2$s. Each listing below shows its current deal, shipping threshold and any product restrictions we could verify.',
+                max(1, $count),
+                'vc-merchant'
+            ),
+            $count, $term->name
+        )) . '</p>';
+    }
+
+    if ($legal !== '') {
+        $out .= '<div class="vc-archive-legal">' . wpautop(wp_kses_post($legal))
+             . vc_archive_legal_source($term) . '</div>';
+    }
+
+    $out .= '</div>';
+
+    // Filterable so a module can append to the editorial block without
+    // reaching into this function -- the shipping explainer link uses it.
+    return apply_filters('vc_archive_intro_html', $out, $term);
+}
+
+/**
+ * The line under a local-rules note: where it came from, when, and that it
+ * is a summary rather than advice.
+ *
+ * Rendered here rather than written into each note for two reasons. It
+ * cannot be forgotten on one state out of fifty-one, and the same sentence
+ * typed into fifty-one terms is fifty-one copies of boilerplate in the
+ * field whose whole purpose is to carry something the other pages do not.
+ *
+ * Nothing is printed without a source. A summary of a state's law with no
+ * citation and no date behind it is an assertion, and this field is the
+ * one place on the site making claims about law rather than about shops.
+ */
+function vc_archive_legal_source($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return '';
+    }
+
+    $url = trim((string) get_term_meta($term->term_id, 'vc_legal_source_url', true));
+    $checked = trim((string) get_term_meta($term->term_id, 'vc_legal_checked', true));
+
+    if ($url === '') {
+        return '';
+    }
+
+    $disclaimer = apply_filters(
+        'vc_archive_legal_disclaimer',
+        __('This is a plain-language summary of published law, not legal advice, and the rules change. Check the source before relying on it.', 'vc-merchant'),
+        $term
+    );
+
+    $line = '<p class="vc-archive-legal__source"><small>'
+        . sprintf(
+            /* translators: %s: link to the source */
+            esc_html__('Source: %s', 'vc-merchant'),
+            '<a href="' . esc_url($url) . '" rel="nofollow noopener" target="_blank">'
+            . esc_html__('Public Health Law Center, U.S. E-Cigarette Regulation: A 50-State Review', 'vc-merchant')
+            . '</a>'
+        );
+
+    if ($checked !== '') {
+        $line .= ' &middot; ' . sprintf(
+            /* translators: %s: date the note was checked */
+            esc_html__('checked %s', 'vc-merchant'),
+            esc_html($checked)
+        );
+    }
+
+    $line .= ' &middot; ' . esc_html($disclaimer) . '</small></p>';
+
+    return $line;
+}
+
+/**
+ * FAQs for the archive, from term meta.
+ */
+function vc_archive_faqs($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return array();
+    }
+
+    $faqs = array();
+    for ($i = 1; $i <= 2; $i++) {
+        $q = trim((string) get_term_meta($term->term_id, "vc_faq_q{$i}", true));
+        $a = trim((string) get_term_meta($term->term_id, "vc_faq_a{$i}", true));
+        if ($q !== '' && $a !== '') {
+            $faqs[] = array($q, $a);
+        }
+    }
+
+    return $faqs;
+}
+
+function vc_archive_faq_html($term = null) {
+    $faqs = vc_archive_faqs($term);
+    if (empty($faqs)) {
+        return '';
+    }
+
+    $out = '<section class="vc-archive-faqs"><h2>' . esc_html__('Frequently asked questions', 'vc-merchant') . '</h2>';
+    foreach ($faqs as $faq) {
+        $out .= '<h3>' . esc_html($faq[0]) . '</h3>' . wpautop(esc_html($faq[1]));
+    }
+    $out .= '</section>';
+
+    return $out;
+}
+
+/**
+ * Sibling destinations, for internal linking.
+ *
+ * Links to other states under the same country (or other top-level
+ * destinations), so the network is crawlable and link equity moves between the
+ * 50 state pages instead of each being an island.
+ */
+function vc_archive_sibling_links($term = null, $limit = 12) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return '';
+    }
+
+    $siblings = get_terms(array(
+        'taxonomy'   => $term->taxonomy,
+        'parent'     => $term->parent,
+        'hide_empty' => true,
+        'exclude'    => array($term->term_id),
+        'number'     => $limit,
+        'orderby'    => 'count',
+        'order'      => 'DESC',
+    ));
+
+    if (is_wp_error($siblings) || empty($siblings)) {
+        return '';
+    }
+
+    $heading = ($term->taxonomy === 'ships_to')
+        ? __('Shops shipping to other destinations', 'vc-merchant')
+        : __('Other categories', 'vc-merchant');
+
+    $out = '<nav class="vc-archive-siblings"><h2>' . esc_html($heading) . '</h2><ul>';
+    foreach ($siblings as $sibling) {
+        $out .= '<li><a href="' . esc_url(get_term_link($sibling)) . '">'
+            . esc_html(sprintf(vc_archive_title_template($sibling), $sibling->name))
+            . '</a> <span class="vc-count">(' . (int) $sibling->count . ')</span></li>';
+    }
+    $out .= '</ul></nav>';
+
+    return $out;
+}
+
+/**
+ * Inject intro, FAQs and sibling links into the archive description, which is
+ * where themes already print term copy -- no template file required.
+ */
+/**
+ * Has the document body started?
+ *
+ * get_the_archive_description() is not only a display function. SEO
+ * plugins, schema builders and page builders all call it while wp_head is
+ * running, to work out a meta description or to stash the term copy in a
+ * data attribute. Returning a page of HTML to one of those callers put the
+ * whole store profile inside <head> on the ReHub store pages -- the text
+ * appeared above the site header, outside the theme template entirely.
+ *
+ * So nothing this plugin renders is emitted until wp_head has finished.
+ */
+function vc_body_started() {
+    return !empty($GLOBALS['vc_body_started']);
+}
+
+add_action('wp_head', function () {
+    $GLOBALS['vc_body_started'] = true;
+}, PHP_INT_MAX);
+
+/**
+ * Has the editorial block already been printed on this request?
+ *
+ * Two hooks can print it and only one of them should. Call with true to
+ * claim the slot; whichever fires first wins and the other stands down.
+ */
+function vc_archive_intro_claimed($claim = false) {
+    // A global rather than a static so a test can render two different
+    // pages in one process, which is the only way to check that the two
+    // hooks do not both print.
+    if ($claim) {
+        $was = !empty($GLOBALS['vc_archive_intro_claimed']);
+        $GLOBALS['vc_archive_intro_claimed'] = true;
+
+        return $was;
+    }
+
+    return !empty($GLOBALS['vc_archive_intro_claimed']);
+}
+
+/**
+ * Whether the editorial block belongs on this view at all.
+ *
+ * Page one only. A paginated archive is noindex, follow by design, and
+ * repeating the intro across eight pages of Texas listings would be eight
+ * copies of it.
+ */
+function vc_archive_wants_intro() {
+    return vc_is_merchant_archive() && !is_paged() && vc_body_started();
+}
+
+add_filter('get_the_archive_description', function ($description) {
+    if (!vc_archive_wants_intro() || vc_archive_intro_claimed(true)) {
+        return $description;
+    }
+
+    return vc_archive_intro() . $description;
+});
+
+/**
+ * Print the editorial block above the listing when the theme never asked
+ * for the archive description.
+ *
+ * get_the_archive_description() is the hook themes are supposed to use for
+ * term copy, and most do. ReHub does not call it on a taxonomy archive at
+ * all -- which meant the intro, the local-rules note and the explainer
+ * link were written to the database by the importer and then rendered
+ * nowhere, with no error to go on. The only visible symptom was a page
+ * that looked exactly like one where the import had not been run.
+ *
+ * loop_start fires in any theme that runs a WordPress loop, so this is the
+ * fallback. The claim flag stops the two from both printing.
+ */
+add_action('loop_start', function ($query) {
+    if (!$query instanceof WP_Query || !$query->is_main_query()) {
+        return;
+    }
+    if (!vc_archive_wants_intro() || vc_archive_intro_claimed(true)) {
+        return;
+    }
+    echo vc_archive_intro();
+}, 5);
+
+/**
+ * Append FAQs and internal links after the loop.
+ */
+add_action('loop_end', function ($query) {
+    if (!is_main_query() || !vc_is_merchant_archive()) {
+        return;
+    }
+    echo vc_archive_faq_html();
+    echo vc_archive_sibling_links();
+});
+
+/* -------------------------------------------------------------------------
+ * Listing excerpts
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Merchant posts hold only a shortcode as content, so a theme excerpt would
+ * print "[merchant_page]" or the whole rendered page. Give the listing a
+ * useful summary instead: the current offer plus the shipping threshold.
+ */
+add_filter('get_the_excerpt', function ($excerpt, $post = null) {
+    if (!$post || !in_array(get_post_type($post), vc_merchant_post_types(), true)) {
+        return $excerpt;
+    }
+    if (is_singular()) {
+        return $excerpt;
+    }
+
+    $post_id = $post->ID;
+    $offer = trim((string) get_post_meta($post_id, 'best_offer_summary', true));
+    $ship  = trim((string) get_post_meta($post_id, 'free_shipping_info', true));
+
+    $parts = array_filter(array($offer, $ship));
+    if (empty($parts)) {
+        return $excerpt;
+    }
+
+    return esc_html(implode(' - ', $parts));
+}, 10, 2);
+
+/* -------------------------------------------------------------------------
+ * Archive schema
+ * ---------------------------------------------------------------------- */
+
+/**
+ * ItemList describing the merchants on this archive, plus FAQPage when the
+ * term has real Q&As. Helps the page be understood as a curated list rather
+ * than an incidental tag archive.
+ */
+function vc_archive_schema_graph() {
+    $term = get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return array();
+    }
+
+    global $wp_query;
+    $items = array();
+    $position = 1;
+
+    if (!empty($wp_query->posts)) {
+        foreach ($wp_query->posts as $post) {
+            $items[] = array(
+                '@type'    => 'ListItem',
+                'position' => $position++,
+                'url'      => vc_merchant_link($post->ID),
+                'name'     => function_exists('vc_merchant_display_name')
+                    ? vc_merchant_display_name($post->ID)
+                    : get_the_title($post->ID),
+            );
+        }
+    }
+
+    $graph = array();
+
+    if (!empty($items)) {
+        $graph[] = array(
+            '@type'           => 'ItemList',
+            'name'            => vc_archive_title($term),
+            'numberOfItems'   => count($items),
+            'itemListElement' => $items,
+        );
+    }
+
+    $faqs = vc_archive_faqs($term);
+    if (!empty($faqs)) {
+        $entities = array();
+        foreach ($faqs as $faq) {
+            $entities[] = array(
+                '@type' => 'Question',
+                'name'  => $faq[0],
+                'acceptedAnswer' => array('@type' => 'Answer', 'text' => $faq[1]),
+            );
+        }
+        $graph[] = array('@type' => 'FAQPage', 'mainEntity' => $entities);
+    }
+
+    return $graph;
+}
+
+add_filter('rank_math/json_ld', function ($data, $jsonld) {
+    if (!vc_is_merchant_archive()) {
+        return $data;
+    }
+    foreach (vc_archive_schema_graph() as $i => $node) {
+        $data['vc_archive_' . $i] = $node;
+    }
+
+    return $data;
+}, 10, 2);
+
+add_action('wp_head', function () {
+    if (class_exists('RankMath') || !vc_is_merchant_archive()) {
+        return;
+    }
+    $graph = vc_archive_schema_graph();
+    if (empty($graph)) {
+        return;
+    }
+    echo "\n<script type=\"application/ld+json\">"
+        . wp_json_encode(array('@context' => 'https://schema.org', '@graph' => $graph),
+                         JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        . "</script>\n";
+}, 20);
+
+/* -------------------------------------------------------------------------
+ * Listing markup
+ * ---------------------------------------------------------------------- */
+
+/**
+ * One merchant card for an archive listing.
+ *
+ * Exposed so the listing does not depend on whatever markup the theme's loop
+ * happens to produce -- these cards carry the offer and shipping detail that
+ * makes a destination page worth reading.
+ */
+function vc_archive_merchant_card($post_id) {
+    $name  = function_exists('vc_merchant_display_name')
+        ? vc_merchant_display_name($post_id)
+        : get_the_title($post_id);
+    $offer = trim((string) get_post_meta($post_id, 'best_offer_summary', true));
+    $ship  = trim((string) get_post_meta($post_id, 'free_shipping_info', true));
+    $badge = function_exists('vc_merchant_offer_badge') ? vc_merchant_offer_badge($post_id) : '';
+    $url   = vc_merchant_link($post_id);
+
+    $out  = '<li class="vc-archive-card">';
+    $out .= '<div class="vc-archive-card__body">';
+    $out .= '<h3 class="vc-archive-card__name"><a href="' . esc_url($url) . '">'
+          . esc_html($name) . '</a></h3>';
+    if ($offer !== '') {
+        $out .= '<p class="vc-archive-card__offer">' . esc_html($offer) . '</p>';
+    }
+    $meta = array_filter(array($badge, $ship !== '' ? esc_html($ship) : ''));
+    if (!empty($meta)) {
+        $out .= '<div class="vc-archive-card__meta">' . implode(' &middot; ', $meta) . '</div>';
+    }
+    $out .= '</div>';
+    $out .= '<div class="vc-archive-card__cta"><a href="' . esc_url($url) . '">'
+          . esc_html__('See deals', 'vc-merchant') . '</a></div>';
+    $out .= '</li>';
+
+    return $out;
+}
+
+/**
+ * [merchant_list] -- render the current archive's merchants as cards, or a
+ * named destination via [merchant_list ships_to="California"].
+ */
+function vc_merchant_list_shortcode($atts) {
+    $atts = shortcode_atts(array('ships_to' => '', 'limit' => 50), $atts, 'merchant_list');
+
+    $args = array(
+        'post_type'      => vc_merchant_post_types(),
+        'post_status'    => 'publish',
+        'posts_per_page' => (int) $atts['limit'],
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+    );
+
+    if (trim((string) $atts['ships_to']) !== '') {
+        $args['tax_query'] = array(array(
+            'taxonomy' => 'ships_to',
+            'field'    => 'name',
+            'terms'    => trim((string) $atts['ships_to']),
+        ));
+    } elseif (is_tax('ships_to') || is_tax('merchant_category')) {
+        $term = get_queried_object();
+        $args['tax_query'] = array(array(
+            'taxonomy' => $term->taxonomy,
+            'field'    => 'term_id',
+            'terms'    => $term->term_id,
+        ));
+    }
+
+    $query = new WP_Query($args);
+    if (!$query->have_posts()) {
+        return '';
+    }
+
+    $out = '<ul class="vc-archive-list">';
+    foreach ($query->posts as $post) {
+        $out .= vc_archive_merchant_card($post->ID);
+    }
+    $out .= '</ul>';
+
+    wp_reset_postdata();
+
+    return $out;
+}
+add_shortcode('merchant_list', 'vc_merchant_list_shortcode');
+
+/* -------------------------------------------------------------------------
+ * Keeping destination pages distinct
+ *
+ * With nationwide-by-default, nearly every merchant is assigned to every
+ * state, so 51 destination pages would otherwise carry the same list, the same
+ * count and the same sentence with one place name swapped. That is the thin-
+ * content problem the merchant pages were built to avoid, reappearing one
+ * level up.
+ *
+ * Two answers: surface the one thing that genuinely differs per state, and
+ * keep a page out of the index until it has something of its own to say.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Merchants that explicitly cannot ship to this destination.
+ *
+ * Genuinely state-specific -- it comes from merchants' own published exclusion
+ * lists, so it differs between California and Texas in a way the main listing
+ * does not.
+ */
+function vc_archive_excluded_merchants($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term) || $term->taxonomy !== 'ships_to') {
+        return array();
+    }
+
+    $query = new WP_Query(array(
+        'post_type'           => vc_merchant_post_types(),
+        'post_status'         => 'publish',
+        'posts_per_page'      => 50,
+        'fields'              => 'ids',
+        'no_found_rows'       => true,
+        'ignore_sticky_posts' => true,
+        'meta_query'          => array(array(
+            'key'     => 'restricted_states',
+            'value'   => $term->name,
+            'compare' => 'LIKE',
+        )),
+    ));
+
+    $out = array();
+    foreach ($query->posts as $id) {
+        // LIKE can match a substring ("Virginia" inside "West Virginia"), so
+        // confirm against the actual pipe-delimited list.
+        $listed = array_filter(array_map('trim',
+            explode('|', (string) get_post_meta($id, 'restricted_states', true))));
+        if (in_array($term->name, $listed, true)) {
+            $out[] = (int) $id;
+        }
+    }
+
+    return $out;
+}
+
+function vc_archive_excluded_html($term = null) {
+    $term = $term ?: get_queried_object();
+    $ids = vc_archive_excluded_merchants($term);
+    if (empty($ids)) {
+        return '';
+    }
+
+    $items = '';
+    foreach ($ids as $id) {
+        $name = function_exists('vc_merchant_display_name')
+            ? vc_merchant_display_name($id) : get_the_title($id);
+        $items .= '<li><a href="' . esc_url(vc_merchant_link($id)) . '">'
+            . esc_html($name) . '</a></li>';
+    }
+
+    return '<section class="vc-archive-excluded"><h2>'
+        . esc_html(sprintf(
+            _n('%1$d store that does not ship to %2$s',
+               '%1$d stores that do not ship to %2$s',
+               count($ids), 'vc-merchant'),
+            count($ids), $term->name))
+        . '</h2><p>' . esc_html__('These retailers state they cannot deliver to this state.', 'vc-merchant')
+        . '</p><ul class="vc-related-links">' . $items . '</ul></section>';
+}
+
+/**
+ * Whether this destination page carries anything of its own.
+ *
+ * The generated intro and the shared merchant list are identical across every
+ * state bar the name, so they do not count. Editorial copy, a local-rules
+ * note, FAQs or a state-specific exclusion list do.
+ */
+function vc_archive_has_unique_content($term = null) {
+    $term = $term ?: get_queried_object();
+    if (!$term || is_wp_error($term)) {
+        return false;
+    }
+
+    foreach (array('vc_intro', 'vc_legal_note', 'vc_faq_q1', 'vc_faq_q2') as $key) {
+        if (trim((string) get_term_meta($term->term_id, $key, true)) !== '') {
+            return true;
+        }
+    }
+
+    return !empty(vc_archive_excluded_merchants($term));
+}
+
+/**
+ * Keep an undifferentiated destination page out of the index.
+ *
+ * Fifty-one near-identical pages competing with each other is worse than a
+ * handful of good ones. A page earns indexing by having its own intro, local
+ * note, FAQs, or a state-specific exclusion list. Links are still followed, so
+ * the merchant pages behind it keep their equity.
+ */
+add_filter('rank_math/frontend/robots', function ($robots) {
+    if (!vc_is_merchant_archive() || vc_archive_has_unique_content()) {
+        return $robots;
+    }
+    $robots['index'] = 'noindex';
+    $robots['follow'] = 'follow';
+
+    return $robots;
+});
+
+add_action('wp_head', function () {
+    if (class_exists('RankMath') || !vc_is_merchant_archive()) {
+        return;
+    }
+    if (!vc_archive_has_unique_content()) {
+        echo "\n<meta name=\"robots\" content=\"noindex, follow\" />\n";
+    }
+}, 1);
+
+// Show the state-specific exclusions after the listing.
+add_action('loop_end', function ($query) {
+    if (!is_main_query() || !vc_is_merchant_archive()) {
+        return;
+    }
+    echo vc_archive_excluded_html();
+}, 5);
+
+/**
+ * Tell editors why a page is not indexed, on the term screen.
+ */
+add_action('admin_notices', function () {
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if (!$screen || $screen->base !== 'term' || $screen->taxonomy !== 'ships_to') {
+        return;
+    }
+    $term_id = isset($_GET['tag_ID']) ? (int) $_GET['tag_ID'] : 0;
+    if (!$term_id) {
+        return;
+    }
+    $term = get_term($term_id, 'ships_to');
+    if (!$term || is_wp_error($term) || vc_archive_has_unique_content($term)) {
+        return;
+    }
+    echo '<div class="notice notice-warning"><p><strong>'
+        . esc_html__('This destination page is set to noindex.', 'vc-merchant')
+        . '</strong> '
+        . esc_html__('Without its own intro, local rules note or FAQs it is near-identical to every other destination page. Fill in any one of the fields below and it becomes indexable.', 'vc-merchant')
+        . '</p></div>';
+});
+
+/* -------------------------------------------------------------------------
+ * Admin: which destination pages are actually indexable
+ *
+ * The per-term notice only appears once you open a term. With 51 states that
+ * means 51 clicks to discover which of your pages Google is not allowed to
+ * index. This puts it in the list table instead.
+ * ---------------------------------------------------------------------- */
+
+add_action('admin_init', function () {
+    foreach (vc_archive_taxonomies() as $tax) {
+        add_filter("manage_edit-{$tax}_columns", 'vc_archive_index_column');
+        add_filter("manage_{$tax}_custom_column", 'vc_archive_index_column_value', 10, 3);
+    }
+});
+
+function vc_archive_index_column($columns) {
+    // Drop WordPress's description column, which we do not use, and put the
+    // indexing state where it is read first.
+    unset($columns['description']);
+    $columns['vc_index'] = __('Search indexing', 'vc-merchant');
+
+    return $columns;
+}
+
+function vc_archive_index_column_value($content, $column, $term_id) {
+    if ($column !== 'vc_index') {
+        return $content;
+    }
+
+    $term = get_term($term_id);
+    if (!$term || is_wp_error($term)) {
+        return $content;
+    }
+
+    if (vc_archive_has_unique_content($term)) {
+        return '<span class="vc-index vc-index--yes">' . esc_html__('Indexable', 'vc-merchant') . '</span>';
+    }
+
+    // Say what is missing, so the fix is one click and not a hunt.
+    return '<span class="vc-index vc-index--no">' . esc_html__('Noindex', 'vc-merchant') . '</span>'
+        . '<span class="vc-index__why">' . esc_html__('needs an intro, local rules note or FAQ', 'vc-merchant') . '</span>';
+}
+
+add_action('admin_head', function () {
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if (!$screen || $screen->base !== 'edit-tags'
+        || !in_array($screen->taxonomy, vc_archive_taxonomies(), true)) {
+        return;
+    }
+    echo '<style>
+    .column-vc_index { width: 220px; }
+    .vc-index { display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: 600; }
+    .vc-index--yes { background: #e3f3e8; color: #0a5c33; }
+    .vc-index--no { background: #fcf0f1; color: #8a2424; }
+    .vc-index__why { display: block; margin-top: 3px; font-size: 11px; color: #646970; }
+    </style>';
+});
+
+/* -------------------------------------------------------------------------
+ * Destination index
+ *
+ * Every destination page links to a handful of siblings, which is not enough
+ * for 51 of them. One hub listing all destinations gives each a reliable
+ * internal link and gives readers the "does anyone ship to my state" entry
+ * point directly.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * [destination_index] -- all destination pages, grouped under their country.
+ *
+ * Attributes:
+ *   parent     restrict to one country by slug, e.g. parent="united-states"
+ *   show_count "yes" (default) prints the number of stores per destination
+ *   hide_empty "yes" (default) omits destinations with no stores yet
+ */
+function vc_destination_index_shortcode($atts) {
+    $atts = shortcode_atts(array(
+        'parent'     => '',
+        'show_count' => 'yes',
+        'hide_empty' => 'yes',
+    ), $atts, 'destination_index');
+
+    if (!taxonomy_exists('ships_to')) {
+        return '';
+    }
+
+    $hide_empty = $atts['hide_empty'] !== 'no';
+    $show_count = $atts['show_count'] !== 'no';
+
+    $terms = get_terms(array(
+        'taxonomy'   => 'ships_to',
+        'hide_empty' => false,
+        'orderby'    => 'name',
+    ));
+    if (is_wp_error($terms) || empty($terms)) {
+        return '';
+    }
+
+    // Group children under their parent country.
+    $parents = array();
+    $children = array();
+    foreach ($terms as $term) {
+        if ((int) $term->parent === 0) {
+            $parents[$term->term_id] = $term;
+        } else {
+            $children[(int) $term->parent][] = $term;
+        }
+    }
+
+    $only = trim((string) $atts['parent']);
+
+    $out = '<div class="vc-destination-index">';
+    $rendered = 0;
+
+    foreach ($parents as $parent_id => $parent) {
+        if ($only !== '' && $parent->slug !== $only) {
+            continue;
+        }
+        $group = $children[$parent_id] ?? array();
+        if (empty($group)) {
+            continue;
+        }
+
+        $items = '';
+        foreach ($group as $child) {
+            $count = vc_archive_merchant_count($child);
+            if ($hide_empty && $count < 1) {
+                continue;
+            }
+            $link = get_term_link($child);
+            if (is_wp_error($link)) {
+                continue;
+            }
+            $items .= '<li class="vc-destination-index__item">'
+                . '<a href="' . esc_url($link) . '">' . esc_html($child->name) . '</a>';
+            if ($show_count) {
+                $items .= ' <span class="vc-destination-index__count">'
+                    . esc_html(sprintf(
+                        _n('%d store', '%d stores', $count, 'vc-merchant'), $count))
+                    . '</span>';
+            }
+            $items .= '</li>';
+        }
+
+        if ($items === '') {
+            continue;
+        }
+
+        $out .= '<section class="vc-destination-index__group">';
+        $out .= '<h2 class="vc-destination-index__heading">' . esc_html($parent->name) . '</h2>';
+        $out .= '<ul class="vc-destination-index__list">' . $items . '</ul>';
+        $out .= '</section>';
+        $rendered++;
+    }
+
+    $out .= '</div>';
+
+    return $rendered ? $out : '';
+}
+add_shortcode('destination_index', 'vc_destination_index_shortcode');

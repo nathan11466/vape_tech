@@ -1,0 +1,614 @@
+<?php
+/**
+ * Plugin Name: VapingCheap Merchant Fields
+ * Description: Service-location taxonomy, brand aliases, merchant contact details, and publish-gated display helpers for coupon/merchant pages.
+ * Version: 1.20.0
+ * Text Domain: vc-merchant
+ *
+ * Companion to merchant-tools/enrich_merchants.py. The enrichment script grades
+ * each merchant and derives `offer_display_mode`; the helpers here are the only
+ * sanctioned way to render offer claims, so a page can never imply a coupon code
+ * exists when one has not been confirmed.
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Post type the merchant data attaches to. Filterable so this drops into an
+ * existing coupon/offers plugin rather than assuming a post type name.
+ */
+function vc_merchant_post_types() {
+    return apply_filters('vc_merchant_post_types', array('merchant'));
+}
+
+/**
+ * The product niche, used in public-facing archive titles.
+ *
+ * Kept as one switch because it appears in the titles that are the whole point
+ * of the destination pages -- "Online Vape Shops That Ship to California". Add
+ * a second niche (hemp, accessories) and that wording needs to change
+ * everywhere at once, or the pages misdescribe what they list.
+ *
+ * Set to an empty string for a niche-free "Online Shops That Ship to X".
+ *
+ *   add_filter('vc_merchant_niche_label', fn() => 'Vape & Hemp');
+ */
+function vc_merchant_niche_label() {
+    return apply_filters('vc_merchant_niche_label', 'Vape');
+}
+
+/**
+ * Register a merchant post type, unless you have pointed the plugin at one of
+ * your own.
+ *
+ * One post here is one STORE (Vape Street), not one coupon code. Coupon
+ * plugins commonly have both a `coupon` post type for individual codes and a
+ * `store`/`brand` type for the retailer -- point the filter at the store one,
+ * never the codes one.
+ *
+ * Without this the plugin assumed a 'merchant' type already existed, and an
+ * import would have created posts of a type nothing had registered: no admin
+ * menu, no archive, no way to find them.
+ */
+function vc_register_merchant_post_type() {
+    // If the filter has moved us onto an existing post type, do not add ours.
+    if (!in_array('merchant', vc_merchant_post_types(), true)) {
+        return;
+    }
+    if (post_type_exists('merchant')) {
+        return;
+    }
+
+    register_post_type('merchant', array(
+        'labels' => array(
+            'name'               => __('Stores', 'vc-merchant'),
+            'singular_name'      => __('Store', 'vc-merchant'),
+            'add_new_item'       => __('Add New Store', 'vc-merchant'),
+            'edit_item'          => __('Edit Store', 'vc-merchant'),
+            'all_items'          => __('All Stores', 'vc-merchant'),
+            'search_items'       => __('Search Stores', 'vc-merchant'),
+            'menu_name'          => __('Stores', 'vc-merchant'),
+        ),
+        'public'       => true,
+        'has_archive'  => true,
+        'show_in_rest' => true,
+        'menu_icon'    => 'dashicons-store',
+        'supports'     => array('title', 'editor', 'excerpt', 'thumbnail', 'custom-fields'),
+        // URL base for store pages: /stores/vape-street/.
+        //
+        // Deliberately NOT 'coupons' -- a coupon plugin very often already
+        // claims that base, and two post types sharing one rewrite slug give
+        // you 404s on one of them. Change it with:
+        //   add_filter('vc_merchant_post_type_slug', fn() => 'shops');
+        // and re-save Settings > Permalinks afterwards.
+        'rewrite'      => array(
+            'slug' => apply_filters('vc_merchant_post_type_slug', 'stores'),
+        ),
+    ));
+}
+add_action('init', 'vc_register_merchant_post_type', 5);
+
+/**
+ * Load the rest of the plugin. Each file is optional, so a partial upload
+ * degrades rather than fataling the site.
+ */
+/**
+ * The URL for a store's page.
+ *
+ * Normally its own permalink. Once the ReHub handover is on, the ReHub store
+ * that replaced it -- so every internal link in the plugin agrees with where
+ * the page actually is. Defined here rather than in the ReHub module so a
+ * site without the theme still resolves links.
+ */
+/**
+ * The shipped version.
+ *
+ * Must match the Version header above. Preflight fails if they drift, because
+ * a version that does not move is a version nobody can check an upload
+ * against -- this one sat at 1.0.0 through twenty-one releases.
+ */
+const VC_MERCHANT_VERSION = '1.20.0';
+
+function vc_merchant_link($post_id) {
+    return function_exists('vc_merchant_permalink')
+        ? vc_merchant_permalink($post_id)
+        : get_permalink($post_id);
+}
+
+foreach (array('wp-merchant-settings.php', 'wp-merchant-shipping.php', 'wp-merchant-render.php',
+               'wp-merchant-seo.php', 'wp-merchant-archive.php',
+               'wp-merchant-sections.php', 'wp-merchant-editor.php',
+               'wp-merchant-coupons.php', 'wp-merchant-logos.php',
+               'wp-merchant-freshness.php', 'wp-merchant-rehub.php',
+               'wp-merchant-import.php', 'wp-merchant-intros.php',
+               'wp-merchant-explainer.php', 'wp-merchant-storepage.php') as $vc_module) {
+    $vc_path = __DIR__ . '/' . $vc_module;
+    if (file_exists($vc_path)) {
+        require_once $vc_path;
+    }
+}
+unset($vc_module, $vc_path);
+
+/**
+ * Front-end stylesheet. Scoped to .vc-* classes so it does not fight the theme.
+ */
+/**
+ * Does this request actually render anything of ours?
+ *
+ * The stylesheet used to load on every page on the site -- 22KB of
+ * render-blocking CSS on the homepage, on every blog post, on the cart,
+ * styling nothing. That is the same fault as a plugin that ships a hundred
+ * kilobytes of assets to pages with none of its output on them, and an
+ * affiliate site lives on search, so it is not free.
+ *
+ * Registered always, enqueued only where it is needed. The render
+ * functions enqueue it themselves as well, which covers a shortcode
+ * dropped somewhere this cannot predict: a style enqueued during the loop
+ * is printed in the footer rather than dropped.
+ */
+function vc_merchant_needs_styles() {
+    if (function_exists('is_singular') && is_singular(vc_merchant_post_types())) {
+        return true;
+    }
+
+    $taxonomies = function_exists('vc_archive_taxonomies')
+        ? vc_archive_taxonomies() : array();
+    if ($taxonomies && function_exists('is_tax') && is_tax($taxonomies)) {
+        return true;
+    }
+
+    // ReHub store pages: a dealstore term that resolves to a merchant.
+    if (function_exists('vc_storepage_current_merchant') && vc_storepage_current_merchant()) {
+        return true;
+    }
+
+    // Our shortcode on an ordinary page or post.
+    if (function_exists('is_singular') && is_singular()) {
+        $post = get_post();
+        if ($post && function_exists('has_shortcode')
+            && has_shortcode((string) $post->post_content, 'merchant_page')) {
+            return true;
+        }
+    }
+
+    return (bool) apply_filters('vc_merchant_needs_styles', false);
+}
+
+add_action('wp_enqueue_scripts', function () {
+    $rel = 'assets/merchant-pages.css';
+    $path = __DIR__ . '/' . $rel;
+    if (!file_exists($path)) {
+        return;
+    }
+
+    wp_register_style(
+        'vc-merchant-pages',
+        plugins_url($rel, __FILE__),
+        array(),
+        (string) filemtime($path)
+    );
+
+    if (vc_merchant_needs_styles()) {
+        wp_enqueue_style('vc-merchant-pages');
+    }
+});
+
+/* -------------------------------------------------------------------------
+ * Service location taxonomy
+ *
+ * Operating market only. Where a merchant SHIPS is tracked separately in the
+ * ships_to_countries meta field -- the two are routinely different for vape and
+ * cannabinoid sellers with state/country product restrictions.
+ * ---------------------------------------------------------------------- */
+
+function vc_register_service_location_taxonomy() {
+    register_taxonomy('service_location', vc_merchant_post_types(), array(
+        'labels' => array(
+            'name'          => __('Service Locations', 'vc-merchant'),
+            'singular_name' => __('Service Location', 'vc-merchant'),
+            'search_items'  => __('Search Service Locations', 'vc-merchant'),
+            'all_items'     => __('All Service Locations', 'vc-merchant'),
+            'parent_item'   => __('Parent Service Location', 'vc-merchant'),
+            'edit_item'     => __('Edit Service Location', 'vc-merchant'),
+            'add_new_item'  => __('Add New Service Location', 'vc-merchant'),
+        ),
+        'hierarchical'      => true,
+        'public'            => true,
+        'show_admin_column' => true,
+        'show_in_rest'      => true,
+        'rewrite'           => array('slug' => 'service-location', 'hierarchical' => true),
+    ));
+}
+add_action('init', 'vc_register_service_location_taxonomy');
+
+/**
+ * The seed hierarchy. Runs on activation and is idempotent, so re-running it
+ * never duplicates terms.
+ */
+function vc_service_location_seed() {
+    return array(
+        'North America' => array('United States', 'Canada', 'Mexico'),
+        'Europe'        => array('United Kingdom', 'Germany', 'France', 'European Union'),
+        'Asia-Pacific'  => array('Australia', 'New Zealand', 'Japan'),
+        'International Shipping'            => array(),
+        'Online Only / Location Not Confirmed' => array(),
+    );
+}
+
+function vc_seed_service_locations() {
+    vc_register_service_location_taxonomy();
+
+    foreach (vc_service_location_seed() as $parent_name => $children) {
+        $parent = term_exists($parent_name, 'service_location');
+        if (!$parent) {
+            $parent = wp_insert_term($parent_name, 'service_location');
+        }
+        if (is_wp_error($parent)) {
+            continue;
+        }
+        $parent_id = is_array($parent) ? (int) $parent['term_id'] : (int) $parent;
+
+        foreach ($children as $child_name) {
+            if (!term_exists($child_name, 'service_location')) {
+                wp_insert_term($child_name, 'service_location', array('parent' => $parent_id));
+            }
+        }
+    }
+}
+/**
+ * Product-category taxonomy.
+ *
+ * brand_category was carried as plain meta text, which cannot be browsed or
+ * filtered. As a taxonomy it gives category archives and lets merchant pages
+ * link to related retailers.
+ */
+function vc_register_merchant_category_taxonomy() {
+    register_taxonomy('merchant_category', vc_merchant_post_types(), array(
+        'labels' => array(
+            'name'          => __('Product Categories', 'vc-merchant'),
+            'singular_name' => __('Product Category', 'vc-merchant'),
+            'all_items'     => __('All Product Categories', 'vc-merchant'),
+            'edit_item'     => __('Edit Product Category', 'vc-merchant'),
+            'add_new_item'  => __('Add New Product Category', 'vc-merchant'),
+            'menu_name'     => __('Product Categories', 'vc-merchant'),
+        ),
+        'hierarchical'      => true,
+        'public'            => true,
+        'show_admin_column' => true,
+        'show_in_rest'      => true,
+        'query_var'         => true,
+        'rewrite'           => array('slug' => 'vape-category', 'hierarchical' => true),
+    ));
+}
+add_action('init', 'vc_register_merchant_category_taxonomy');
+
+/**
+ * Single activation entry point.
+ *
+ * Every seeder runs from here, against __FILE__ of the main plugin file.
+ * Registering an activation hook from an included file with a hand-built path
+ * is unreliable -- WordPress resolves it through plugin_basename() and may not
+ * match the plugin being activated, which would leave the taxonomies empty.
+ */
+function vc_merchant_activate() {
+    vc_seed_service_locations();
+
+    if (function_exists('vc_seed_ships_to')) {
+        vc_seed_ships_to();
+    }
+
+    // Move destinations seeded by an earlier version onto the clean slugs.
+    // Old URLs are recorded and redirected, so this is safe to re-run.
+    if (function_exists('vc_shipping_migrate_slugs')) {
+        vc_shipping_migrate_slugs();
+    }
+
+    // Permalinks for the new post type and taxonomy archives.
+    vc_register_merchant_post_type();
+    vc_register_merchant_category_taxonomy();
+    flush_rewrite_rules();
+}
+register_activation_hook(__FILE__, 'vc_merchant_activate');
+
+/**
+ * Leave nothing scheduled behind on deactivation.
+ */
+register_deactivation_hook(__FILE__, function () {
+    if (function_exists('vc_freshness_unschedule')) {
+        vc_freshness_unschedule();
+    }
+});
+
+/* -------------------------------------------------------------------------
+ * Merchant meta fields
+ *
+ * Aliases are stored as meta (pipe-delimited on import, array in PHP) rather
+ * than a taxonomy -- they are naming variants, not a browsable classification.
+ * ---------------------------------------------------------------------- */
+
+function vc_merchant_meta_fields() {
+    return array(
+        'display_brand_name'      => 'string',
+        'alternative_brand_names' => 'string',
+        'ships_to_countries'      => 'string',
+        'primary_service_location'=> 'string',
+        'contact_email'           => 'string',
+        'contact_page_url'        => 'string',
+        'contact_method'          => 'string',
+        'contact_verified_at'     => 'string',
+        'contact_source_url'      => 'string',
+        'fact_source_url'         => 'string',
+        'fact_last_verified'      => 'string',
+        'trust_source_url'        => 'string',
+        'trust_verified_at'       => 'string',
+        'content_confidence'      => 'string',
+        'publish_status'          => 'string',
+        'offer_display_mode'      => 'string',
+        'company_trust_info'      => 'string',
+        'last_checked_text'       => 'string',
+    );
+}
+
+function vc_register_merchant_meta() {
+    foreach (vc_merchant_post_types() as $post_type) {
+        foreach (vc_merchant_meta_fields() as $key => $type) {
+            register_post_meta($post_type, $key, array(
+                'type'          => $type,
+                'single'        => true,
+                'show_in_rest'  => true,
+                'auth_callback' => function () {
+                    return current_user_can('edit_posts');
+                },
+            ));
+        }
+    }
+}
+add_action('init', 'vc_register_merchant_meta');
+
+/* -------------------------------------------------------------------------
+ * Display helpers -- the trust layer
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Whether this merchant is publicly visible.
+ *
+ * This defers entirely to WordPress post status. The enrichment script's
+ * grading is advisory metadata for sorting a review queue -- it does not gate
+ * the front end, because a post you published is a post you decided to publish.
+ *
+ * Retained mainly for preview_page.php, which has no WordPress post status to
+ * consult.
+ */
+function vc_merchant_is_publishable($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+
+    if (function_exists('get_post_status')) {
+        return get_post_status($post_id) === 'publish';
+    }
+
+    return true;
+}
+
+/**
+ * The offer claim for a merchant.
+ *
+ * Stored value by default, but filterable so a source with real records --
+ * live coupons with codes, expiry dates and reader votes -- can override text
+ * that was parsed out of a summary sentence and goes stale on expiry.
+ */
+function vc_merchant_offer_mode($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $mode = trim((string) get_post_meta($post_id, 'offer_display_mode', true));
+
+    return apply_filters('vc_merchant_offer_display_mode', $mode, $post_id);
+}
+
+/**
+ * Offer badge. The ONLY sanctioned way to state what a page is claiming.
+ *
+ * Never asserts that a code exists unless offer_display_mode says so, which the
+ * enrichment script only sets when a real code is paired with a source or a
+ * recent test.
+ */
+function vc_merchant_offer_badge($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $mode = vc_merchant_offer_mode($post_id);
+    $checked = trim((string) get_post_meta($post_id, 'last_checked_text', true));
+
+    // A live coupon's own timestamp beats a hand-typed date.
+    if (function_exists('vc_merchant_coupon_checked')) {
+        $live = vc_merchant_coupon_checked($post_id);
+        if ($live !== '') {
+            $checked = $live;
+        }
+    }
+
+    switch ($mode) {
+        case 'verified_code':
+            $label = __('Verified Code', 'vc-merchant');
+            $class = 'vc-badge vc-badge--verified';
+            break;
+
+        case 'best_deal':
+            $label = __('Best Deal', 'vc-merchant');
+            $class = 'vc-badge vc-badge--deal';
+            break;
+
+        default:
+            // No confirmed code. Say so plainly rather than implying one exists.
+            $label = __('No active code confirmed - see current deals', 'vc-merchant');
+            $class = 'vc-badge vc-badge--none';
+            break;
+    }
+
+    $html  = '<span class="' . esc_attr($class) . '">' . esc_html($label) . '</span>';
+    if ($checked !== '') {
+        $html .= ' <span class="vc-checked">' . esc_html($checked) . '</span>';
+    }
+
+    return $html;
+}
+
+/**
+ * Aliases as a short "Also known as" line.
+ *
+ * Aliases belong in body copy and FAQs, never stuffed into the title, H1, or
+ * schema name -- those stay on the single canonical display name.
+ */
+function vc_merchant_aliases_line($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $raw = trim((string) get_post_meta($post_id, 'alternative_brand_names', true));
+    if ($raw === '') {
+        return '';
+    }
+
+    $aliases = array_filter(array_map('trim', explode('|', $raw)));
+    if (empty($aliases)) {
+        return '';
+    }
+
+    $escaped = array_map('esc_html', $aliases);
+
+    return '<p class="vc-aliases"><strong>' . esc_html__('Also known as:', 'vc-merchant') . '</strong> '
+        . implode(', ', $escaped) . '</p>';
+}
+
+/**
+ * Canonical public name for title / H1 / schema. Falls back to the raw brand
+ * name when no editorial display name was set.
+ */
+function vc_merchant_display_name($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $display = trim((string) get_post_meta($post_id, 'display_brand_name', true));
+
+    return $display !== '' ? $display : get_the_title($post_id);
+}
+
+/**
+ * Trust / reputation copy, gated hard.
+ *
+ * Returns an empty string unless the claim carries both a source URL and a
+ * verification date. Reputation claims are the highest-risk content on these
+ * pages, so an unsourced one renders as nothing at all.
+ */
+function vc_merchant_trust_info($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    $claim  = trim((string) get_post_meta($post_id, 'company_trust_info', true));
+
+    // Deliberately NOT fact_source_url. That is filled automatically with
+    // whichever policy page was read, so a Trustpilot rating would end up
+    // citing the store's shipping policy -- a citation pointing at the wrong
+    // page is worse than none. A reputation claim needs its own source.
+    $source = trim((string) get_post_meta($post_id, 'trust_source_url', true));
+    $date   = trim((string) get_post_meta($post_id, 'trust_verified_at', true));
+
+    if ($claim === '' || $source === '' || $date === '') {
+        return '';
+    }
+
+    return '<div class="vc-trust"><p>' . esc_html($claim) . '</p>'
+        . '<p class="vc-trust__source"><a href="' . esc_url($source) . '" rel="nofollow noopener" target="_blank">'
+        . esc_html__('Source', 'vc-merchant') . '</a> &middot; '
+        . esc_html(sprintf(__('verified %s', 'vc-merchant'), $date))
+        . '</p></div>';
+}
+
+/**
+ * Merchant information panel: operating market, shipping coverage, aliases,
+ * support link, last checked.
+ *
+ * Policy-type claims carry a change disclaimer, since shipping, returns and
+ * payment terms move without notice.
+ */
+function vc_merchant_info_panel($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+
+    $primary = trim((string) get_post_meta($post_id, 'primary_service_location', true));
+    $ships   = trim((string) get_post_meta($post_id, 'ships_to_countries', true));
+    $email   = trim((string) get_post_meta($post_id, 'contact_email', true));
+    $page    = trim((string) get_post_meta($post_id, 'contact_page_url', true));
+    $checked = trim((string) get_post_meta($post_id, 'last_checked_text', true));
+
+    $rows = array();
+
+    if ($primary !== '') {
+        $rows[] = array(__('Primary market', 'vc-merchant'), esc_html($primary));
+    }
+
+    if ($ships !== '') {
+        $list = array_filter(array_map('trim', explode('|', $ships)));
+        if (!empty($list)) {
+            $rows[] = array(__('Ships to', 'vc-merchant'), esc_html(implode(', ', $list)));
+        }
+    }
+
+    // Prefer a public support email; fall back to the official contact page.
+    if ($email !== '' && is_email($email)) {
+        $rows[] = array(
+            __('Customer support', 'vc-merchant'),
+            '<a href="' . esc_url('mailto:' . $email) . '">' . esc_html($email) . '</a>',
+        );
+    } elseif ($page !== '') {
+        $rows[] = array(
+            __('Customer support', 'vc-merchant'),
+            '<a href="' . esc_url($page) . '" rel="nofollow noopener" target="_blank">'
+                . esc_html__('Official contact page', 'vc-merchant') . '</a>',
+        );
+    }
+
+    if ($checked !== '') {
+        $rows[] = array(__('Last checked', 'vc-merchant'), esc_html($checked));
+    }
+
+    if (empty($rows)) {
+        return '';
+    }
+
+    $html = '<div class="vc-merchant-info"><h2>' . esc_html__('Merchant information', 'vc-merchant') . '</h2><dl>';
+    foreach ($rows as $row) {
+        $html .= '<dt>' . esc_html($row[0]) . '</dt><dd>' . $row[1] . '</dd>';
+    }
+    $html .= '</dl>';
+
+    $html .= '<p class="vc-disclaimer">'
+        . esc_html__('Shipping, returns and payment details can change - confirm at checkout.', 'vc-merchant')
+        . ' ' . esc_html__('* Where this store publishes no state restrictions we show it as shipping nationwide; confirm your state at checkout.', 'vc-merchant')
+        . '</p>';
+
+    $html .= vc_merchant_aliases_line($post_id);
+    $html .= '</div>';
+
+    return $html;
+}
+
+/**
+ * Print the shipped version on our own admin screens.
+ *
+ * The Plugins list shows it too, but when the question is "did that upload
+ * take", the answer should be on the screen you are already looking at.
+ */
+add_action('admin_footer', function () {
+    if (!function_exists('get_current_screen')) {
+        return;
+    }
+    $screen = get_current_screen();
+    if (!$screen) {
+        return;
+    }
+
+    $ours = in_array($screen->post_type, vc_merchant_post_types(), true)
+        || strpos((string) $screen->id, 'vc-merchant') !== false
+        || strpos((string) $screen->id, 'vc-coupon') !== false;
+    if (!$ours) {
+        return;
+    }
+
+    printf(
+        '<p style="margin:20px 0 0;color:#787c82;font-size:12px;">%s</p>',
+        esc_html(sprintf(
+            /* translators: %s: version number */
+            __('VapingCheap Merchant Fields %s', 'vc-merchant'), VC_MERCHANT_VERSION))
+    );
+});
