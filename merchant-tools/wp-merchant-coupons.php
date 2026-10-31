@@ -504,11 +504,32 @@ const VC_COUPON_SHORTCODE_DEFAULT = '[coupon_deals brand="{brand}"]';
  * they differ between versions, and guessing wrong would silently render
  * nothing, which is the failure this is meant to remove.
  */
+/**
+ * Is this a shortcode WordPress will actually run?
+ *
+ * The source spreadsheet carried the literal string
+ * "[your_coupon_shortcode]" in coupon_plugin_shortcode for all 111
+ * merchants -- a fill-this-in placeholder nobody filled in. Trusting it
+ * printed "[your_coupon_shortcode]" as visible text on every store page,
+ * because WordPress leaves an unregistered shortcode exactly as typed.
+ *
+ * A stored value is only used when its tag is registered. Anything else is
+ * treated as not set, so the configured template takes over and the page
+ * shows coupons instead of a placeholder.
+ */
+function vc_merchant_shortcode_is_real($value) {
+    if (!preg_match('/^\[([a-zA-Z0-9_-]+)/', trim((string) $value), $match)) {
+        return false;
+    }
+
+    return function_exists('shortcode_exists') && shortcode_exists($match[1]);
+}
+
 function vc_merchant_coupon_shortcode($post_id = null) {
     $post_id = $post_id ?: get_the_ID();
 
     $explicit = trim((string) get_post_meta($post_id, 'coupon_plugin_shortcode', true));
-    if ($explicit !== '') {
+    if ($explicit !== '' && vc_merchant_shortcode_is_real($explicit)) {
         return $explicit;
     }
 

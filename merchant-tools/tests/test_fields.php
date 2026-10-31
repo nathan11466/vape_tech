@@ -422,16 +422,17 @@ check('a derived fact is reachable as a token',
         === 'Ships free over $75.',
     vc_merchant_expand_tokens('Ships free over {fact_free_shipping_over}.'));
 
-// A name that is not a field at all must survive as typed, so the mistake is
-// visible rather than silently swallowed. (brand_dot_com was the original
-// example here and is now a real field, so this uses one that is not.)
+// A name that is not a field at all must survive as typed for an editor, so
+// the mistake is visible to the person who can fix it. Two earlier choices
+// of example -- brand_dot_com, then 2nd_display_name -- have since become
+// real fields, which is why this one is deliberately nonsense.
 check('an unknown token is left exactly as typed',
-    vc_merchant_expand_tokens('{2nd_display_name}') === '{2nd_display_name}',
-    vc_merchant_expand_tokens('{2nd_display_name}'));
+    vc_merchant_expand_tokens('{no_such_field_anywhere}') === '{no_such_field_anywhere}',
+    vc_merchant_expand_tokens('{no_such_field_anywhere}'));
 check('and so is a made-up one next to a real one',
-    vc_merchant_expand_tokens('{2nd_display_name} at {display_brand_name}')
-        === '{2nd_display_name} at VooPoo',
-    vc_merchant_expand_tokens('{2nd_display_name} at {display_brand_name}'));
+    vc_merchant_expand_tokens('{no_such_field_anywhere} at {display_brand_name}')
+        === '{no_such_field_anywhere} at VooPoo',
+    vc_merchant_expand_tokens('{no_such_field_anywhere} at {display_brand_name}'));
 
 check('a blank field resolves to nothing rather than showing the token',
     trim(vc_merchant_expand_tokens('{why_code_not_work}')) === '',

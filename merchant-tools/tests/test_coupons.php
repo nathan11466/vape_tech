@@ -135,6 +135,12 @@ class WP_Query {
     }
 }
 
+// Shortcodes WordPress knows about. coupon_deals is the one WP Coupon &
+// Deals registers, so the plugin treats a stored [coupon_deals ...] as
+// real and the spreadsheet's [your_coupon_shortcode] as not.
+$GLOBALS['shortcodes'] = array('coupon_deals' => true);
+function shortcode_exists($tag) { return isset($GLOBALS['shortcodes'][$tag]); }
+
 require __DIR__ . '/../wp-merchant-coupons.php';
 
 $fail = 0;
@@ -394,6 +400,18 @@ $GLOBALS['options']['vc_coupon_shortcode_template'] = '[coupon_deals brand="{bra
 check('a store\'s own shortcode field overrides the template',
     vc_merchant_coupon_shortcode(7) === '[coupon_deals brand="hand-picked" columns="1"]',
     vc_merchant_coupon_shortcode(7));
+
+// The spreadsheet shipped the literal "[your_coupon_shortcode]" in that
+// same field for all 111 merchants. An unregistered tag is printed by
+// WordPress exactly as typed, so it has to be treated as not set.
+$GLOBALS['meta'][7]['coupon_plugin_shortcode'] = '[your_coupon_shortcode]';
+$resolved = vc_merchant_coupon_shortcode(7);
+check('a placeholder in the field is ignored, not printed',
+    $resolved !== '' && strpos($resolved, 'your_coupon_shortcode') === false,
+    $resolved);
+check('and the configured template is used instead',
+    strpos($resolved, '[coupon_deals') === 0, $resolved);
+$GLOBALS['meta'][7]['coupon_plugin_shortcode'] = '[coupon_deals brand="hand-picked" columns="1"]';
 
 // An unmatched store must render nothing rather than an unscoped shortcode,
 // which would list every coupon on the site on every store page.
@@ -693,6 +711,25 @@ check('org @id is left alone when the coupon plugin is inactive',
     apply_filters('vc_merchant_org_id', 'https://x/#merchant', $S) === 'https://x/#merchant');
 check('our Offer node is emitted again when the coupon plugin is inactive',
     apply_filters('vc_merchant_emit_offer', true, $S) === true);
+
+/* --- A placeholder shortcode must never reach the page ----------------- */
+//
+// The source spreadsheet had the literal "[your_coupon_shortcode]" in
+// coupon_plugin_shortcode for all 111 merchants. WordPress prints an
+// unregistered shortcode as typed, so that string was visible on every
+// store page, under the real coupon cards.
+
+
+check('a registered shortcode is recognised',
+    vc_merchant_shortcode_is_real('[coupon_deals brand="voopoo"]'));
+check('the spreadsheet placeholder is not',
+    !vc_merchant_shortcode_is_real('[your_coupon_shortcode]'));
+
+check('nor is any unregistered tag',
+    !vc_merchant_shortcode_is_real('[not_a_real_shortcode]'));
+check('nor plain text', !vc_merchant_shortcode_is_real('coupon_deals'));
+check('nor an empty value', !vc_merchant_shortcode_is_real(''));
+
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

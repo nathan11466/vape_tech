@@ -29,6 +29,10 @@ const VC_MERCHANT_KEY_META = '_vc_merchant_key';
 function vc_merchant_import_meta_keys() {
     return array(
         'externalMerchantKey', 'brand_url', 'brand_dot_com',
+        // The spreadsheet's second display name. Spaces and capitals and
+        // all -- it is referenced in page copy as {2nd_Display Name}, and
+        // a token cannot resolve against a column that was never imported.
+        '2nd_Display Name',
         'coupon_plugin_shortcode', 'best_offer_summary',
         'last_checked_text', 'top_offer_type', 'coupon_intro', 'brand_summary',
         'best_ways_to_save', 'free_shipping_info', 'return_policy_summary', 'payment_methods',
