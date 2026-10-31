@@ -615,6 +615,39 @@
   .vc-policy dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
 }
 
+/* ---------- Store sidebar facts (ReHub dealstore pages) ----------
+   Stacked, not a label/value grid: the column is ~250px, so two columns
+   leave the values too narrow to read. */
+
+.vc-store-facts {
+  margin: 0.9rem 0 0;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--vc-border);
+  text-align: left;
+}
+
+.vc-store-fact + .vc-store-fact {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-store-fact dt {
+  font-weight: 650;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vc-text-soft);
+  margin: 0 0 0.15rem;
+}
+
+.vc-store-fact dd {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--vc-text);
+}
+
 /* ---------- Two-column layout ---------- */
 
 .vc-merchant-page--split {

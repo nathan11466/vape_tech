@@ -77,6 +77,10 @@ function wp_update_term($id, $tax, $args) {
 function vc_merchant_coupon_shortcode($id = null) {
     return $GLOBALS['coupon_sc'] ?? '[coupon_deals brand="voopoo"]';
 }
+function _n($s, $p, $n, $d = null) { return $n === 1 ? $s : $p; }
+function get_the_terms($id, $tax) {
+    return $GLOBALS['object_terms'][$id][$tax] ?? false;
+}
 function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
 function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
 function get_permalink($id = null) { return 'https://vapingcheap.com/stores/store-' . $id . '/'; }
@@ -614,6 +618,106 @@ check('with every source blank it falls through to the title',
 $GLOBALS['options'] = array();
 check('an unset source returns to the default',
     vc_rehub_store_name($n) === 'VooPoo', vc_rehub_store_name($n));
+
+/* --- The store sidebar -------------------------------------------------
+ *
+ * brand_short_description is the only free-content slot in ReHub's dealstore
+ * sidebar, so the facts panel is appended to it. The risks are putting a
+ * paragraph of policy prose into a 250px column, and inventing a row for a
+ * field we have no value for.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['taxes'][] = 'ships_to';
+
+function vc_section_meta($post_id, $key) {
+    return trim((string) get_post_meta($post_id, $key, true));
+}
+function vc_destinations_nationwide_threshold() { return 45; }
+
+/** A ships_to assignment: one country roll-up plus $n child terms. */
+function assign_ships($post_id, $country, $n) {
+    $terms = array((object) array('term_id' => 9000, 'name' => $country, 'parent' => 0));
+    for ($i = 0; $i < $n; $i++) {
+        $terms[] = (object) array('term_id' => 9100 + $i, 'name' => "State $i", 'parent' => 9000);
+    }
+    $GLOBALS['object_terms'][$post_id]['ships_to'] = $terms;
+}
+
+$s = store(700, array(
+    'coupon_intro'        => 'Intro sentence.',
+    'free_shipping_info'  => 'Free over $50',
+    'payment_methods'     => 'Card, crypto',
+    'last_checked_text'   => '24 Jul 2026',
+));
+assign_ships(700, 'United States', 48);
+
+$facts = vc_rehub_sidebar_facts(700);
+check('a nationwide store is summarised, not listed state by state',
+    strpos($facts, 'United States nationwide') !== false, $facts);
+check('State 0 is not listed individually',
+    strpos($facts, 'State 0') === false, $facts);
+check('short policy fields become rows',
+    strpos($facts, 'Free over $50') !== false
+    && strpos($facts, 'Card, crypto') !== false, $facts);
+check('the last-checked date is carried into the sidebar',
+    strpos($facts, '24 Jul 2026') !== false, $facts);
+check('a field we hold no value for produces no row',
+    strpos($facts, 'Returns') === false, $facts);
+
+// The whole point of the length cap: this field often holds a paragraph.
+$long = str_repeat('Shipping is free on orders over fifty dollars. ', 5);
+update_post_meta(700, 'free_shipping_info', $long);
+$facts = vc_rehub_sidebar_facts(700);
+check('a paragraph of prose is dropped rather than squeezed into the column',
+    strpos($facts, 'Shipping is free on orders over fifty') === false, $facts);
+check('and dropping it leaves the other rows intact',
+    strpos($facts, 'Card, crypto') !== false, $facts);
+update_post_meta(700, 'free_shipping_info', 'Free over $50');
+
+// A store shipping to a handful of states: the count is the useful fact.
+$few = store(701, array('coupon_intro' => 'Hi.'));
+assign_ships(701, 'United States', 6);
+check('a partial-coverage store reports how many states',
+    strpos(vc_rehub_sidebar_facts($few), '6 states in United States') !== false,
+    vc_rehub_sidebar_facts($few));
+
+$one = store(702, array('coupon_intro' => 'Hi.'));
+assign_ships(702, 'United States', 1);
+check('one state is singular',
+    strpos(vc_rehub_sidebar_facts($one), '1 state in United States') !== false,
+    vc_rehub_sidebar_facts($one));
+
+// No shipping data at all must not fabricate a row.
+$bare = store(703, array('coupon_intro' => 'Hi.'));
+check('a store with no ships_to terms gets no shipping row',
+    vc_rehub_sidebar_facts($bare) === '', vc_rehub_sidebar_facts($bare));
+
+check('a store with nothing to say produces no panel at all',
+    vc_rehub_sidebar_facts(store(704)) === '', vc_rehub_sidebar_facts(704));
+
+/* The panel has to reach the sidebar, which means riding along with
+ * brand_short_description -- a correct builder wired to nothing is the
+ * failure mode this catches. */
+$map = vc_rehub_term_map();
+$short = $map['brand_short_description'](700);
+check('the sidebar slot carries the intro sentence first',
+    strpos($short, 'Intro sentence.') === 0, substr($short, 0, 40));
+check('and the facts panel after it',
+    strpos($short, 'vc-store-facts') !== false, $short);
+
+// Term meta is not run through wp_kses on the way out, and these values are
+// merchant-entered, so the panel escapes them itself.
+update_post_meta(700, 'payment_methods', 'Card <script>x</script>');
+check('a value is escaped, not passed through as markup',
+    strpos(vc_rehub_sidebar_facts(700), '<script>') === false,
+    vc_rehub_sidebar_facts(700));
+update_post_meta(700, 'payment_methods', 'Card, crypto');
+
+// A store with no facts must leave the sidebar exactly as it was.
+$plain = store(705, array('coupon_intro' => 'Only an intro.'));
+check('a store with no facts still gets its plain intro, with no empty panel',
+    $map['brand_short_description']($plain) === 'Only an intro.',
+    $map['brand_short_description']($plain));
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

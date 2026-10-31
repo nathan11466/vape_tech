@@ -33,6 +33,137 @@ function vc_rehub_active() {
     return taxonomy_exists('dealstore');
 }
 
+/* -------------------------------------------------------------------------
+ * The store sidebar
+ *
+ * ReHub's dealstore sidebar is built by the template, not from a widget area,
+ * so widgets cannot be dropped into it. The template renders exactly these
+ * term meta fields: brandimage, brand_url (the GO TO SHOP button),
+ * brand_short_description, and cashback_notice. That is the whole surface.
+ *
+ * brand_short_description is therefore the only slot that takes free content,
+ * and ReHub passes it through do_shortcode, so markup in it renders. We put a
+ * short facts panel there under the intro sentence.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Longest value that belongs in a sidebar column.
+ *
+ * The policy fields hold full sentences written for the body of the page. A
+ * paragraph of shipping prose in a 250px column is unreadable, and it is
+ * already rendered in the policies table further down, so a long value is
+ * skipped here rather than truncated -- a sentence cut mid-clause reads as a
+ * bug, and half a shipping policy is worse than none.
+ */
+function vc_rehub_sidebar_max_length() {
+    return (int) apply_filters('vc_rehub_sidebar_max_length', 90);
+}
+
+/**
+ * One-line summary of where a store ships, from the assigned ships_to terms.
+ *
+ * Returns '' when the taxonomy is absent or the store has no terms, so a
+ * store we have no shipping data for simply shows no row.
+ */
+function vc_rehub_sidebar_ships_to($post_id) {
+    if (!taxonomy_exists('ships_to')) {
+        return '';
+    }
+
+    $terms = get_the_terms($post_id, 'ships_to');
+    if (!$terms || is_wp_error($terms)) {
+        return '';
+    }
+
+    $parents = array();
+    $counts  = array();
+    foreach ($terms as $term) {
+        if ((int) $term->parent === 0) {
+            $parents[$term->term_id] = $term->name;
+        } else {
+            $parent = (int) $term->parent;
+            $counts[$parent] = ($counts[$parent] ?? 0) + 1;
+        }
+    }
+
+    $threshold = function_exists('vc_destinations_nationwide_threshold')
+        ? vc_destinations_nationwide_threshold() : 45;
+
+    $parts = array();
+    foreach ($parents as $parent_id => $name) {
+        $count = $counts[$parent_id] ?? 0;
+
+        if ($count >= $threshold) {
+            $parts[] = sprintf(
+                /* translators: %s: country name */
+                __('%s nationwide', 'vc-merchant'), $name);
+        } elseif ($count > 0) {
+            $parts[] = sprintf(
+                /* translators: 1: number of destinations, 2: country name */
+                _n('%1$d state in %2$s', '%1$d states in %2$s', $count, 'vc-merchant'),
+                $count, $name);
+        } else {
+            $parts[] = $name;
+        }
+    }
+
+    // A store assigned only child terms with no country roll-up still has a
+    // usable answer: the number of places.
+    if (empty($parts) && !empty($counts)) {
+        $total = array_sum($counts);
+        $parts[] = sprintf(
+            /* translators: %d: number of destinations */
+            _n('%d destination', '%d destinations', $total, 'vc-merchant'), $total);
+    }
+
+    return implode(', ', $parts);
+}
+
+/**
+ * The sidebar facts panel, or '' when we have nothing short to show.
+ *
+ * Every row comes from merchant meta. A field we have no value for produces
+ * no row -- there are no placeholders, no "N/A", and nothing inferred.
+ */
+function vc_rehub_sidebar_facts($post_id) {
+    $get = function ($key) use ($post_id) {
+        return function_exists('vc_section_meta')
+            ? trim((string) vc_section_meta($post_id, $key))
+            : trim((string) get_post_meta($post_id, $key, true));
+    };
+
+    $rows = array(
+        __('Ships to', 'vc-merchant')      => vc_rehub_sidebar_ships_to($post_id),
+        __('Shipping', 'vc-merchant')      => $get('free_shipping_info'),
+        __('Payment', 'vc-merchant')       => $get('payment_methods'),
+        __('Returns', 'vc-merchant')       => $get('return_policy_summary'),
+        __('Codes checked', 'vc-merchant') => $get('last_checked_text'),
+    );
+
+    $max   = vc_rehub_sidebar_max_length();
+    $items = '';
+    foreach ($rows as $label => $value) {
+        if ($value === '') {
+            continue;
+        }
+
+        // The ships-to line is ours and always short; the rest are prose
+        // fields that may not be.
+        if (function_exists('mb_strlen') ? mb_strlen($value) > $max : strlen($value) > $max) {
+            continue;
+        }
+
+        $items .= '<div class="vc-store-fact"><dt>' . esc_html($label) . '</dt>'
+            . '<dd>' . esc_html($value) . '</dd></div>';
+    }
+
+    if ($items === '') {
+        return '';
+    }
+
+    return '<dl class="vc-store-facts">' . $items . '</dl>';
+}
+
 /**
  * The dealstore term fields, mapped to where our value comes from.
  *
@@ -58,9 +189,18 @@ function vc_rehub_term_map() {
         'brand_short_description' => function ($post_id) {
             $intro = trim((string) get_post_meta($post_id, 'coupon_intro', true));
 
-            return $intro !== ''
-                ? $intro
-                : trim((string) get_post_meta($post_id, 'brand_summary', true));
+            if ($intro === '') {
+                $intro = trim((string) get_post_meta($post_id, 'brand_summary', true));
+            }
+
+            // This is the only free-content slot in ReHub's store sidebar, so
+            // the facts panel goes here, under the intro sentence.
+            $facts = vc_rehub_sidebar_facts($post_id);
+            if ($facts !== '') {
+                $intro = $intro === '' ? $facts : $intro . "\n\n" . $facts;
+            }
+
+            return $intro;
         },
         'brand_second_description' => function ($post_id) {
             $text = trim((string) get_post_meta($post_id, 'best_ways_to_save', true));
