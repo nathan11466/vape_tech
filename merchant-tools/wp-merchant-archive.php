@@ -460,6 +460,20 @@ function vc_archive_wants_intro() {
     return vc_is_merchant_archive() && !is_paged() && vc_body_started();
 }
 
+/**
+ * term_description() is what ReHub's taxonomy templates actually call --
+ * get_the_archive_description() is never reached on them. A destination
+ * page with no merchants in it runs no loop either, so without this hook
+ * such a page renders nothing at all.
+ */
+add_filter('term_description', function ($description) {
+    if (!vc_archive_wants_intro() || vc_archive_intro_claimed(true)) {
+        return $description;
+    }
+
+    return vc_archive_intro() . $description;
+});
+
 add_filter('get_the_archive_description', function ($description) {
     if (!vc_archive_wants_intro() || vc_archive_intro_claimed(true)) {
         return $description;

@@ -163,6 +163,32 @@ add_action('loop_start', function ($query) {
     echo $html;
 }, 6);
 
+/**
+ * The hook ReHub actually uses.
+ *
+ * taxonomy-dealstore.php does not call get_the_archive_description() at
+ * all. Line 33 calls term_description(), prints it inside
+ * <div class="term-description post"> under the store's H1, and skips it
+ * on paginated pages. That is both the only reliable hook on this template
+ * and the right place for the profile to sit -- inside ReHub's own content
+ * column rather than wherever a generic hook happens to fire.
+ *
+ * It also works on a store with no offers posted to it, where no loop runs
+ * and loop_start never fires.
+ */
+add_filter('term_description', function ($description) {
+    if (vc_storepage_claimed()) {
+        return $description;
+    }
+    $html = vc_storepage_html();
+    if ($html === '') {
+        return $description;
+    }
+    vc_storepage_claimed(true);
+
+    return $html . $description;
+});
+
 add_filter('get_the_archive_description', function ($description) {
     if (vc_storepage_claimed()) {
         return $description;

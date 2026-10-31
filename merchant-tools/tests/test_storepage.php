@@ -121,6 +121,11 @@ function description_hook($d = '') {
     foreach ($GLOBALS['filters']['get_the_archive_description'] ?? array() as $fn) { $d = $fn($d); }
     return $d;
 }
+// What ReHub's taxonomy-dealstore.php actually calls.
+function term_description_hook($d = '') {
+    foreach ($GLOBALS['filters']['term_description'] ?? array() as $fn) { $d = $fn($d); }
+    return $d;
+}
 
 merchant(101, '1st Class Cigar Humidors', array('rehub_dealstore_term_id' => 4923));
 merchant(102, 'VooPoo', array('display_brand_name' => 'VooPoo'));
@@ -180,6 +185,34 @@ check('a store with no offers still gets its profile',
     strpos($out, 'profile of 1st Class') !== false, $out);
 check('and not a second time from the loop',
     trim(fire('loop_start')) === '');
+
+/* --- The hook ReHub actually uses -------------------------------------- */
+//
+// taxonomy-dealstore.php never calls get_the_archive_description(). It
+// calls term_description(), at line 33, and prints the result under the
+// store's H1. Hooking the wrong one meant every store page rendered
+// nothing once the head guard stopped the accidental path working.
+
+fresh($humidors);
+$out = term_description_hook('The store description ReHub stored.');
+check('the profile prints through term_description',
+    strpos($out, 'profile of 1st Class Cigar Humidors') !== false, $out);
+check('and the term description survives after it',
+    strpos($out, 'The store description ReHub stored.') !== false);
+check('the profile comes first',
+    strpos($out, 'profile of') < strpos($out, 'ReHub stored'));
+check('loop_start then prints nothing', trim(fire('loop_start')) === '');
+
+// A store with no offers runs no loop at all, so this hook is the only one
+// that will fire there.
+fresh($humidors);
+check('it works with no loop having run',
+    strpos(term_description_hook(''), 'profile of 1st Class') !== false);
+
+fresh($humidors);
+fire('loop_start');
+check('and it does not print again after the loop already did',
+    term_description_hook('desc') === 'desc');
 
 /* --- Where it must not print ------------------------------------------- */
 
