@@ -198,6 +198,26 @@ $r = vc_rep_report();
 check('an empty site reports no stores rather than failing',
     $r['stores'] === 0 && $r['fields'] === array());
 
+/* --- The audited set must match the pipeline's own ------------------- */
+
+$audited = array_keys(vc_rep_fields());
+// enrich_merchants.py REPEATING_BY_DESIGN: these repeat as a matter of fact,
+// so scoring them would point the work at a problem that is not one.
+foreach (array('payment_methods', 'verification_method', 'brand_category',
+               'editor_name', 'last_checked_text', 'top_offer_type',
+               'age_verification_required', 'coupon_plugin_shortcode') as $key) {
+    check("$key is not audited -- it repeats by design",
+        !in_array($key, $audited, true));
+}
+// And the editorial columns must all be covered, or repetition hides in one.
+foreach (array('best_offer_summary', 'coupon_intro', 'brand_summary',
+               'best_ways_to_save', 'free_shipping_info', 'return_policy_summary',
+               'common_exclusions', 'stacking_policy', 'why_code_not_work',
+               'shipping_restrictions', 'company_trust_info',
+               'faq_1_answer', 'faq_2_answer', 'faq_3_answer') as $key) {
+    check("$key is audited", in_array($key, $audited, true));
+}
+
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
 echo "All repetition report checks passed.\n";

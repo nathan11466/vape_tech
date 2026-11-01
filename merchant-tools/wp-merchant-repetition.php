@@ -31,6 +31,13 @@ if (!defined('ABSPATH')) {
  * Only fields that render as sentences on the page. A URL, a date or a
  * payment list repeating across stores is a fact, not duplicated writing --
  * flagging those would bury the real findings in noise.
+ *
+ * This is the same set as CONTENT_FIELDS in enrich_merchants.py, and it
+ * deliberately leaves out everything in that script's REPEATING_BY_DESIGN:
+ * payment_methods repeats because most stores really do take the same cards,
+ * and verification_method describes our editorial process rather than the
+ * store, so both would score near 100% and send the editing effort at a
+ * problem that is not one.
  */
 function vc_rep_fields() {
     return apply_filters('vc_rep_fields', array(
@@ -43,7 +50,6 @@ function vc_rep_fields() {
         'common_exclusions'     => __('Exclusions', 'vc-merchant'),
         'stacking_policy'       => __('Stacking codes', 'vc-merchant'),
         'why_code_not_work'     => __('If a code fails', 'vc-merchant'),
-        'verification_method'   => __('How we check', 'vc-merchant'),
         'shipping_restrictions' => __('Restrictions', 'vc-merchant'),
         'company_trust_info'    => __('Company info', 'vc-merchant'),
         'faq_1_answer'          => __('FAQ 1 answer', 'vc-merchant'),
