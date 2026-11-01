@@ -123,9 +123,36 @@ def extract_facts(row, skip_fields=frozenset()):
         if term in lowered and term not in categories:
             categories.append(term)
 
+    # --- facts collected from the store's own policy pages
+    #
+    # enrich_policies.py writes these with a _source and _evidence column
+    # beside each one. They are preferred over anything mined out of the
+    # spreadsheet's own prose, which is unsourced and often templated.
+    # Reading them here is what widens this vocabulary from eight slots to
+    # fifteen, and that is what makes the composed sections differ from one
+    # another without a word being rewritten.
+    def policy_int(field):
+        raw = _text(row, field)
+        return int(raw) if raw.isdigit() else None
+
+    policy_return_days = policy_int("return_window_days")
+    if policy_return_days:
+        return_days = policy_return_days
+    policy_threshold = policy_int("free_shipping_threshold_usd")
+    if policy_threshold:
+        ship_threshold = str(policy_threshold)
+
     return {
         "codes": codes,
         "ship_threshold": ship_threshold,
+        "restocking_fee": policy_int("restocking_fee_percent"),
+        "warranty_days": policy_int("warranty_days"),
+        "processing_days": policy_int("processing_days"),
+        "min_order": policy_int("min_order_usd"),
+        "carriers": [c for c in _text(row, "shipping_carriers").split("|") if c],
+        "age_method": [a for a in
+                       _text(row, "age_verification_method").split("|") if a],
+        "return_payer": _text(row, "return_shipping_paid_by"),
         "thresholds": thresholds,
         "percents": percents,
         "return_days": return_days,
@@ -282,9 +309,19 @@ def compose_troubleshooting(brand, facts):
 
 def compose_returns(brand, facts, original):
     if facts["return_days"]:
+        parts = [f"{brand} accepts returns within {facts['return_days']} "
+                 f"days of delivery"]
+        if facts.get("restocking_fee"):
+            parts.append(f"with a {facts['restocking_fee']}% restocking fee "
+                         f"on opened hardware")
+        if facts.get("return_payer") == "customer":
+            parts.append("and the customer pays return postage")
+        elif facts.get("return_payer") == "store":
+            parts.append("and return postage is covered")
+        lead = ", ".join(parts[:-1]) + " " + parts[-1] if len(parts) > 1 else parts[0]
         return (
-            f"{brand} accepts returns within {facts['return_days']} days of delivery. "
-            f"Opened consumables are commonly excluded, so confirm eligibility before shipping anything back.",
+            f"{lead}. Opened consumables are commonly excluded, so confirm "
+            f"eligibility before shipping anything back.",
             "composed",
         )
     return (

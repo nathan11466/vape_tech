@@ -48,6 +48,21 @@ function vc_merchant_import_meta_keys() {
         'fact_last_verified', 'content_confidence', 'publish_status', 'offer_display_mode',
         'content_score', 'low_confidence_fields', 'review_notes', 'section_origins',
         'ships_to_terms', 'restricted_states', 'shipping_confidence',
+        // Policy facts from enrich_policies.py. Each carries a _source and
+        // _evidence column so the claim on the page can be traced back to
+        // the sentence on the store's own site that supports it.
+        'return_window_days', 'return_window_days_source', 'return_window_days_evidence',
+        'restocking_fee_percent', 'restocking_fee_percent_source', 'restocking_fee_percent_evidence',
+        'return_shipping_paid_by', 'return_shipping_paid_by_source', 'return_shipping_paid_by_evidence',
+        'warranty_days', 'warranty_days_source', 'warranty_days_evidence',
+        'free_shipping_threshold_usd', 'free_shipping_threshold_usd_source',
+        'free_shipping_threshold_usd_evidence',
+        'min_order_usd', 'min_order_usd_source', 'min_order_usd_evidence',
+        'processing_days', 'processing_days_source', 'processing_days_evidence',
+        'shipping_carriers', 'shipping_carriers_source', 'shipping_carriers_evidence',
+        'age_verification_method', 'age_verification_method_source',
+        'age_verification_method_evidence',
+        'policy_facts_checked', 'policy_facts_conflicts', 'policy_facts_problem',
         'social_links', 'useful_links', 'shipping_policy_url', 'returns_policy_url',
         'age_policy_url', 'do_they_id_on_delivery', 'trust_source_url', 'trust_verified_at',
     );
