@@ -29,6 +29,16 @@ function apply_filters($tag, $value) {
     return $value;
 }
 function add_filter($tag, $fn, $p = 10, $n = 1) { $GLOBALS['filters'][$tag][] = $fn; }
+function add_action($tag, $fn = null, $p = 10, $n = 1) { $GLOBALS['actions'][$tag][] = $fn; }
+function add_submenu_page() {}
+function current_user_can() { return true; }
+function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
+function check_admin_referer() { return true; }
+function wp_nonce_field() {}
+function submit_button() {}
+function wp_unslash($v) { return $v; }
+function esc_url_raw($v) { return $v; }
+function esc_attr($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
 function add_shortcode($tag, $fn) { $GLOBALS['shortcodes'][$tag] = $fn; }
 function shortcode_atts($pairs, $atts, $sc = '') {
     return array_merge($pairs, is_array($atts) ? $atts : array());
@@ -193,6 +203,35 @@ $evil = $one(array('state' => '<script>x</script>'));
 check('a state name is escaped into the label',
     strpos($evil, '<script>') === false, $evil);
 $GLOBALS['filters']['vc_law_slugs'] = array();
+
+/* --- The setting that makes staging usable ----------------------------- */
+
+// The whole reason this field exists: on staging home_url() is .../staging,
+// so the default points at pages that are not there, and a filter in PHP is
+// not something you can set from wp-admin.
+$GLOBALS['options']['vc_law_base_url'] = 'https://vapingcheap.com/vape-laws/';
+check('a saved production base overrides the staging default',
+    vc_law_url('Texas') === 'https://vapingcheap.com/vape-laws/tx/',
+    vc_law_url('Texas'));
+
+// Saved without a trailing slash, as anyone would type it.
+$GLOBALS['options']['vc_law_base_url'] = 'https://vapingcheap.com/vape-laws';
+check('a base typed without a trailing slash still builds a valid URL',
+    vc_law_url('Ohio') === 'https://vapingcheap.com/vape-laws/oh/',
+    vc_law_url('Ohio'));
+
+$GLOBALS['options'] = array();
+check('with nothing saved it falls back to this site',
+    vc_law_url('Ohio') === 'https://vapingcheap.com/vape-laws/oh/',
+    vc_law_url('Ohio'));
+
+check('the admin screen is registered', isset($GLOBALS['actions']['admin_menu']));
+check('and it renders without error',
+    (function () {
+        ob_start(); vc_law_screen(); $out = ob_get_clean();
+        return strpos($out, '/vape-laws/tx/') !== false
+            && substr_count($out, '<tr>') >= 51;
+    })());
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

@@ -201,6 +201,80 @@ add_shortcode('vape_law_links', function ($atts) {
 });
 
 /* -------------------------------------------------------------------------
+ * Admin screen
+ *
+ * The base URL needs a field, not just a filter. On staging home_url() is
+ * .../staging, so the default resolves to /staging/vape-laws/tx/ -- a page
+ * that is not there. Without somewhere to type the production URL, the only
+ * way to correct that is editing PHP, which is not a setting.
+ * ---------------------------------------------------------------------- */
+
+add_action('admin_menu', function () {
+    add_submenu_page('edit.php?post_type=merchant',
+        __('Law links', 'vc-merchant'), __('Law links', 'vc-merchant'),
+        'manage_options', 'vc-merchant-lawlinks', 'vc_law_screen');
+});
+
+function vc_law_screen() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    $notice = '';
+    if (isset($_POST['vc_law_submit'])
+        && check_admin_referer('vc_law_save', 'vc_law_nonce')) {
+        // Stored raw-ish but sanitised as a URL, and an empty value is
+        // meaningful: it turns every link off rather than falling back.
+        $value = isset($_POST['base']) ? trim(wp_unslash($_POST['base'])) : '';
+        update_option('vc_law_base_url',
+            $value === '' ? '' : esc_url_raw($value));
+        $notice = __('Saved.', 'vc-merchant');
+    }
+
+    $stored = trim((string) get_option('vc_law_base_url', ''));
+    $base = vc_law_base();
+
+    echo '<div class="wrap"><h1>' . esc_html__('Law links', 'vc-merchant') . '</h1>';
+
+    if ($notice !== '') {
+        echo '<div class="notice notice-success"><p>' . esc_html($notice) . '</p></div>';
+    }
+
+    echo '<p>' . esc_html__('Where the state vape-law pages live. Each state shipping page links to its own page here, and the [vape_law_links] shortcode lists all of them.', 'vc-merchant') . '</p>';
+
+    echo '<form method="post"><table class="form-table"><tr>'
+        . '<th scope="row"><label for="vc_law_base">'
+        . esc_html__('Law page base URL', 'vc-merchant') . '</label></th><td>';
+    wp_nonce_field('vc_law_save', 'vc_law_nonce');
+    echo '<input type="url" class="regular-text code" id="vc_law_base" name="base" value="'
+        . esc_attr($stored) . '" placeholder="' . esc_attr(home_url('/vape-laws/')) . '" />'
+        . '<p class="description">'
+        . esc_html__('Leave empty to use this site\'s own /vape-laws/. Set it to the production URL when running on staging, where the default would point at pages that are not there. Clearing it to a single space removes every law link.', 'vc-merchant')
+        . '</p></td></tr></table>';
+    submit_button(__('Save', 'vc-merchant'), 'primary', 'vc_law_submit');
+    echo '</form>';
+
+    if ($base === '') {
+        echo '<p><strong>' . esc_html__('Law links are currently switched off.', 'vc-merchant')
+            . '</strong></p></div>';
+
+        return;
+    }
+
+    echo '<h2>' . esc_html__('Where each state points', 'vc-merchant') . '</h2>';
+    echo '<p class="description">' . esc_html__('Open a few to confirm they resolve. To check all fifty-one at once, run: wp merchant lawlinks --check', 'vc-merchant') . '</p>';
+    echo '<table class="widefat striped"><thead><tr><th>'
+        . esc_html__('State', 'vc-merchant') . '</th><th>'
+        . esc_html__('Law page', 'vc-merchant') . '</th></tr></thead><tbody>';
+    foreach (vc_law_slugs() as $state => $slug) {
+        $url = $base . $slug . '/';
+        printf('<tr><td>%s</td><td><a href="%s" target="_blank" rel="noopener">%s</a></td></tr>',
+            esc_html($state), esc_url($url), esc_html($url));
+    }
+    echo '</tbody></table></div>';
+}
+
+/* -------------------------------------------------------------------------
  * WP-CLI: wp merchant lawlinks [--check]
  *
  * --check requests every URL. A link to a 404 is worse than no link, and the
