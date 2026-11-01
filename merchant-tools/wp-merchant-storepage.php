@@ -237,6 +237,16 @@ add_filter('rank_math/frontend/title', function ($title) {
     if (!$post_id || !function_exists('vc_merchant_seo_title')) {
         return $title;
     }
+
+    // A title typed into the Rank Math box on the merchant wins, exactly as
+    // it does on our own page. Without this the two disagree: an editor's
+    // hand-written title is honoured at /stores/brand/ and silently
+    // discarded on the store page that replaced it.
+    $manual = trim((string) get_post_meta($post_id, 'rank_math_title', true));
+    if ($manual !== '') {
+        return $title;
+    }
+
     $built = trim((string) vc_merchant_seo_title($post_id));
 
     return $built !== '' ? $built : $title;
@@ -247,6 +257,12 @@ add_filter('rank_math/frontend/description', function ($description) {
     if (!$post_id || !function_exists('vc_merchant_meta_description')) {
         return $description;
     }
+
+    $manual = trim((string) get_post_meta($post_id, 'rank_math_description', true));
+    if ($manual !== '') {
+        return $description;
+    }
+
     $built = trim((string) vc_merchant_meta_description($post_id));
 
     return $built !== '' ? $built : $description;

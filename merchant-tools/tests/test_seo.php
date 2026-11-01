@@ -24,8 +24,10 @@ function get_the_ID() { return $GLOBALS['current_id']; }
 function get_the_title($id = null) { return $GLOBALS['titles'][$id ?: $GLOBALS['current_id']] ?? ''; }
 function get_permalink($id = null) { return 'https://vapingcheap.com/stores/brand/'; }
 function get_post_type($id = null) { return 'merchant'; }
-function is_singular() { return true; }
-function is_tax($t = '') { return false; }
+// Switchable: the ReHub store page is a taxonomy archive, not a singular,
+// so the two paths have to be testable independently.
+function is_singular() { return !isset($GLOBALS['is_singular']) || $GLOBALS['is_singular']; }
+function is_tax($t = '') { return !empty($GLOBALS['is_tax']); }
 function get_queried_object() { return null; }
 function apply_filters($tag, $value) {
     foreach ($GLOBALS['filters'][$tag] ?? array() as $fn) {
@@ -345,6 +347,66 @@ $GLOBALS['filters']['vc_merchant_title_template'][] = function ($t) { return '';
 check('an emptied template falls back rather than blanking the title',
     trim(vc_merchant_seo_title(1)) !== '', vc_merchant_seo_title(1));
 $GLOBALS['filters']['vc_merchant_title_template'] = array();
+
+/* --- Title and description on the ReHub store page ---------------------
+ *
+ * The store page is a taxonomy archive, so everything gated on is_singular()
+ * skips it and Rank Math falls back to the brand_heading term meta the sync
+ * wrote once. That snapshot carries whatever month the sync ran in, which on
+ * a page selling freshness is the one thing that must not go stale.
+ * -------------------------------------------------------------------- */
+
+$month = vc_merchant_freshness_stamp();
+
+// The singular path must keep working exactly as before.
+$GLOBALS['current_id'] = 1;
+$GLOBALS['is_singular'] = true;
+$GLOBALS['is_tax'] = false;
+$GLOBALS['vc_storepage_merchant'] = 0;
+check('our own store page still gets its title',
+    apply_filters('rank_math/frontend/title', 'theme default') !== 'theme default');
+
+// Now the ReHub store page: not singular, but a merchant is matched to it.
+$GLOBALS['is_singular'] = false;
+$GLOBALS['is_tax'] = true;
+$GLOBALS['vc_storepage_merchant'] = 1;
+
+$on_term = apply_filters('rank_math/frontend/title', 'theme default');
+check('the ReHub store page gets our title too',
+    $on_term !== 'theme default', $on_term);
+check('and it carries the current month, not the month the sync ran in',
+    strpos($on_term, $month) !== false, "$on_term (want $month)");
+check('the ReHub store page gets our meta description',
+    apply_filters('rank_math/frontend/description', 'theme default') !== 'theme default');
+
+// A dealstore term that is not one of our stores must be left alone --
+// ReHub sites have stores we do not manage.
+$GLOBALS['vc_storepage_merchant'] = 0;
+check('a store page with no merchant behind it is left to the theme',
+    apply_filters('rank_math/frontend/title', 'theme default') === 'theme default');
+check('and so is its description',
+    apply_filters('rank_math/frontend/description', 'theme default') === 'theme default');
+
+// An editor's manual override still wins on the store page.
+$GLOBALS['vc_storepage_merchant'] = 1;
+update_post_meta(1, 'rank_math_title', 'Hand-written title');
+check('a manually set title is respected on the store page',
+    apply_filters('rank_math/frontend/title', 'theme default') === 'theme default',
+    apply_filters('rank_math/frontend/title', 'theme default'));
+update_post_meta(1, 'rank_math_title', '');
+
+update_post_meta(1, 'rank_math_description', 'Hand-written description');
+check('a manually set description is respected on the store page',
+    apply_filters('rank_math/frontend/description', 'theme default') === 'theme default');
+update_post_meta(1, 'rank_math_description', '');
+
+// Neither a singular nor a store page: an ordinary archive is not ours.
+$GLOBALS['is_tax'] = false;
+$GLOBALS['vc_storepage_merchant'] = 0;
+check('an unrelated archive is untouched',
+    apply_filters('rank_math/frontend/title', 'theme default') === 'theme default');
+
+$GLOBALS['is_singular'] = true;
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

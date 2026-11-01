@@ -42,6 +42,15 @@ function vc_merchant_render_page($atts = array()) {
 function vc_merchant_seo_title($id) { return 'SEO title for ' . $id; }
 function vc_merchant_meta_description($id) { return 'SEO description for ' . $id; }
 
+function get_post_meta($id, $key, $single = false) {
+    return $GLOBALS['posts'][$id]['meta'][$key] ?? '';
+}
+function update_post_meta($id, $key, $value) {
+    $GLOBALS['posts'][$id]['meta'][$key] = $value;
+
+    return true;
+}
+
 function get_posts($args = array()) {
     $key = $args['meta_key'] ?? '';
     $value = $args['meta_value'] ?? null;
