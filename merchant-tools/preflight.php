@@ -275,6 +275,7 @@ $required = array(
     'vc_rehub_active', 'vc_rehub_sync_merchant', 'vc_rehub_term_map',
     'vc_rehub_offer_map', 'vc_rehub_handover', 'vc_merchant_permalink',
     'vc_merchant_link', 'vc_rehub_unmatched_count',
+    'vc_rep_fields', 'vc_rep_normalize', 'vc_rep_shingles', 'vc_rep_report',
 );
 foreach ($required as $fn) {
     check("$fn() exists", function_exists($fn));
