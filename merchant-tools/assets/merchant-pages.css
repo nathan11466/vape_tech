@@ -907,3 +907,20 @@
 .vc-custom__body img { max-width: 100%; height: auto; }
 .vc-custom__body ul,
 .vc-custom__body ol { margin: 0 0 .75rem 1.25rem; }
+
+/* ---------- Links to the state law pages ---------- */
+
+.vc-archive-legal .vc-law-link,
+p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
+
+.vc-law-list__items {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem 1.25rem;
+  /* Fifty-one items in one column is a scroll; in four it is a reference. */
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+
+.vc-law-list__items li { margin: 0; font-size: 0.94rem; }
