@@ -132,8 +132,15 @@ function vc_rehub_sidebar_facts($post_id) {
             : trim((string) get_post_meta($post_id, $key, true));
     };
 
+    // The destinations block answers this in the body with a link per
+    // destination. Repeating it here made "where does it ship" the answer to
+    // three separate questions on one page.
+    $ships_to = (function_exists('vc_layout_block_renders')
+                 && vc_layout_block_renders('destinations'))
+        ? '' : vc_rehub_sidebar_ships_to($post_id);
+
     $rows = array(
-        __('Ships to', 'vc-merchant')      => vc_rehub_sidebar_ships_to($post_id),
+        __('Ships to', 'vc-merchant')      => $ships_to,
         __('Shipping', 'vc-merchant')      => $get('free_shipping_info'),
         __('Payment', 'vc-merchant')       => $get('payment_methods'),
         __('Returns', 'vc-merchant')       => $get('return_policy_summary'),
@@ -213,6 +220,13 @@ function vc_rehub_term_map() {
             $embed = vc_rehub_coupon_embed($post_id);
             if ($embed !== '') {
                 $text = $text === '' ? $embed : $text . "\n\n" . $embed;
+            }
+
+            // The rest of the profile, after the coupons. A shortcode, not
+            // the HTML: term meta written at sync time would freeze most of
+            // the page, and ReHub runs this field through do_shortcode.
+            if (function_exists('vc_storepage_split') && vc_storepage_split()) {
+                $text = trim($text . "\n\n[merchant_page_below]");
             }
 
             return $text;

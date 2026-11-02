@@ -144,9 +144,45 @@ function vc_storepage_html() {
     }
 
     return '<div class="vc-storepage">'
-        . vc_merchant_render_page(array('id' => $post_id, 'sidebar' => 'no'))
+        . vc_merchant_render_page(array('id' => $post_id, 'sidebar' => 'no',
+            'split' => vc_storepage_split() ? 'above' : ''))
         . '</div>';
 }
+
+/**
+ * Is the profile split around the theme's coupon list?
+ *
+ * On by default. ReHub prints the coupons in the middle of the page, and
+ * everything here used to land above them, so a reader met the full profile
+ * -- policies, FAQs, company details, similar stores -- before reaching the
+ * codes they came for.
+ */
+function vc_storepage_split() {
+    return (bool) apply_filters('vc_storepage_split',
+        get_option('vc_storepage_split', '1') === '1');
+}
+
+/**
+ * The part of the profile that belongs below the theme's coupon list.
+ *
+ * Reached as a shortcode rather than written into term meta: ReHub runs
+ * brand_second_description through do_shortcode, so this renders live on
+ * every request. Storing the HTML instead would freeze it at sync time, and
+ * it is most of the page.
+ */
+add_shortcode('merchant_page_below', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_page_below');
+
+    $post_id = (int) $atts['id'] ?: vc_storepage_current_merchant();
+    if (!$post_id || !vc_storepage_split()) {
+        return '';
+    }
+
+    return '<div class="vc-storepage vc-storepage--below">'
+        . vc_merchant_render_page(array('id' => $post_id, 'sidebar' => 'no',
+            'split' => 'below'))
+        . '</div>';
+});
 
 add_action('loop_start', function ($query) {
     if (!$query instanceof WP_Query || !$query->is_main_query()) {

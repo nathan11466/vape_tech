@@ -199,6 +199,50 @@ function vc_layout_has_sidebar() {
     return !empty(vc_layout_blocks('side'));
 }
 
+/**
+ * Is this block rendering anywhere on the page?
+ *
+ * Used so that one block can own a subject and the others can stand down,
+ * rather than three of them stating where a store ships in three different
+ * forms.
+ */
+function vc_layout_block_renders($block) {
+    $layout = vc_layout_get();
+
+    return isset($layout['where'][$block])
+        && $layout['where'][$block] !== 'off';
+}
+
+/**
+ * Main-column blocks on one side of the coupon widget.
+ *
+ * On a ReHub store page the coupons are rendered by the theme, in the middle
+ * of the page, and everything this plugin produced landed above them -- so a
+ * reader met the whole profile before reaching the one thing they came for.
+ *
+ * The split point is the 'coupon' block in the order you have already set,
+ * rather than a second list to keep in step with it. Drag a block above or
+ * below Coupon widget on the Layout screen and it moves on the page.
+ *
+ * $part: 'above' or 'below'. The coupon block itself belongs to neither,
+ * because the theme renders it.
+ */
+function vc_layout_split_blocks($part) {
+    $blocks = vc_layout_blocks('main');
+    $at = array_search('coupon', $blocks, true);
+
+    if ($at === false) {
+        // Coupon widget switched off for the main column: there is no split
+        // point, so 'above' keeps everything and 'below' adds nothing. That
+        // is the pre-split behaviour, which is the safe side to fail to.
+        return $part === 'above' ? $blocks : array();
+    }
+
+    return $part === 'above'
+        ? array_slice($blocks, 0, $at)
+        : array_slice($blocks, $at + 1);
+}
+
 /* -------------------------------------------------------------------------
  * Visual values as CSS custom properties
  * ---------------------------------------------------------------------- */

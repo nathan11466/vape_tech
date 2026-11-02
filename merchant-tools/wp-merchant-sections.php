@@ -309,7 +309,13 @@ add_shortcode('merchant_policies', function ($atts) {
         __('Payment', 'vc-merchant')         => vc_section_meta($post_id, 'payment_methods'),
         __('Exclusions', 'vc-merchant')      => vc_section_meta($post_id, 'common_exclusions'),
         __('Stacking codes', 'vc-merchant')  => vc_section_meta($post_id, 'stacking_policy'),
-        __('Restrictions', 'vc-merchant')    => vc_section_meta($post_id, 'shipping_restrictions'),
+        // Left out when the destinations block is rendering: that block
+        // states where a store ships AND names its exclusions, so this row
+        // was a third telling of the same thing on the same page.
+        __('Restrictions', 'vc-merchant')    =>
+            (function_exists('vc_layout_block_renders')
+             && vc_layout_block_renders('destinations'))
+                ? '' : vc_section_meta($post_id, 'shipping_restrictions'),
         __('If a code fails', 'vc-merchant') => vc_section_meta($post_id, 'why_code_not_work'),
     );
 
@@ -343,6 +349,184 @@ add_shortcode('merchant_policies', function ($atts) {
 });
 
 /**
+ * The policy values already shown in the policies table.
+ *
+ * A FAQ answering what that table answers two inches higher is the same
+ * fact twice in different words -- which is the pattern the whole project
+ * refuses. The spreadsheet's three FAQ columns did exactly that on all 112
+ * stores: "Shipping details vary by order" in the table and "Shipping costs
+ * vary by order, so check your cart" in the FAQ.
+ */
+function vc_faq_policy_values($post_id) {
+    $out = array();
+    foreach (array_keys(vc_faq_policy_topics()) as $key) {
+        $value = trim((string) vc_section_meta($post_id, $key));
+        if ($value !== '') {
+            $out[] = $value;
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * Policy row => the questions that row already answers.
+ *
+ * Matched against the QUESTION, not the answer. Comparing answers by shared
+ * word runs catches a near-copy but not a rewrite: "Shipping details vary by
+ * order - check cart at checkout" and "Shipping costs vary by order, so
+ * check your cart total at checkout" share no eight-word run and not even a
+ * four-word one, because the wording interleaves differently. They are
+ * plainly the same fact all the same, and what gives it away is that both
+ * answer "does this shop do free shipping".
+ *
+ * So the topic is the test, and it is deliberately narrow: a question about
+ * couriers, packaging or tracking is about shipping without being the
+ * question the Shipping row answers, and losing it would cost real content.
+ */
+function vc_faq_policy_topics() {
+    return apply_filters('vc_faq_policy_topics', array(
+        'free_shipping_info'    => '/free\s+ship|shipping\s+(?:cost|rate|fee|charge|price)'
+                                   . '|(?:cost|price)\s+of\s+shipping|delivery\s+(?:cost|fee|charge)/i',
+        'return_policy_summary' => '/return\s+polic|refund\s+polic|can\s+i\s+return'
+                                   . '|how\s+(?:do|long).{0,24}return|send\s+(?:it|something)\s+back/i',
+        'payment_methods'       => '/payment\s+method|how\s+can\s+i\s+pay|what.{0,12}payment'
+                                   . '|accept\s+(?:credit|card|paypal|crypto)/i',
+        'common_exclusions'     => '/what.{0,20}exclud|which.{0,20}exclud|exempt\s+from/i',
+        'stacking_policy'       => '/stack|combine.{0,20}code|more\s+than\s+one\s+code/i',
+        'shipping_restrictions' => '/which\s+states.{0,24}(?:ship|restrict)|state\s+restriction/i',
+        'why_code_not_work'     => '/code.{0,24}(?:not\s+work|does\s*n.t\s+work|fail|invalid|reject|expire)'
+                                   . '|why.{0,20}code/i',
+    ));
+}
+
+/**
+ * Is this question already answered by a row of the policies table?
+ */
+function vc_faq_topic_covered($question, $post_id) {
+    foreach (vc_faq_policy_topics() as $key => $pattern) {
+        if (trim((string) vc_section_meta($post_id, $key)) === '') {
+            // That row is not rendering, so it answers nothing.
+            continue;
+        }
+        if (preg_match($pattern, (string) $question)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Does this answer restate something already on the page?
+ *
+ * Measured on shared eight-word runs after the store's name is blanked,
+ * the same way the repetition report measures the spreadsheet, so
+ * "2Fdeal allows DOA items to be returned within 5 days" and "DOA items can
+ * be returned within 5 days of delivery" are recognised as one fact.
+ *
+ * Without the repetition module loaded this says no: dropping a FAQ is a
+ * judgement, and the honest default is to show both and let the editor see
+ * the duplication rather than hide something silently.
+ */
+function vc_faq_duplicates($answer, array $already, $min_shared = 2, $names = array()) {
+    if (!function_exists('vc_rep_normalize') || !function_exists('vc_rep_shingles')) {
+        return false;
+    }
+
+    $mine = vc_rep_shingles(vc_rep_normalize($answer, $names));
+    if (empty($mine)) {
+        return false;
+    }
+
+    foreach ($already as $other) {
+        $theirs = vc_rep_shingles(vc_rep_normalize($other, $names));
+        $shared = count(array_intersect_key($mine, $theirs));
+        if ($shared >= $min_shared) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Questions we can answer from data the policies table does not show.
+ *
+ * These are the ones readers actually ask about a vape shop and that no
+ * other block on the page covers -- whether a courier will check ID at the
+ * door, how age is verified, the minimum age, dispatch time, warranty.
+ *
+ * Every one is skipped when the field behind it is empty. Nothing is
+ * inferred, and no question is asked that we cannot answer.
+ */
+function vc_faq_generated($post_id) {
+    $name = vc_merchant_display_name($post_id);
+    $out = array();
+
+    $id_delivery = trim((string) vc_section_meta($post_id, 'do_they_id_on_delivery'));
+    if ($id_delivery !== '') {
+        $out[] = array(
+            sprintf(__('Does %s require ID on delivery?', 'vc-merchant'), $name),
+            $id_delivery,
+        );
+    }
+
+    $method = trim((string) vc_section_meta($post_id, 'age_verification_method'));
+    if ($method !== '') {
+        $out[] = array(
+            sprintf(__('How does %s verify your age?', 'vc-merchant'), $name),
+            sprintf(__('%1$s uses %2$s.', 'vc-merchant'), $name,
+                strtolower(str_replace('|', ', ', $method))),
+        );
+    }
+
+    $age = trim((string) vc_section_meta($post_id, 'age_verification_required'));
+    if ($age !== '') {
+        $out[] = array(
+            sprintf(__('How old do you have to be to order from %s?', 'vc-merchant'), $name),
+            $age,
+        );
+    }
+
+    $processing = trim((string) vc_section_meta($post_id, 'processing_days'));
+    if ($processing !== '' && ctype_digit($processing)) {
+        $out[] = array(
+            sprintf(__('How long does %s take to dispatch an order?', 'vc-merchant'), $name),
+            sprintf(
+                /* translators: 1: store name, 2: number of days */
+                _n('%1$s dispatches orders within %2$d day of payment clearing.',
+                   '%1$s dispatches orders within %2$d days of payment clearing.',
+                   (int) $processing, 'vc-merchant'),
+                $name, (int) $processing),
+        );
+    }
+
+    $warranty = trim((string) vc_section_meta($post_id, 'warranty_days'));
+    if ($warranty !== '' && ctype_digit($warranty)) {
+        $out[] = array(
+            sprintf(__('Does %s offer a warranty?', 'vc-merchant'), $name),
+            sprintf(
+                /* translators: 1: store name, 2: number of days */
+                __('%1$s states a %2$d-day warranty on hardware.', 'vc-merchant'),
+                $name, (int) $warranty),
+        );
+    }
+
+    return apply_filters('vc_faq_generated', $out, $post_id);
+}
+
+/**
+ * How many FAQ columns to read from the spreadsheet.
+ *
+ * Was three, hardcoded, so a fourth question typed into the sheet never
+ * appeared and there was no sign of why.
+ */
+function vc_faq_column_count() {
+    return (int) apply_filters('vc_faq_column_count', 8);
+}
+
+/**
  * [merchant_faqs] -- the Q&As that also feed FAQPage schema.
  */
 add_shortcode('merchant_faqs', function ($atts) {
@@ -352,14 +536,38 @@ add_shortcode('merchant_faqs', function ($atts) {
         return '';
     }
 
-    $faqs = '';
-    for ($i = 1; $i <= 3; $i++) {
+    // Answers already on the page, grown as we go so two FAQs cannot
+    // restate each other either.
+    $already = vc_faq_policy_values($post_id);
+    $names = function_exists('vc_rep_store_names')
+        ? vc_rep_store_names(array($post_id)) : array();
+
+    $pairs = array();
+    for ($i = 1; $i <= vc_faq_column_count(); $i++) {
         $q = vc_section_meta($post_id, "faq_{$i}_question");
         $a = vc_section_meta($post_id, "faq_{$i}_answer");
         if ($q !== '' && $a !== '') {
-            $faqs .= '<div class="vc-faq"><h3>' . esc_html($q) . '</h3>' . wpautop(esc_html($a)) . '</div>';
+            $pairs[] = array($q, $a);
         }
     }
+
+    // Hand-written questions first: a real answer beats a generated one.
+    foreach (vc_faq_generated($post_id) as $pair) {
+        $pairs[] = $pair;
+    }
+
+    $faqs = '';
+    foreach ($pairs as $pair) {
+        list($q, $a) = $pair;
+        if (vc_faq_topic_covered($q, $post_id)
+            || vc_faq_duplicates($a, $already, 2, $names)) {
+            continue;
+        }
+        $already[] = $a;
+        $faqs .= '<div class="vc-faq"><h3>' . esc_html($q) . '</h3>'
+            . wpautop(esc_html($a)) . '</div>';
+    }
+
     if ($faqs === '') {
         return '';
     }

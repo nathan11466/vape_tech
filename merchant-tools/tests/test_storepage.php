@@ -42,6 +42,12 @@ function vc_merchant_render_page($atts = array()) {
 function vc_merchant_seo_title($id) { return 'SEO title for ' . $id; }
 function vc_merchant_meta_description($id) { return 'SEO description for ' . $id; }
 
+function add_shortcode($tag, $fn) { $GLOBALS['shortcodes'][$tag] = $fn; }
+function shortcode_atts($pairs, $atts, $sc = '') {
+    return array_merge($pairs, is_array($atts) ? $atts : array());
+}
+function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
+
 function get_post_meta($id, $key, $single = false) {
     return $GLOBALS['posts'][$id]['meta'][$key] ?? '';
 }

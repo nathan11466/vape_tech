@@ -651,6 +651,11 @@ $s = store(700, array(
 ));
 assign_ships(700, 'United States', 48);
 
+// Destinations block off, so the sidebar is the only place this is said.
+function vc_layout_block_renders($block) {
+    return !empty($GLOBALS['renders'][$block]);
+}
+
 $facts = vc_rehub_sidebar_facts(700);
 check('a nationwide store is summarised, not listed state by state',
     strpos($facts, 'United States nationwide') !== false, $facts);
@@ -694,6 +699,25 @@ check('a store with no ships_to terms gets no shipping row',
 
 check('a store with nothing to say produces no panel at all',
     vc_rehub_sidebar_facts(store(704)) === '', vc_rehub_sidebar_facts(704));
+
+/* --- One block owns where a store ships -------------------------------
+ *
+ * The destinations block states it in the body with a link per destination.
+ * The sidebar saying it too made "where does this ship" the answer to three
+ * questions on one page, which is what the complaint was about.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['renders']['destinations'] = true;
+$with_block = vc_rehub_sidebar_facts(700);
+check('with the destinations block on, the sidebar drops its ships-to row',
+    strpos($with_block, 'nationwide') === false, $with_block);
+check('but keeps the facts the destinations block does not cover',
+    strpos($with_block, 'Card, crypto') !== false, $with_block);
+
+$GLOBALS['renders']['destinations'] = false;
+check('with that block off, the sidebar answers it again',
+    strpos(vc_rehub_sidebar_facts(700), 'nationwide') !== false,
+    vc_rehub_sidebar_facts(700));
 
 /* The panel has to reach the sidebar, which means riding along with
  * brand_short_description -- a correct builder wired to nothing is the

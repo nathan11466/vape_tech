@@ -240,6 +240,71 @@ check('only the changed tokens are emitted',
 check('and an unchanged token is left to the stylesheet',
     strpos($css, '--vc-text:') === false && strpos($css, '--vc-section-gap') === false, $css);
 
+/* --- Splitting the page around the coupon widget -----------------------
+ *
+ * On a ReHub store page the theme prints the coupons mid-page, and every
+ * block this plugin renders landed above them -- so a reader met the whole
+ * profile before reaching the codes they came for. The split point is the
+ * coupon block in the order already set, so there is no second list to keep
+ * in step with it.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+
+$above = vc_layout_split_blocks('above');
+$below = vc_layout_split_blocks('below');
+
+check('by default only a little sits above the coupons',
+    count($above) <= 3, implode(', ', $above));
+check('and the title is part of it',
+    in_array('title', $above, true), implode(', ', $above));
+check('the heavy reference blocks sit below',
+    in_array('policies', $below, true) && in_array('faqs', $below, true)
+    && in_array('destinations', $below, true), implode(', ', $below));
+
+// The theme renders the coupons, so neither part may render them again.
+check('the coupon block itself is in neither part',
+    !in_array('coupon', $above, true) && !in_array('coupon', $below, true));
+
+// Every main block has to land somewhere, or a block silently disappears.
+$main = vc_layout_blocks('main');
+$rejoined = array_merge($above, array('coupon'), $below);
+check('no main block is lost by the split',
+    $rejoined === $main,
+    implode(',', $rejoined) . ' vs ' . implode(',', $main));
+
+// Moving a block in the Layout screen has to move it on the page.
+$layout = vc_layout_get();
+$order = $layout['order'];
+$order = array_values(array_diff($order, array('policies')));
+array_splice($order, array_search('coupon', $order, true), 0, 'policies');
+update_option('vc_merchant_layout',
+    array('order' => $order, 'where' => $layout['where']));
+
+check('dragging a block above Coupon widget moves it above the coupons',
+    in_array('policies', vc_layout_split_blocks('above'), true),
+    implode(', ', vc_layout_split_blocks('above')));
+check('and it leaves the lower part',
+    !in_array('policies', vc_layout_split_blocks('below'), true));
+
+$GLOBALS['options'] = array();
+
+// Coupon widget switched off: there is no split point, and the safe side to
+// fail to is the behaviour that worked before the split existed.
+$layout = vc_layout_get();
+$where = $layout['where'];
+$where['coupon'] = 'off';
+update_option('vc_merchant_layout',
+    array('order' => $layout['order'], 'where' => $where));
+
+check('with the coupon block off, everything stays above',
+    vc_layout_split_blocks('above') === vc_layout_blocks('main'),
+    implode(', ', vc_layout_split_blocks('above')));
+check('and nothing is rendered twice below',
+    vc_layout_split_blocks('below') === array());
+
+$GLOBALS['options'] = array();
+
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
 echo "All layout customisation checks passed.\n";
