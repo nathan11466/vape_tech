@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""
+Derive shipping-destination terms from the merchant data.
+
+Vape and hemp sellers usually describe shipping as an exception list --
+"ships nationwide except California and Utah" -- rather than an inclusion list.
+This turns that prose into concrete terms the WordPress `ships_to` taxonomy can
+use, so pages become filterable by destination.
+
+Every result carries a confidence marker, because the inference is not equally
+safe in every case:
+
+  stated    - the source explicitly claims nationwide or all-states shipping,
+              with an exception list we subtracted
+  inferred  - the source names states it will NOT ship to, which implies it
+              ships to the rest; probable but worth a spot check
+  unknown   - nothing explicit, so no terms are assigned rather than guessed
+
+A boilerplate non-statement ("no shipping restrictions listed - confirm at
+checkout") is deliberately NOT treated as a nationwide claim.
+"""
+
+import re
+
+US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
+    "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia",
+    "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan",
+    "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
+    "New Hampshire", "New Jersey", "New Mexico", "New York",
+    "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon",
+    "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+    "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+    "West Virginia", "Wisconsin", "Wyoming",
+]
+
+# Common shorthand seen in merchant copy.
+_STATE_ALIASES = {
+    "washington dc": "District of Columbia",
+    "washington d.c.": "District of Columbia",
+    "d.c.": "District of Columbia",
+    "dc": "District of Columbia",
+}
+
+COUNTRIES = [
+    "United States", "Canada", "Mexico", "United Kingdom", "Germany", "France",
+    "Netherlands", "Spain", "Italy", "Ireland", "Australia", "New Zealand",
+    "Japan", "European Union",
+]
+
+_COUNTRY_ALIASES = {
+    "usa": "United States", "u.s.": "United States", "us": "United States",
+    "united states of america": "United States", "america": "United States",
+    "uk": "United Kingdom", "great britain": "United Kingdom",
+    "eu": "European Union", "nz": "New Zealand",
+}
+
+# An explicit claim of nationwide / all-states coverage.
+_NATIONWIDE_RE = re.compile(
+    r"\b(?:ships?\s+)?(?:nationwide|all\s+(?:50\s+)?states|every\s+state|"
+    r"all\s+US\s+states|throughout\s+the\s+(?:US|United\s+States))\b",
+    re.I,
+)
+
+# Phrases introducing a list of places the merchant will NOT serve.
+_EXCLUSION_RES = [
+    re.compile(r"\bexcept(?:\s+for)?\b(?P<list>[^.;]+)", re.I),
+    re.compile(r"\b(?:does\s+not|do\s+not|cannot|can'?t|won'?t|unable\s+to)\s+ship\b"
+               r"(?:[^.;]*?)\bto\b(?P<list>[^.;]+)", re.I),
+    re.compile(r"\bnot\s+available\s+(?:in|to)\b(?P<list>[^.;]+)", re.I),
+    re.compile(r"\b(?:no|excluding|excludes)\s+(?:shipping|delivery)\s+to\b(?P<list>[^.;]+)", re.I),
+    re.compile(r"\brestrict(?:ed|ions?)?\s+(?:in|for|to)\b(?P<list>[^.;]+)", re.I),
+]
+
+# Signals that a merchant is NOT US-based. A UK or Australian retailer must
+# never be assumed onto US state pages.
+NON_US_RE = re.compile(
+    r"\b(united kingdom|\buk\b|britain|england|scotland|wales|"
+    r"australia|australian|new zealand|canada|canadian|"
+    r"european union|\beu\b|germany|france|netherlands|spain|italy|ireland)\b",
+    re.I,
+)
+
+US_RE = re.compile(
+    r"\b(united states|usa|u\.s\.|\bus\b|america|american|nationwide|"
+    r"50 states|domestic)\b",
+    re.I,
+)
+
+# Text that looks like a restriction statement but confirms nothing.
+_NON_STATEMENT_RE = re.compile(
+    r"no\s+(?:explicit\s+)?(?:shipping\s+)?restrictions?\s+(?:listed|found|stated)|"
+    r"confirm\s+at\s+checkout|"
+    r"details\s+vary",
+    re.I,
+)
+
+
+def _find_states(text):
+    """Return state names mentioned in the text, in canonical form."""
+    found = []
+    for state in US_STATES:
+        if re.search(r"\b" + re.escape(state) + r"\b", text, re.I):
+            if state not in found:
+                found.append(state)
+
+    lowered = text.lower()
+    for alias, canonical in _STATE_ALIASES.items():
+        if re.search(r"\b" + re.escape(alias) + r"\b", lowered) and canonical not in found:
+            found.append(canonical)
+
+    return found
+
+
+def _find_countries(text):
+    found = []
+    for country in COUNTRIES:
+        if re.search(r"\b" + re.escape(country) + r"\b", text, re.I):
+            if country not in found:
+                found.append(country)
+
+    lowered = text.lower()
+    for alias, canonical in _COUNTRY_ALIASES.items():
+        if re.search(r"\b" + re.escape(alias) + r"\b", lowered) and canonical not in found:
+            found.append(canonical)
+
+    return found
+
+
+def looks_us_based(row):
+    """
+    Whether to treat a merchant as shipping within the US.
+
+    Deliberately conservative: an explicit non-US signal with no US signal
+    anywhere means no assumption is made, so a UK retailer never lands on a
+    Texas page.
+    """
+    blob = " ".join([
+        row.get("brand_name", ""), row.get("brand_url", ""),
+        row.get("brand_summary", ""), row.get("ships_to_countries", ""),
+        row.get("primary_service_location", ""), row.get("shipping_restrictions", ""),
+        row.get("free_shipping_info", ""),
+    ])
+
+    if US_RE.search(blob):
+        return True
+
+    return not NON_US_RE.search(blob)
+
+
+def derive(row, assume_nationwide=True):
+    """
+    Work out shipping destinations for one merchant row.
+
+    Returns (ships_to_terms, restricted_states, confidence). Confidence is
+    stated | inferred | assumed | unknown.
+
+    `assume_nationwide` is the house rule: a US merchant that says nothing
+    about restrictions is taken to ship to every state, because that is the
+    norm for an online retailer and the page carries a confirm-at-checkout
+    note. Restrictions a merchant DOES state are always honoured.
+    """
+    restrictions = (row.get("shipping_restrictions") or "").strip()
+    declared = (row.get("ships_to_countries") or "").strip()
+    # A populated restricted_states column is the most reliable signal we have:
+    # it was either entered deliberately or extracted from the merchant's own
+    # shipping policy with a source recorded. Trust it over re-parsing prose,
+    # which may be an older, shorter summary of the same policy.
+    explicit_restricted = [
+        s.strip() for s in (row.get("restricted_states") or "").split("|") if s.strip()
+    ]
+    free_ship = (row.get("free_shipping_info") or "").strip()
+    summary = (row.get("brand_summary") or "").strip()
+
+    if explicit_restricted:
+        known = [s for s in explicit_restricted if s in US_STATES]
+        if known:
+            states = [s for s in US_STATES if s not in known]
+            return ["United States"] + states, known, "stated"
+
+    haystack = " ".join([restrictions, free_ship])
+
+    # Pull out anything named after an exclusion phrase. Parsed before the
+    # declared-countries branch below, which needs it to know what to leave
+    # out when it expands a country into its states.
+    restricted = []
+    for pattern in _EXCLUSION_RES:
+        for match in pattern.finditer(haystack):
+            fragment = match.group("list")
+            for state in _find_states(fragment):
+                if state not in restricted:
+                    restricted.append(state)
+
+    # An explicit ships_to_countries value always wins -- it was entered
+    # deliberately rather than parsed out of prose.
+    if declared:
+        names = [n.strip() for n in re.split(r"[|,]", declared) if n.strip()]
+        names = [_COUNTRY_ALIASES.get(n.lower(), n) for n in names]
+        if "United States" in names:
+            # "United States" is a country, not a destination list. Returned
+            # as-is it tags only the parent term, and since a state archive
+            # cannot see merchants tagged on the parent, the merchant then
+            # appears on no state page at all -- which is how 81 of 111
+            # merchants came to be missing from every state page, the pages
+            # this whole project is built to rank. Expand it the way every
+            # other branch here does, honouring anything stated as excluded.
+            states = [s for s in US_STATES if s not in restricted]
+            others = [n for n in names if n != "United States"]
+            return ["United States"] + states + others, restricted, "stated"
+        if names:
+            return names, [], "stated"
+
+    is_non_statement = bool(_NON_STATEMENT_RE.search(restrictions))
+    claims_nationwide = bool(_NATIONWIDE_RE.search(haystack))
+
+    # Case 1: explicit nationwide claim, minus any exceptions.
+    if claims_nationwide and not is_non_statement:
+        states = [s for s in US_STATES if s not in restricted]
+        return ["United States"] + states, restricted, "stated"
+
+    # Case 2: named exclusions imply coverage of the rest of the US.
+    if restricted and not is_non_statement:
+        states = [s for s in US_STATES if s not in restricted]
+        return ["United States"] + states, restricted, "inferred"
+
+    # Case 3: other countries named somewhere useful.
+    countries = _find_countries(" ".join([restrictions, summary]))
+    if countries and not is_non_statement:
+        return countries, restricted, "inferred"
+
+    # Nothing stated. House rule: a US merchant ships everywhere unless it
+    # says otherwise. Marked "assumed" so it is distinguishable from a claim
+    # the merchant actually made.
+    if assume_nationwide and looks_us_based(row):
+        return ["United States"] + list(US_STATES), restricted, "assumed"
+
+    # Non-US, or assumption disabled.
+    return [], restricted, "unknown"
+
+
+def apply_to_row(row, assume_nationwide=True):
+    """Write the derived columns onto the row and return the confidence."""
+    ships_to, restricted, confidence = derive(row, assume_nationwide)
+
+    row["ships_to_terms"] = "|".join(ships_to)
+    row["restricted_states"] = "|".join(restricted)
+    row["shipping_confidence"] = confidence
+
+    # Keep ships_to_countries populated for the merchant info panel, using the
+    # country-level names only so the panel does not print 50 states.
+    countries = [n for n in ships_to if n in COUNTRIES]
+    if not (row.get("ships_to_countries") or "").strip() and ships_to:
+        row["ships_to_countries"] = "|".join(countries)
+
+    # service_locations drives its own taxonomy, and nothing filled it -- the
+    # column was declared and then left empty, so the Service Locations boxes
+    # on every store stayed unticked however many times the CSV was imported.
+    #
+    # Country level only. The service_location tree is about where a merchant
+    # serves customers, and a 51-state list belongs in ships_to, which already
+    # has it.
+    if not (row.get("service_locations") or "").strip() and countries:
+        row["service_locations"] = "|".join(countries)
+
+    # The single primary market, for the review queue and the info panel.
+    if not (row.get("primary_service_location") or "").strip() and countries:
+        row["primary_service_location"] = countries[0]
+
+    return confidence
