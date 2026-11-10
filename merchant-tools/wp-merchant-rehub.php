@@ -194,9 +194,16 @@ function vc_rehub_term_map() {
                 ? vc_merchant_seo_title($post_id) : '';
         },
         'brand_short_description' => function ($post_id) {
+            $split = function_exists('vc_storepage_split') && vc_storepage_split();
+
             $intro = trim((string) get_post_meta($post_id, 'coupon_intro', true));
 
-            if ($intro === '') {
+            // brand_summary is what the 'about' block renders in the main
+            // column, so falling back to it under the split would show a
+            // store's About text twice -- in the sidebar and again below.
+            // coupon_intro is written for this slot and rendered nowhere
+            // else, so it is the only safe source here.
+            if ($intro === '' && !$split) {
                 $intro = trim((string) get_post_meta($post_id, 'brand_summary', true));
             }
 
@@ -204,29 +211,33 @@ function vc_rehub_term_map() {
             // blocks render through a shortcode rather than being written
             // here as HTML: this field is written once at sync time, and the
             // panel carries the last-checked date.
-            if (function_exists('vc_storepage_split') && vc_storepage_split()) {
+            if ($split) {
                 $intro = trim($intro . "\n\n[merchant_page_sidebar]");
             }
 
             return $intro;
         },
+        // ReHub prints this field below its offer list, and runs it through
+        // do_shortcode (taxonomy-dealstore.php:201). It is the lower of the
+        // three slots a store page has.
         'brand_second_description' => function ($post_id) {
-            $text = trim((string) get_post_meta($post_id, 'best_ways_to_save', true));
+            $split = function_exists('vc_storepage_split') && vc_storepage_split();
 
-            // ReHub runs both store descriptions through do_shortcode
-            // (taxonomy-dealstore.php:60 and :201), which is the only way to
-            // get coupon cards onto a ReHub store page: its own listing is
-            // post_type => 'post', so neither wcd_coupon posts nor our
-            // merchant posts can ever appear in it.
+            // Without the split this field IS the lower slot, so the copy
+            // goes in it directly. With the split, [merchant_page_below]
+            // renders the layout's own blocks -- and the 'save' block emits
+            // this very field. Putting both in showed "Best ways to save"
+            // twice on every store page: once as bare prose and again under
+            // its heading.
+            $text = $split
+                ? '' : trim((string) get_post_meta($post_id, 'best_ways_to_save', true));
+
             $embed = vc_rehub_coupon_embed($post_id);
             if ($embed !== '') {
                 $text = $text === '' ? $embed : $text . "\n\n" . $embed;
             }
 
-            // The rest of the profile, after the coupons. A shortcode, not
-            // the HTML: term meta written at sync time would freeze most of
-            // the page, and ReHub runs this field through do_shortcode.
-            if (function_exists('vc_storepage_split') && vc_storepage_split()) {
+            if ($split) {
                 $text = trim($text . "\n\n[merchant_page_below]");
             }
 
@@ -718,8 +729,22 @@ function vc_rehub_screen() {
                 <tr><td><code>brand_url</code></td><td>brand_url</td></tr>
                 <tr><td><code>brandimage</code></td><td><?php esc_html_e('brand_logo_url, or the coupon plugin\'s brand logo', 'vc-merchant'); ?></td></tr>
                 <tr><td><code>brand_heading</code></td><td><?php esc_html_e('the generated SEO title', 'vc-merchant'); ?></td></tr>
-                <tr><td><code>brand_short_description</code></td><td>coupon_intro, <?php esc_html_e('else', 'vc-merchant'); ?> brand_summary</td></tr>
-                <tr><td><code>brand_second_description</code></td><td>best_ways_to_save</td></tr>
+                <tr><td><code>brand_short_description</code></td><td>
+                    <?php if (function_exists('vc_storepage_split') && vc_storepage_split()) : ?>
+                        coupon_intro + <code>[merchant_page_sidebar]</code>
+                        &mdash; <?php esc_html_e('ReHub prints this in the store sidebar', 'vc-merchant'); ?>
+                    <?php else : ?>
+                        coupon_intro, <?php esc_html_e('else', 'vc-merchant'); ?> brand_summary
+                    <?php endif; ?>
+                </td></tr>
+                <tr><td><code>brand_second_description</code></td><td>
+                    <?php if (function_exists('vc_storepage_split') && vc_storepage_split()) : ?>
+                        <code>[merchant_page_below]</code>
+                        &mdash; <?php esc_html_e('ReHub prints this below its offer list', 'vc-merchant'); ?>
+                    <?php else : ?>
+                        best_ways_to_save
+                    <?php endif; ?>
+                </td></tr>
                 <tr><td><code>rehub_offer_discount</code></td><td><?php esc_html_e('the headline discount figure', 'vc-merchant'); ?></td></tr>
                 <tr><td><code>rehub_offer_verify_label</code></td><td><?php esc_html_e('the offer gate: Verified, Best deal, or nothing', 'vc-merchant'); ?></td></tr>
                 <tr><td><code>rehub_offer_disclaimer</code></td><td>restricted_states, why_code_not_work</td></tr>

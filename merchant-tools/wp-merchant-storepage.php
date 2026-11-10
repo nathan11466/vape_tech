@@ -145,8 +145,42 @@ function vc_storepage_html() {
 
     return '<div class="vc-storepage">'
         . vc_merchant_render_page(array('id' => $post_id, 'sidebar' => 'no',
-            'split' => vc_storepage_split() ? 'above' : ''))
+            'split' => vc_storepage_split_active() ? 'above' : ''))
         . '</div>';
+}
+
+/**
+ * Is the page actually split on the store being viewed?
+ *
+ * Separate from the SETTING, which the sync reads to decide what to write.
+ * This asks whether the lower slot can render at all: the sync puts
+ * [merchant_page_below] into brand_second_description, and without it there
+ * is nowhere for the lower blocks to go.
+ *
+ * The failure this prevents is silent and total. Upgrade the plugin, do not
+ * re-run the sync, and the upper slot would render the title and the hero
+ * while the rest of the page -- policies, FAQs, destinations, the sidebar --
+ * simply vanished, with nothing on the page to say why. The same happens to
+ * one store whose description was edited by hand in ReHub, because the sync
+ * then declines to overwrite it.
+ *
+ * So the split engages only where the lower slot is wired up. Everywhere
+ * else the whole profile renders in one piece, exactly as it did before the
+ * split existed.
+ */
+function vc_storepage_split_active() {
+    if (!vc_storepage_split()) {
+        return false;
+    }
+
+    $term = get_queried_object();
+    if (empty($term) || is_wp_error($term) || empty($term->term_id)) {
+        return false;
+    }
+
+    $below = (string) get_term_meta($term->term_id, 'brand_second_description', true);
+
+    return strpos($below, '[merchant_page_below]') !== false;
 }
 
 /**

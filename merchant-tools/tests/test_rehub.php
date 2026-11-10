@@ -725,6 +725,46 @@ check('with that block off, the sidebar answers it again',
 /* The panel has to reach the sidebar, which means riding along with
  * brand_short_description -- a correct builder wired to nothing is the
  * failure mode this catches. */
+/* --- The lower slot must not repeat what it renders -------------------
+ *
+ * With the split on, [merchant_page_below] renders the layout's blocks, and
+ * the 'save' block emits best_ways_to_save. Writing that copy into the field
+ * as well put "Best ways to save" on every store page twice: once as bare
+ * prose and again under its heading.
+ * -------------------------------------------------------------------- */
+
+update_post_meta(700, 'best_ways_to_save', 'Stack the clearance tab with a code.');
+
+$GLOBALS['storepage_split'] = false;
+$unsplit = vc_rehub_term_map()['brand_second_description'](700);
+check('unsplit, the field carries the copy itself',
+    strpos($unsplit, 'Stack the clearance tab') !== false, $unsplit);
+check('and no shortcode', strpos($unsplit, '[merchant_page_below]') === false);
+
+$GLOBALS['storepage_split'] = true;
+$splitv = vc_rehub_term_map()['brand_second_description'](700);
+check('split, the field carries only the shortcode',
+    strpos($splitv, '[merchant_page_below]') !== false, $splitv);
+check('and NOT the copy the shortcode already renders',
+    strpos($splitv, 'Stack the clearance tab') === false, $splitv);
+
+// The same bug, conditional: with coupon_intro empty the sidebar fell back
+// to brand_summary, which the 'about' block renders in the main column.
+$bare = store(706, array('coupon_intro' => '',
+    'brand_summary' => 'A Shenzhen reseller trading since 2015.'));
+
+$GLOBALS['storepage_split'] = false;
+check('unsplit, the sidebar may fall back to the About copy',
+    strpos(vc_rehub_term_map()['brand_short_description']($bare),
+        'Shenzhen reseller') !== false);
+
+$GLOBALS['storepage_split'] = true;
+$side = vc_rehub_term_map()['brand_short_description']($bare);
+check('split, it does NOT repeat the About copy in the sidebar',
+    strpos($side, 'Shenzhen reseller') === false, $side);
+check('and still carries the sidebar shortcode',
+    strpos($side, '[merchant_page_sidebar]') !== false, $side);
+
 $GLOBALS['storepage_split'] = true;
 $map = vc_rehub_term_map();
 $short = $map['brand_short_description'](700);

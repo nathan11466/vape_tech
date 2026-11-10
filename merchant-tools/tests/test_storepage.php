@@ -19,6 +19,7 @@ define('ABSPATH', '/tmp/');
 define('OBJECT', 'OBJECT');
 
 $GLOBALS['posts'] = array();      // id => array(post_title, post_type)
+$GLOBALS['term_meta'] = array();  // term id => array(key => value)
 $GLOBALS['meta'] = array();       // id => array(key => value)
 $GLOBALS['terms'] = array();      // id => array(term_id, name, taxonomy)
 $GLOBALS['queried'] = null;
@@ -48,6 +49,9 @@ function shortcode_atts($pairs, $atts, $sc = '') {
 }
 function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
 
+function get_term_meta($id, $k, $single = false) {
+    return $GLOBALS['term_meta'][$id][$k] ?? '';
+}
 function get_post_meta($id, $key, $single = false) {
     return $GLOBALS['posts'][$id]['meta'][$key] ?? '';
 }
@@ -311,6 +315,66 @@ check('the resolved merchant is cached for the request',
     vc_storepage_current_merchant() === 101);
 
 echo "\n";
+/* --- Failing safe when the sync has not run ----------------------------
+ *
+ * The lower slot lives in a shortcode the sync writes into
+ * brand_second_description. Upgrade the plugin, skip the sync, and the
+ * upper slot would render the title and hero while policies, FAQs,
+ * destinations and the sidebar vanished, with nothing on the page saying
+ * why. The same happens to any one store whose description was edited by
+ * hand in ReHub, because the sync then declines to overwrite it. So the
+ * split engages only where the lower slot is actually wired up.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['queried'] = (object) array('term_id' => 4242, 'name' => 'Store',
+    'taxonomy' => 'dealstore');
+
+$GLOBALS['term_meta'][4242] = array();
+check('with no shortcode in the term, the page is not split',
+    vc_storepage_split_active() === false);
+
+$GLOBALS['term_meta'][4242]['brand_second_description'] = 'Some prose only.';
+check('and prose alone does not count as wired up',
+    vc_storepage_split_active() === false);
+
+$GLOBALS['term_meta'][4242]['brand_second_description'] =
+    '[coupon_deals brand="x"]' . "\n\n" . '[merchant_page_below]';
+check('with the shortcode present, the page splits',
+    vc_storepage_split_active() === true);
+
+// The setting still overrides everything, wired up or not.
+$GLOBALS['options']['vc_storepage_split'] = '0';
+check('the setting switched off keeps the page whole',
+    vc_storepage_split_active() === false);
+unset($GLOBALS['options']['vc_storepage_split']);
+check('and back on it splits again',
+    vc_storepage_split_active() === true);
+
+// No term queried at all must never split -- and must not read ->term_id
+// off null to find that out, which "works" in PHP while warning on every
+// archive page that is not a store.
+$saved = $GLOBALS['queried'];
+$GLOBALS['warnings'] = array();
+set_error_handler(function ($no, $str) {
+    $GLOBALS['warnings'][] = $str;
+
+    return true;
+});
+
+$GLOBALS['queried'] = null;
+check('with no term queried, the page is not split',
+    vc_storepage_split_active() === false);
+
+$GLOBALS['queried'] = new WP_Error();
+check('and a WP_Error term does not split either',
+    vc_storepage_split_active() === false);
+
+restore_error_handler();
+check('neither raised a PHP warning',
+    $GLOBALS['warnings'] === array(), implode(' | ', $GLOBALS['warnings']));
+
+$GLOBALS['queried'] = $saved;
+
 if ($fails) {
     echo count($fails) . " check(s) FAILED: " . implode(', ', $fails) . "\n";
     exit(1);
