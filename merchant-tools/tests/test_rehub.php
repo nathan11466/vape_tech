@@ -64,6 +64,9 @@ function esc_html__($v, $d = null) { return $v; }
 function esc_html_e($v, $d = null) { echo $v; }
 function __($v, $d = null) { return $v; }
 function vc_merchant_post_types() { return array('merchant'); }
+// Lives in wp-merchant-storepage.php, which this suite does not load. The
+// adapter guards on function_exists, so the split is off without it.
+function vc_storepage_split() { return !empty($GLOBALS['storepage_split']); }
 function vc_merchant_import_meta_keys() {
     return array('display_brand_name', 'brand_name_official', 'alternative_brand_names',
                  'brand_url', 'brand_logo_url', 'coupon_intro');
@@ -722,12 +725,14 @@ check('with that block off, the sidebar answers it again',
 /* The panel has to reach the sidebar, which means riding along with
  * brand_short_description -- a correct builder wired to nothing is the
  * failure mode this catches. */
+$GLOBALS['storepage_split'] = true;
 $map = vc_rehub_term_map();
 $short = $map['brand_short_description'](700);
 check('the sidebar slot carries the intro sentence first',
     strpos($short, 'Intro sentence.') === 0, substr($short, 0, 40));
-check('and the facts panel after it',
-    strpos($short, 'vc-store-facts') !== false, $short);
+check('and the sidebar shortcode after it, not panel HTML frozen at sync time',
+    strpos($short, '[merchant_page_sidebar]') !== false
+    && strpos($short, 'vc-store-facts') === false, $short);
 
 // Term meta is not run through wp_kses on the way out, and these values are
 // merchant-entered, so the panel escapes them itself.
@@ -737,10 +742,11 @@ check('a value is escaped, not passed through as markup',
     vc_rehub_sidebar_facts(700));
 update_post_meta(700, 'payment_methods', 'Card, crypto');
 
-// A store with no facts must leave the sidebar exactly as it was.
+// The shortcode renders nothing for a store with no facts and no side
+// blocks, so an empty sidebar costs an unresolved shortcode and no markup.
 $plain = store(705, array('coupon_intro' => 'Only an intro.'));
-check('a store with no facts still gets its plain intro, with no empty panel',
-    $map['brand_short_description']($plain) === 'Only an intro.',
+check('a store with no facts still gets its intro first',
+    strpos($map['brand_short_description']($plain), 'Only an intro.') === 0,
     $map['brand_short_description']($plain));
 
 echo "\n";

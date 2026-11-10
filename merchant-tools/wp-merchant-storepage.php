@@ -170,6 +170,39 @@ function vc_storepage_split() {
  * every request. Storing the HTML instead would freeze it at sync time, and
  * it is most of the page.
  */
+/**
+ * The sidebar column, for ReHub's own store sidebar.
+ *
+ * ReHub lays a store page out in three slots: content above its offer list,
+ * content below it, and the sidebar. This is the third. It renders the blocks
+ * set to the side column in Layout, plus the facts panel, and goes into
+ * brand_short_description -- which ReHub prints in the mini-sidebar and runs
+ * through do_shortcode.
+ *
+ * A shortcode rather than HTML written at sync time, for the same reason as
+ * the lower part: term meta would freeze it, and the facts panel carries the
+ * last-checked date, which is the one thing on it that must not go stale.
+ */
+add_shortcode('merchant_page_sidebar', function ($atts) {
+    $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_page_sidebar');
+
+    $post_id = (int) $atts['id'] ?: vc_storepage_current_merchant();
+    if (!$post_id) {
+        return '';
+    }
+
+    $out = '';
+    if (function_exists('vc_rehub_sidebar_facts')) {
+        $out .= vc_rehub_sidebar_facts($post_id);
+    }
+
+    $out .= vc_merchant_render_page(array('id' => $post_id, 'sidebar' => 'no',
+        'split' => 'side'));
+
+    return trim($out) === '' ? ''
+        : '<div class="vc-storepage vc-storepage--side">' . $out . '</div>';
+});
+
 add_shortcode('merchant_page_below', function ($atts) {
     $atts = shortcode_atts(array('id' => 0), $atts, 'merchant_page_below');
 

@@ -200,11 +200,12 @@ function vc_rehub_term_map() {
                 $intro = trim((string) get_post_meta($post_id, 'brand_summary', true));
             }
 
-            // This is the only free-content slot in ReHub's store sidebar, so
-            // the facts panel goes here, under the intro sentence.
-            $facts = vc_rehub_sidebar_facts($post_id);
-            if ($facts !== '') {
-                $intro = $intro === '' ? $facts : $intro . "\n\n" . $facts;
+            // ReHub's sidebar slot. The facts panel and the side-column
+            // blocks render through a shortcode rather than being written
+            // here as HTML: this field is written once at sync time, and the
+            // panel carries the last-checked date.
+            if (function_exists('vc_storepage_split') && vc_storepage_split()) {
+                $intro = trim($intro . "\n\n[merchant_page_sidebar]");
             }
 
             return $intro;

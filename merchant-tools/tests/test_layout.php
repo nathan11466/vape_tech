@@ -55,7 +55,24 @@ function do_shortcode($s) {
 }
 function vc_merchant_post_types() { return array('merchant'); }
 function vc_merchant_display_name($id = null) { return 'VooPoo'; }
-function shortcode_exists($t) { return false; }
+// True, so the shortcode-backed blocks (policies, FAQs, related) run and
+// the do_shortcode stub records them. With it false they return '' and a
+// routing check cannot tell "in the wrong slot" from "did not render".
+function shortcode_exists($t) { return true; }
+
+// Every block helper emits a marker naming its block, so the routing checks
+// can see which blocks a slot rendered without replacing vc_merchant_block,
+// which lives in the file under test.
+function vc_merchant_offer_badge($id = null) { return ''; }
+function vc_merchant_hero($id = null) { return '<!--b:hero-->'; }
+function vc_merchant_destinations($id = null) { return '<!--b:destinations-->'; }
+function vc_merchant_taxonomy_tags($id = null) { return '<!--b:tags-->'; }
+function vc_merchant_quick_facts($id = null) { return '<!--b:quickfacts-->'; }
+function vc_merchant_info_panel($id = null) { return '<!--b:info-->'; }
+function vc_merchant_trust_info($id = null) { return 'Trust text.'; }
+function vc_merchant_links($id = null) { return '<!--b:links-->'; }
+function vc_merchant_coupon_section($id = null) { return '<!--b:coupon-->'; }
+function vc_merchant_coupon_shortcode($id = null) { return '[coupon_deals]'; }
 function add_shortcode($tag, $fn) { $GLOBALS['shortcodes'][$tag] = $fn; }
 function shortcode_atts($p, $a, $sc = '') { return array_merge($p, (array) $a); }
 function get_the_ID() { return 1; }
@@ -304,6 +321,134 @@ check('and nothing is rendered twice below',
     vc_layout_split_blocks('below') === array());
 
 $GLOBALS['options'] = array();
+
+/* --- Three slots, and every block in exactly one -----------------------
+ *
+ * ReHub lays a store page out in three places: above its offer list, below
+ * it, and the sidebar. Our layout has to partition into exactly those. The
+ * bug this pins: the side blocks used to be appended to the LOWER slot, so
+ * Merchant information, Company information, the link lists and Similar
+ * stores rendered in the middle of the main column as though they were body
+ * copy, and the sidebar got nothing.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+
+$above = vc_layout_split_blocks('above');
+$below = vc_layout_split_blocks('below');
+$side  = vc_layout_blocks('side');
+
+check('the side blocks are a slot of their own, not part of the lower one',
+    array_intersect($side, $below) === array(),
+    implode(',', array_intersect($side, $below)));
+check('and not part of the upper one either',
+    array_intersect($side, $above) === array(),
+    implode(',', array_intersect($side, $above)));
+
+// The reference material belongs beside the page, not inside it.
+foreach (array('info', 'trust', 'links', 'related') as $block) {
+    check("$block is a sidebar block",
+        in_array($block, $side, true), implode(',', $side));
+}
+
+// Nothing may be lost, and nothing may appear twice.
+$all = array_merge($above, array('coupon'), $below, $side);
+$layout = vc_layout_get();
+$live = array_values(array_filter($layout['order'], function ($k) use ($layout) {
+    return $layout['where'][$k] !== 'off';
+}));
+sort($all);
+sort($live);
+check('the three slots plus the coupon list account for every live block',
+    $all === $live,
+    implode(',', array_diff($live, $all)) . ' missing / '
+    . implode(',', array_diff($all, $live)) . ' extra');
+check('and no block lands in two slots',
+    count($all) === count(array_unique($all)));
+
+/* --- The renderer must actually route them that way --------------------
+ *
+ * The partition above is arithmetic on a list; this calls the renderer and
+ * looks at what each slot emits. The bug was here, not in the arithmetic:
+ * the side blocks were appended to the lower slot, and no check noticed
+ * because nothing exercised vc_merchant_render_page.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$GLOBALS['rendered'] = array();
+
+/**
+ * Which blocks a slot renders, read from the shortcodes it ran.
+ *
+ * vc_merchant_block cannot be replaced -- it lives in the file under test --
+ * so the do_shortcode stub's record is the signal instead. Each block emits
+ * its own [merchant_*] shortcode, which names it.
+ */
+function render_slot($slot) {
+    $GLOBALS['shortcodes_run'] = array();
+    $html = vc_merchant_render_page(
+        array('id' => 1, 'sidebar' => 'no', 'split' => $slot));
+
+    $names = array();
+    foreach ($GLOBALS['shortcodes_run'] as $sc) {
+        if (preg_match('/^\[([a-z_]+)/', $sc, $m)) {
+            $names[$m[1]] = true;
+        }
+    }
+    if (preg_match_all('/<!--b:([a-z:]+)-->/', $html, $m)) {
+        foreach ($m[1] as $marker) {
+            $names[$marker] = true;
+        }
+    }
+    if (strpos($html, 'vc-page-title') !== false) { $names['title'] = true; }
+    if (strpos($html, 'vc-trust-section') !== false) { $names['trust'] = true; }
+
+    return array_keys($names);
+}
+
+/** The shortcode a block is expected to run, where it runs one. */
+function slot_has($rendered, $shortcode) {
+    return in_array($shortcode, $rendered, true);
+}
+
+$r_above = render_slot('above');
+$r_below = render_slot('below');
+$r_side  = render_slot('side');
+
+// The sidebar's own reference blocks, by the shortcode each one runs.
+$side_shortcodes = array('info', 'trust', 'links', 'merchant_related');
+
+foreach ($side_shortcodes as $sc) {
+    check("the sidebar slot renders $sc", slot_has($r_side, $sc),
+        implode(',', $r_side));
+    // This is the bug, stated directly.
+    check("the lower slot does NOT render $sc", !slot_has($r_below, $sc),
+        implode(',', $r_below));
+    check("and nor does the upper slot", !slot_has($r_above, $sc),
+        implode(',', $r_above));
+}
+
+// The main-column blocks must be in the main slots, not the sidebar.
+foreach (array('merchant_policies', 'merchant_faqs', 'destinations') as $sc) {
+    check("$sc renders in a main slot",
+        slot_has($r_below, $sc) || slot_has($r_above, $sc),
+        'above: ' . implode(',', $r_above) . ' | below: ' . implode(',', $r_below));
+    check("$sc does not render in the sidebar", !slot_has($r_side, $sc),
+        implode(',', $r_side));
+}
+
+check('the title is in the upper slot, under the store heading',
+    slot_has($r_above, 'title'), implode(',', $r_above));
+check('and not repeated in the lower slot',
+    !slot_has($r_below, 'title'), implode(',', $r_below));
+
+// Unsplit, the whole page still renders everything: our own merchant pages
+// have no theme laying them out.
+$r_all = render_slot('');
+foreach (array_merge($side_shortcodes, array('merchant_policies')) as $sc) {
+    check("unsplit, $sc still renders", slot_has($r_all, $sc),
+        implode(',', $r_all));
+}
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

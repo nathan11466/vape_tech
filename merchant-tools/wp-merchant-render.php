@@ -78,9 +78,10 @@ function vc_merchant_section($heading, $value) {
 
 function vc_merchant_render_page($atts = array()) {
     $atts = shortcode_atts(array('id' => 0, 'related' => 'yes', 'sidebar' => 'yes',
-        // '' renders the whole page. 'above' / 'below' render only the main
-        // blocks before / after the coupon widget, for a theme that renders
-        // the coupons itself in the middle of the page.
+        // '' renders the whole page. The others render one slot of a theme
+        // that lays a store page out itself: 'above' and 'below' are the
+        // main-column blocks before and after its coupon list, and 'side'
+        // is the sidebar column on its own.
         'split' => ''), $atts, 'merchant_page');
     $post_id = (int) $atts['id'] ?: get_the_ID();
 
@@ -107,23 +108,26 @@ function vc_merchant_render_page($atts = array()) {
         }
     }
 
-    $split = in_array($atts['split'], array('above', 'below'), true)
+    $split = in_array($atts['split'], array('above', 'below', 'side'), true)
         ? $atts['split'] : '';
 
     $main = '';
     $side = '';
 
-    $main_blocks = $split === ''
-        ? vc_layout_blocks('main') : vc_layout_split_blocks($split);
-    foreach ($main_blocks as $block) {
-        $main .= vc_merchant_block($block, $post_id, $atts);
+    if ($split !== 'side') {
+        $main_blocks = $split === ''
+            ? vc_layout_blocks('main') : vc_layout_split_blocks($split);
+        foreach ($main_blocks as $block) {
+            $main .= vc_merchant_block($block, $post_id, $atts);
+        }
     }
 
-    // The sidebar belongs to whichever part is rendering the whole page, and
-    // to the lower part when the page is split -- putting it above the
-    // coupons would push them off the screen, which is the problem the
-    // split exists to fix.
-    if ($split !== 'above') {
+    // The sidebar blocks go in the sidebar. They used to be appended to the
+    // lower part instead, which put Merchant information, Company
+    // information, the link lists and Similar stores in the middle of the
+    // main column -- a sidebar's worth of reference material rendered as
+    // though it were body copy.
+    if ($split === '' || $split === 'side') {
         foreach (vc_layout_blocks('side') as $block) {
             $side .= vc_merchant_block($block, $post_id, $atts);
         }
