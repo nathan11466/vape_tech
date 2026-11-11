@@ -22,7 +22,15 @@ function delete_option($k) { unset($GLOBALS['options'][$k]); return true; }
 function add_action($tag, $fn = null, $p = 10, $n = 1) { $GLOBALS['hooks'][$tag][] = $fn; }
 function add_filter() {}
 function add_submenu_page() {}
-function apply_filters($t, $v) { return $v; }
+// Runs the filters actually registered. It used to return $v untouched,
+// which silently made every filter-based check in this file assert nothing.
+function apply_filters($t, $v) {
+    $args = func_get_args();
+    foreach ($GLOBALS['filters'][$t] ?? array() as $fn) {
+        $v = $fn($v, $args[2] ?? null, $args[3] ?? null);
+    }
+    return $v;
+}
 function current_user_can() { return true; }
 function wp_verify_nonce() { return !empty($GLOBALS['nonce_ok']); }
 function wp_nonce_field() {}
@@ -449,6 +457,81 @@ foreach (array_merge($side_shortcodes, array('merchant_policies')) as $sc) {
     check("unsplit, $sc still renders", slot_has($r_all, $sc),
         implode(',', $r_all));
 }
+
+/* --- The ReHub arrangement --------------------------------------------
+ *
+ * What a reader is doing at each point decides the place. Above the offers
+ * they are judging whether the shop is worth their time: what it is, how to
+ * save there, who checked. Below are the details they want once they have a
+ * code. The sidebar takes reference panels, not prose -- long copy in a
+ * 250px column is what made it look wrong.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$moved = vc_layout_apply_rehub_preset();
+
+$above = vc_layout_split_blocks('above');
+$below = vc_layout_split_blocks('below');
+$side  = vc_layout_blocks('side');
+
+foreach (array('about', 'save', 'editorial') as $block) {
+    check("$block sits above the offers", in_array($block, $above, true),
+        implode(',', $above));
+    check("and not in the sidebar", !in_array($block, $side, true),
+        implode(',', $side));
+}
+
+foreach (array('policies', 'faqs', 'destinations', 'quickfacts') as $block) {
+    check("$block sits below the offers", in_array($block, $below, true),
+        implode(',', $below));
+}
+
+foreach (array('info', 'trust', 'links', 'related') as $block) {
+    check("$block stays a sidebar panel", in_array($block, $side, true),
+        implode(',', $side));
+}
+
+// The upper slot has to stay short: it is what delays the offers.
+check('the upper slot holds five blocks or fewer',
+    count($above) <= 5, count($above) . ': ' . implode(',', $above));
+
+// Nothing may be lost, and the coupon block must remain the split point.
+check('the preset accounts for every block',
+    $moved === count(vc_layout_defaults()),
+    $moved . ' of ' . count(vc_layout_defaults()));
+check('the coupon block is still the split point and renders in neither half',
+    !in_array('coupon', $above, true) && !in_array('coupon', $below, true));
+
+// Visual settings are a separate concern and must survive.
+$GLOBALS['options'] = array();
+update_option(VC_LAYOUT_OPTION, array(
+    'order' => array_keys(vc_layout_defaults()),
+    'where' => array_map(function ($d) { return $d['where']; }, vc_layout_defaults()),
+    'visual' => array('accent' => '#ff0000') + vc_layout_visual_defaults(),
+));
+vc_layout_apply_rehub_preset();
+check('applying the preset keeps the visual settings',
+    vc_layout_get()['visual']['accent'] === '#ff0000',
+    vc_layout_get()['visual']['accent']);
+
+// A block the preset does not name keeps its place rather than vanishing.
+$GLOBALS['filters']['vc_layout_rehub_preset'][] = function ($p) {
+    unset($p['policies']);
+    return $p;
+};
+$GLOBALS['options'] = array();
+vc_layout_apply_rehub_preset();
+// Asserted against the STORED option, not vc_layout_get(): that backfills
+// a missing key from the defaults, so it cannot tell "kept" from "dropped".
+$stored = get_option(VC_LAYOUT_OPTION);
+check('a block the preset omits is still in the stored order',
+    in_array('policies', $stored['order'], true),
+    implode(',', $stored['order']));
+check('and still has a stored place of its own',
+    isset($stored['where']['policies']),
+    json_encode(array_keys($stored['where'])));
+$GLOBALS['filters']['vc_layout_rehub_preset'] = array();
+$GLOBALS['options'] = array();
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

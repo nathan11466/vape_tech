@@ -127,6 +127,90 @@ function vc_layout_visual_defaults() {
  * Stored layout, merged over the defaults so a new block added in a future
  * version appears rather than vanishing.
  */
+/**
+ * The arrangement that suits a ReHub store page.
+ *
+ * ReHub gives three places: above its offer list, below it, and the sidebar.
+ * Which block goes where follows from what a reader is doing at each point.
+ *
+ * Above the offers they are deciding whether this shop is worth their time,
+ * so: what it is, how to save at it, and who checked. Short, and it earns
+ * the scroll to the codes.
+ *
+ * Below are the details they check once they have a code in hand -- the
+ * policies table, the FAQs, where it ships.
+ *
+ * The sidebar takes reference material that is not prose: the merchant and
+ * company panels, the link lists, similar stores. Long-form copy in a 250px
+ * column is what made it look strange, which is why About and Best ways to
+ * save move out of it.
+ *
+ * Title and hero are left as they are: they stand down on a ReHub page by
+ * themselves and still render on our own store pages.
+ */
+function vc_layout_rehub_preset() {
+    return apply_filters('vc_layout_rehub_preset', array(
+        // order => where. The coupon block is the split point, so anything
+        // before it lands above ReHub's offers and anything after below.
+        'title'        => 'main',
+        'hero'         => 'main',
+        'about'        => 'main',
+        'save'         => 'main',
+        'editorial'    => 'main',
+        'coupon'       => 'main',
+        'quickfacts'   => 'main',
+        'policies'     => 'main',
+        'destinations' => 'main',
+        'faqs'         => 'main',
+        'internal'     => 'main',
+        'info'         => 'side',
+        'trust'        => 'side',
+        'links'        => 'side',
+        'related'      => 'side',
+        'tags'         => 'side',
+        'custom1'      => 'off',
+        'custom2'      => 'off',
+        'custom3'      => 'off',
+    ));
+}
+
+/**
+ * Apply that preset, keeping the visual settings as they are.
+ */
+function vc_layout_apply_rehub_preset() {
+    $preset = vc_layout_rehub_preset();
+    $defaults = vc_layout_defaults();
+
+    $order = array();
+    $where = array();
+    foreach ($preset as $key => $place) {
+        if (!isset($defaults[$key])) {
+            continue;
+        }
+        $order[] = $key;
+        $where[$key] = in_array($place, array('main', 'side', 'off'), true)
+            ? $place : $defaults[$key]['where'];
+    }
+
+    // A block the preset forgot keeps the place it has, at the end, so a
+    // block added to the plugin later is never silently switched off.
+    $current = vc_layout_get();
+    foreach (array_keys($defaults) as $key) {
+        if (!in_array($key, $order, true)) {
+            $order[] = $key;
+            $where[$key] = $current['where'][$key] ?? $defaults[$key]['where'];
+        }
+    }
+
+    update_option(VC_LAYOUT_OPTION, array(
+        'order'  => $order,
+        'where'  => $where,
+        'visual' => $current['visual'] ?? vc_layout_visual_defaults(),
+    ));
+
+    return count($order);
+}
+
 function vc_layout_get() {
     $saved = get_option(VC_LAYOUT_OPTION, array());
     $defaults = vc_layout_defaults();
@@ -323,6 +407,9 @@ function vc_layout_screen() {
         if (isset($_POST['vc_layout_reset'])) {
             delete_option(VC_LAYOUT_OPTION);
             $saved_notice = __('Layout reset to defaults.', 'vc-merchant');
+        } elseif (isset($_POST['vc_layout_rehub'])) {
+            vc_layout_apply_rehub_preset();
+            $saved_notice = __('Arranged for a ReHub store page: About, Best ways to save and the verification note above the offers; policies, FAQs and shipping destinations below; the reference panels in the sidebar.', 'vc-merchant');
         } else {
             $defaults = vc_layout_defaults();
 
@@ -601,6 +688,11 @@ function vc_layout_screen() {
             <p class="submit">
                 <?php submit_button(__('Save layout', 'vc-merchant'), 'primary', 'submit', false); ?>
                 <?php submit_button(__('Reset to defaults', 'vc-merchant'), 'secondary', 'vc_layout_reset', false); ?>
+                <?php submit_button(__('Arrange for a ReHub store page', 'vc-merchant'),
+                    'secondary', 'vc_layout_rehub', false); ?>
+                <p class="description" style="margin-top:8px">
+                    <?php esc_html_e('That button puts About, Best ways to save and the verification note above ReHub\'s offer list; the policies table, FAQs and shipping destinations below it; and the merchant, company, link and similar-store panels in the sidebar. Long prose in a 250px column is what makes a sidebar look wrong, so it moves out.', 'vc-merchant'); ?>
+                </p>
             </p>
         </form>
     </div>
