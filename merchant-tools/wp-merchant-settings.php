@@ -592,6 +592,18 @@ function vc_layout_screen() {
             </table>
 
             <h2><?php esc_html_e('Appearance', 'vc-merchant'); ?></h2>
+            <?php
+            // Say plainly which of these still do anything. On a theme-laid-out
+            // store page some are overridden, and a control that presents as
+            // live while doing nothing wastes an afternoon.
+            $vc_themed = function_exists('vc_storepage_split') && vc_storepage_split()
+                && function_exists('vc_rehub_active') && vc_rehub_active();
+            if ($vc_themed) : ?>
+                <p class="description" style="max-width:760px">
+                    <strong><?php esc_html_e('On your ReHub store pages:', 'vc-merchant'); ?></strong>
+                    <?php esc_html_e('the accent colour, type sizes, spacing and corner radius below all still apply. The H1 wording and sidebar width do not -- ReHub draws its own heading and its own sidebar column. Content width applies only within ReHub\'s column, so setting it lower makes these blocks narrower than the offers above and below them. All of them still apply on your own /stores/ pages.', 'vc-merchant'); ?>
+                </p>
+            <?php endif; ?>
             <table class="form-table" style="max-width:760px;">
                 <tr>
                     <th scope="row"><label for="h1_suffix"><?php esc_html_e('H1 wording', 'vc-merchant'); ?></label></th>
@@ -599,7 +611,10 @@ function vc_layout_screen() {
                         <code><?php esc_html_e('[store name]', 'vc-merchant'); ?></code>
                         <input type="text" id="h1_suffix" name="h1_suffix"
                                value="<?php echo esc_attr($visual['h1_suffix']); ?>" class="regular-text" />
-                        <p class="description"><?php esc_html_e('The H1 is the store\'s display name followed by this. Leave empty for the name alone.', 'vc-merchant'); ?></p>
+                        <p class="description"><?php esc_html_e('The H1 is the store\'s display name followed by this. Leave empty for the name alone.', 'vc-merchant'); ?>
+                        <?php if ($vc_themed) : ?>
+                            <br /><em><?php esc_html_e('Not used on a ReHub store page: ReHub draws the heading there.', 'vc-merchant'); ?></em>
+                        <?php endif; ?></p>
                     </td>
                 </tr>
                 <tr>
@@ -615,6 +630,12 @@ function vc_layout_screen() {
                     <td>
                         <input type="number" id="sidebar_width" name="sidebar_width"
                                value="<?php echo esc_attr($visual['sidebar_width']); ?>" min="200" max="600" step="10" /> px
+                        <p class="description">
+                            <?php esc_html_e('The width of our own two-column store page.', 'vc-merchant'); ?>
+                            <?php if ($vc_themed) : ?>
+                                <em><?php esc_html_e('Not used on a ReHub store page: that column is ReHub\'s, and its width is a theme setting.', 'vc-merchant'); ?></em>
+                            <?php endif; ?>
+                        </p>
                     </td>
                 </tr>
                 <tr>
