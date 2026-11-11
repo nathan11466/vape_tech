@@ -998,3 +998,30 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
     border-top: 1px solid var(--vc-border);
   }
 }
+
+/* ---------- Sidebar: stop long values being clipped ----------
+   Reported as "some items get cut off". The column is ~250px and carries
+   email addresses, cloaked URLs and store names with no spaces in them,
+   none of which wrap at a space because they have none. */
+
+.vc-storepage--side,
+.vc-storepage--side dd,
+.vc-storepage--side dt,
+.vc-storepage--side p,
+.vc-storepage--side li,
+.vc-storepage--side a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+/* A grid or flex child will not shrink below its content without this, which
+   is what pushes a long value out of the column rather than wrapping it. */
+.vc-storepage--side * { max-width: 100%; }
+
+/* Nothing in a narrow column should scroll sideways. */
+.vc-storepage--side { overflow-x: clip; }
+
+/* Link lists: the label wraps, the bullet stays put. */
+.vc-storepage--side .vc-links li,
+.vc-storepage--side .vc-related-links li { display: list-item; }

@@ -375,6 +375,51 @@ check('neither raised a PHP warning',
 
 $GLOBALS['queried'] = $saved;
 
+/* --- Blocks ReHub renders itself --------------------------------------
+ *
+ * The store page carried two H1s: ReHub's "2Fdeal Coupon Codes & Promo
+ * Codes - November 2026" and ours, "2Fdeal Coupon Codes". The hero went for
+ * a different reason -- a discount badge, a figure, an offer line and a
+ * Visit button read as a coupon card, which beside ReHub's real offer cards
+ * competes with them and sends people off without a code.
+ *
+ * This exercises the callback the plugin registers, not a copy of it: an
+ * earlier version of this check reimplemented the rule in the test and
+ * stayed green while the real one was broken.
+ * -------------------------------------------------------------------- */
+
+$page_filters = $GLOBALS['filters']['vc_merchant_page_blocks'] ?? array();
+check('the plugin registers a block filter', count($page_filters) === 1);
+
+function run_block_filter($blocks, $split) {
+    $out = $blocks;
+    foreach ($GLOBALS['filters']['vc_merchant_page_blocks'] ?? array() as $fn) {
+        $out = $fn($out, 'main', $split);
+    }
+    return $out;
+}
+
+$all = array('title', 'hero', 'quickfacts', 'about', 'policies');
+
+check('unsplit, every block stays ours to render',
+    run_block_filter($all, '') === $all,
+    implode(',', run_block_filter($all, '')));
+
+$split = run_block_filter($all, 'above');
+check('split, the title stands down so the page has one H1',
+    !in_array('title', $split, true), implode(',', $split));
+check('and the hero stands down rather than mimicking a coupon card',
+    !in_array('hero', $split, true), implode(',', $split));
+check('while everything else survives',
+    $split === array('quickfacts', 'about', 'policies'), implode(',', $split));
+
+// A filter callback must not throw when called with fewer arguments than it
+// declares: that is exactly how this first broke another suite.
+$threw = false;
+try { $page_filters[0](array('title', 'about')); }
+catch (Throwable $e) { $threw = true; }
+check('the callback tolerates being called with one argument', !$threw);
+
 if ($fails) {
     echo count($fails) . " check(s) FAILED: " . implode(', ', $fails) . "\n";
     exit(1);

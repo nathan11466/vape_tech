@@ -132,19 +132,35 @@ function vc_rehub_sidebar_facts($post_id) {
             : trim((string) get_post_meta($post_id, $key, true));
     };
 
-    // The destinations block answers this in the body with a link per
-    // destination. Repeating it here made "where does it ship" the answer to
-    // three separate questions on one page.
-    $ships_to = (function_exists('vc_layout_block_renders')
-                 && vc_layout_block_renders('destinations'))
-        ? '' : vc_rehub_sidebar_ships_to($post_id);
+    // Each row stands down when another block on the page already owns that
+    // subject. The live page had "Shipping details vary by order - check cart
+    // at checkout" and "Major credit cards and standard checkout options
+    // accepted" printed twice, once here and once in the policies table a
+    // screen below, which is one fact in two places rather than two facts.
+    //
+    // With the policies table, the destinations block and the merchant
+    // information panel all rendering, nothing is left that this panel alone
+    // can say -- and then it renders nothing at all, which is correct. It
+    // was built for a sidebar that did not also carry those.
+    $owned = function ($block) {
+        return function_exists('vc_layout_block_renders')
+            && vc_layout_block_renders($block);
+    };
 
     $rows = array(
-        __('Ships to', 'vc-merchant')      => $ships_to,
-        __('Shipping', 'vc-merchant')      => $get('free_shipping_info'),
-        __('Payment', 'vc-merchant')       => $get('payment_methods'),
-        __('Returns', 'vc-merchant')       => $get('return_policy_summary'),
-        __('Codes checked', 'vc-merchant') => $get('last_checked_text'),
+        // The destinations block names every destination, with links.
+        __('Ships to', 'vc-merchant')      => $owned('destinations')
+            ? '' : vc_rehub_sidebar_ships_to($post_id),
+        // The policies table carries these three verbatim.
+        __('Shipping', 'vc-merchant')      => $owned('policies')
+            ? '' : $get('free_shipping_info'),
+        __('Payment', 'vc-merchant')       => $owned('policies')
+            ? '' : $get('payment_methods'),
+        __('Returns', 'vc-merchant')       => $owned('policies')
+            ? '' : $get('return_policy_summary'),
+        // The merchant information panel shows this as "Last checked".
+        __('Codes checked', 'vc-merchant') => $owned('info')
+            ? '' : $get('last_checked_text'),
     );
 
     $max   = vc_rehub_sidebar_max_length();

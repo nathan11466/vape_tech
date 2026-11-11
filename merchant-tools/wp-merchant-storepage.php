@@ -197,6 +197,33 @@ function vc_storepage_split() {
 }
 
 /**
+ * Blocks ReHub renders itself, which we must not render a second time.
+ *
+ * The store page carried two H1s -- ReHub's "2Fdeal Coupon Codes & Promo
+ * Codes - November 2026" and ours, "2Fdeal Coupon Codes" -- which is both a
+ * duplicate heading and near-duplicate text.
+ *
+ * The hero went for a second reason: it draws a discount badge, a figure, an
+ * offer line and a Visit button, which reads as a coupon card. Beside
+ * ReHub's real offer cards it competes with them and sends people to the
+ * shop without a code.
+ */
+function vc_storepage_theme_blocks() {
+    return (array) apply_filters('vc_storepage_theme_blocks',
+        array('title', 'hero'));
+}
+
+add_filter('vc_merchant_page_blocks', function ($blocks, $column = '', $split = '') {
+    if ($split === '') {
+        // Our own merchant pages: no theme is laying these out, so every
+        // block is ours to render.
+        return $blocks;
+    }
+
+    return array_values(array_diff($blocks, vc_storepage_theme_blocks()));
+}, 10, 3);
+
+/**
  * The part of the profile that belongs below the theme's coupon list.
  *
  * Reached as a shortcode rather than written into term meta: ReHub runs

@@ -117,6 +117,9 @@ function vc_merchant_render_page($atts = array()) {
     if ($split !== 'side') {
         $main_blocks = $split === ''
             ? vc_layout_blocks('main') : vc_layout_split_blocks($split);
+        // A theme laying the page out itself already renders some of these.
+        $main_blocks = (array) apply_filters('vc_merchant_page_blocks',
+            $main_blocks, 'main', $split, $post_id);
         foreach ($main_blocks as $block) {
             $main .= vc_merchant_block($block, $post_id, $atts);
         }
@@ -128,7 +131,9 @@ function vc_merchant_render_page($atts = array()) {
     // main column -- a sidebar's worth of reference material rendered as
     // though it were body copy.
     if ($split === '' || $split === 'side') {
-        foreach (vc_layout_blocks('side') as $block) {
+        $side_blocks = (array) apply_filters('vc_merchant_page_blocks',
+            vc_layout_blocks('side'), 'side', $split, $post_id);
+        foreach ($side_blocks as $block) {
             $side .= vc_merchant_block($block, $post_id, $atts);
         }
     }

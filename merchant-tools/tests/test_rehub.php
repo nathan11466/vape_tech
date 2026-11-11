@@ -703,6 +703,46 @@ check('a store with no ships_to terms gets no shipping row',
 check('a store with nothing to say produces no panel at all',
     vc_rehub_sidebar_facts(store(704)) === '', vc_rehub_sidebar_facts(704));
 
+/* --- One fact, one place ----------------------------------------------
+ *
+ * The live page printed "Shipping details vary by order - check cart at
+ * checkout" and "Major credit cards and standard checkout options accepted"
+ * twice each: once in this panel and once in the policies table a screen
+ * below. Each row now stands down when another block owns that subject.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['renders'] = array();
+update_post_meta(700, 'return_policy_summary', 'Thirty days, unopened.');
+
+$alone = vc_rehub_sidebar_facts(700);
+check('with no other block rendering, the panel carries the facts',
+    strpos($alone, 'Free over $50') !== false
+    && strpos($alone, 'Card, crypto') !== false, $alone);
+
+$GLOBALS['renders']['policies'] = true;
+$with_policies = vc_rehub_sidebar_facts(700);
+check('with the policies table on, shipping is not repeated here',
+    strpos($with_policies, 'Free over $50') === false, $with_policies);
+check('nor payment',
+    strpos($with_policies, 'Card, crypto') === false, $with_policies);
+check('nor returns',
+    strpos($with_policies, 'Thirty days') === false, $with_policies);
+check('but the last-checked date, which that table does not show, stays',
+    strpos($with_policies, '24 Jul 2026') !== false, $with_policies);
+
+$GLOBALS['renders']['info'] = true;
+check('and with the merchant information panel on, that goes too',
+    strpos(vc_rehub_sidebar_facts(700), '24 Jul 2026') === false,
+    vc_rehub_sidebar_facts(700));
+
+$GLOBALS['renders']['destinations'] = true;
+check('with every owner rendering, the panel prints nothing at all',
+    vc_rehub_sidebar_facts(700) === '', vc_rehub_sidebar_facts(700));
+
+$GLOBALS['renders'] = array();
+check('and it comes back when those blocks are switched off',
+    vc_rehub_sidebar_facts(700) !== '');
+
 /* --- One block owns where a store ships -------------------------------
  *
  * The destinations block states it in the body with a link per destination.
