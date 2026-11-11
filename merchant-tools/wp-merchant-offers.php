@@ -104,7 +104,117 @@ add_action('pre_get_posts', function ($query) {
  * post id and returns the value.
  */
 function vc_offers_field_map() {
-    return apply_filters('vc_offers_field_map', array());
+    return apply_filters('vc_offers_field_map', array(
+        'rehub_offer_name'           => 'vc_offers_src_name',
+        'rehub_offer_product_url'    => 'vc_offers_src_url',
+        'rehub_offer_product_desc'   => '_wcd_description',
+        'rehub_offer_disclaimer'     => '_wcd_additional_info',
+        'rehub_offer_discount'       => 'vc_offers_src_discount',
+        'rehub_offer_coupon_date'    => 'vc_offers_src_date',
+        // The code, and the two fields that only make sense beside one.
+        'rehub_offer_product_coupon' => 'vc_offers_src_code',
+        'rehub_offer_coupon_mask'    => 'vc_offers_src_mask',
+        'rehub_offer_btn_text'       => 'vc_offers_src_btn',
+    ));
+}
+
+/**
+ * The offer's name: the coupon's own title.
+ */
+function vc_offers_src_name($coupon_id) {
+    return trim((string) get_the_title($coupon_id));
+}
+
+/**
+ * The destination, with the staging path taken out.
+ *
+ * _wcd_destination_url holds a cloaked link that currently reads
+ * https://vapingcheap.com/staging/likes/<store>. Migrated as-is, all 42
+ * offers would point at /staging/ and break the day they go live.
+ */
+function vc_offers_src_url($coupon_id) {
+    $url = trim((string) get_post_meta($coupon_id, '_wcd_destination_url', true));
+    if ($url === '') {
+        return '';
+    }
+
+    return (string) apply_filters('vc_offers_rewrite_url',
+        str_replace('/staging/', '/', $url), $coupon_id);
+}
+
+/**
+ * The discount figure, in the form ReHub stores.
+ *
+ * ReHub keeps "99%", not "99% OFF" -- the template adds its own wording, so
+ * leaving the suffix on reads "10% OFF OFF" on the badge.
+ */
+function vc_offers_src_discount($coupon_id) {
+    $value = trim((string) get_post_meta($coupon_id, '_wcd_discount', true));
+
+    return trim(preg_replace('/\s*\b(off|discount)\b\s*$/i', '', $value));
+}
+
+/**
+ * The expiry, as a datetime.
+ *
+ * ReHub stores "2027-05-14 12:00". _wcd_expiration holds a bare date, so a
+ * time is added; without one the field is a different shape from the one the
+ * theme writes, and an expiry that cannot be parsed is an offer that either
+ * never expires or expires at once.
+ */
+function vc_offers_src_date($coupon_id) {
+    $value = trim((string) get_post_meta($coupon_id, '_wcd_expiration', true));
+    if ($value === '') {
+        return '';
+    }
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return $value . ' 12:00';
+    }
+
+    return $value;
+}
+
+/**
+ * The coupon code, but only where the field actually holds one.
+ *
+ * _wcd_code is not reliably a code. One of the sampled coupons has
+ * "Save 10% at Vaporider" in it, with _wcd_type still set to "code". Writing
+ * that into the code field gives a reader a SHOW CODE button that reveals a
+ * sentence -- worse than no button, because they click it, get nothing
+ * usable, and conclude the site pads its listings.
+ *
+ * So the test is per coupon, not per catalogue: a value that looks like a
+ * code migrates as a code, and anything else migrates as a deal with no code
+ * field at all. ReHub renders both; only one of them can mislead.
+ */
+function vc_offers_src_code($coupon_id) {
+    $value = trim((string) get_post_meta($coupon_id, '_wcd_code', true));
+    if ($value === '') {
+        return '';
+    }
+
+    // A code is one token: no spaces, nothing sentence-shaped.
+    if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{2,23}$/', $value)) {
+        return '';
+    }
+
+    return $value;
+}
+
+/**
+ * Mask the code behind a reveal button -- only when there is a code.
+ */
+function vc_offers_src_mask($coupon_id) {
+    return vc_offers_src_code($coupon_id) === '' ? '' : '1';
+}
+
+/**
+ * The button label, matching what the offer actually is.
+ */
+function vc_offers_src_btn($coupon_id) {
+    return vc_offers_src_code($coupon_id) === ''
+        ? __('GET DEAL', 'vc-merchant')
+        : __('SHOW CODE', 'vc-merchant');
 }
 
 /**
@@ -326,6 +436,14 @@ function vc_offers_migrate_one($coupon_id, $dry_run = true, $publish = false) {
 
     foreach ($meta as $key => $value) {
         update_post_meta($post_id, $key, $value);
+    }
+
+    // The coupon's featured image, through WordPress's own field rather than
+    // an offer field: ReHub reads the post thumbnail for the offer image, and
+    // the test offer written by the theme itself set no rehub_offer_product_thumb.
+    $thumb = (int) get_post_meta($coupon_id, '_thumbnail_id', true);
+    if ($thumb) {
+        update_post_meta($post_id, '_thumbnail_id', $thumb);
     }
 
     wp_set_object_terms($post_id, array((int) $term->term_id), 'dealstore', false);

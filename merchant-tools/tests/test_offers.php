@@ -36,6 +36,8 @@ function is_admin() { return false; }
 function taxonomy_exists($t) { return in_array($t, $GLOBALS['taxes'], true); }
 function post_type_exists($t) { return true; }
 function vc_merchant_post_types() { return array('merchant'); }
+function get_the_title($id = null) { return $GLOBALS['titles'][$id] ?? ''; }
+function __($v, $d = null) { return $v; }
 
 function get_post($id) { return $GLOBALS['posts'][$id] ?? null; }
 function get_post_meta($id, $key = '', $single = false) {
@@ -130,8 +132,15 @@ coupon(21, 'Free shipping', 301, array('wcd_code' => 'SHIPFREE'));
 
 /* --- The guard that matters most -------------------------------------- */
 
-check('with no field map, nothing is considered ready to migrate',
+// The map now ships filled in, read off a ReHub-authored offer. The guard
+// still matters: a site that filters it away must refuse rather than create
+// empty posts, which is the failure the refusal exists to prevent.
+check('the shipped map is ready to migrate', vc_offers_map_ready() === true);
+
+$GLOBALS['filters']['vc_offers_field_map'][] = function ($m) { return array(); };
+check('an emptied map is not considered ready',
     vc_offers_map_ready() === false);
+$GLOBALS['filters']['vc_offers_field_map'] = array();
 
 /* --- Resolving which store a coupon belongs to ------------------------ */
 
@@ -230,6 +239,100 @@ $report = vc_offers_inspect_source();
 check('inspecting finds the coupons', $report['sampled'] >= 2, $report['sampled']);
 check('and lists their real meta keys with an example',
     ($report['keys']['wcd_code'] ?? '') !== '', json_encode($report['keys']));
+
+/* --- The field map, built from a real ReHub-authored offer -------------
+ *
+ * The keys and formats here were read off a post the THEME wrote, not
+ * inferred. One of them is the opposite of what the source suggested: the
+ * theme mentions rehub_offer_coupon 85 times and
+ * rehub_offer_product_coupon 16, and the code lives in the latter. The
+ * former is a CSS class.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['filters']['vc_offers_field_map'] = array();
+$map = vc_offers_field_map();
+
+check('the code goes in rehub_offer_product_coupon, not rehub_offer_coupon',
+    isset($map['rehub_offer_product_coupon'])
+    && !isset($map['rehub_offer_coupon']), implode(',', array_keys($map)));
+
+function src($id, $key) {
+    $map = vc_offers_field_map();
+    $s = $map[$key];
+    return is_callable($s) ? call_user_func($s, $id)
+        : (string) get_post_meta($id, $s, true);
+}
+
+$GLOBALS['titles'][30] = '60% off atomizers';
+$GLOBALS['posts'][30] = (object) array('ID' => 30, 'post_type' => 'wcd_coupon',
+    'post_title' => '60% off atomizers');
+$GLOBALS['meta'][30] = array(
+    '_wcd_code' => 'SAVE60',
+    '_wcd_discount' => '10% OFF',
+    '_wcd_expiration' => '2027-02-06',
+    '_wcd_destination_url' => 'https://vapingcheap.com/staging/likes/vaporider',
+    '_wcd_description' => 'Save 10% site-wide.',
+    '_wcd_additional_info' => 'Not stackable.',
+);
+
+check('the name comes from the coupon title',
+    src(30, 'rehub_offer_name') === '60% off atomizers');
+check('"OFF" is stripped from the discount, which ReHub adds itself',
+    src(30, 'rehub_offer_discount') === '10%', src(30, 'rehub_offer_discount'));
+check('a bare date becomes the datetime ReHub stores',
+    src(30, 'rehub_offer_coupon_date') === '2027-02-06 12:00',
+    src(30, 'rehub_offer_coupon_date'));
+check('the staging path is taken out of the destination',
+    src(30, 'rehub_offer_product_url') === 'https://vapingcheap.com/likes/vaporider',
+    src(30, 'rehub_offer_product_url'));
+check('a real code is carried across',
+    src(30, 'rehub_offer_product_coupon') === 'SAVE60');
+check('and it is masked behind a reveal button',
+    src(30, 'rehub_offer_coupon_mask') === '1');
+check('with the matching button label',
+    src(30, 'rehub_offer_btn_text') === 'SHOW CODE');
+
+/* --- A label in the code field is not a code -------------------------- */
+
+$GLOBALS['titles'][31] = 'Vaporider 10%';
+$GLOBALS['posts'][31] = (object) array('ID' => 31, 'post_type' => 'wcd_coupon',
+    'post_title' => 'Vaporider 10%');
+$GLOBALS['meta'][31] = array('_wcd_code' => 'Save 10% at Vaporider');
+
+check('a sentence in _wcd_code is NOT written as a code',
+    src(31, 'rehub_offer_product_coupon') === '',
+    src(31, 'rehub_offer_product_coupon'));
+check('so nothing is masked',
+    src(31, 'rehub_offer_coupon_mask') === '');
+check('and the button says it is a deal, not a code',
+    src(31, 'rehub_offer_btn_text') === 'GET DEAL',
+    src(31, 'rehub_offer_btn_text'));
+
+// The boundary cases either side of "looks like a code".
+foreach (array(
+    'SAVE60'      => 'SAVE60',
+    'VAPE-20'     => 'VAPE-20',
+    'a1b'         => 'a1b',
+    'Save 10%'    => '',
+    'ab'          => '',
+    '10% OFF'     => '',
+    'Get yours now at the store' => '',
+) as $raw => $want) {
+    $GLOBALS['meta'][32] = array('_wcd_code' => $raw);
+    check("code test: " . var_export($raw, true) . " -> " . var_export($want, true),
+        vc_offers_src_code(32) === $want, var_export(vc_offers_src_code(32), true));
+}
+
+// A URL with no staging segment must be left exactly as it is.
+$GLOBALS['meta'][33] = array(
+    '_wcd_destination_url' => 'https://vapingcheap.com/likes/elementvape');
+check('a production URL is untouched',
+    vc_offers_src_url(33) === 'https://vapingcheap.com/likes/elementvape');
+check('and an empty one stays empty', vc_offers_src_url(34) === '');
+
+// An empty expiry must not become a bare time.
+$GLOBALS['meta'][35] = array('_wcd_expiration' => '');
+check('no expiry produces no date', vc_offers_src_date(35) === '');
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
