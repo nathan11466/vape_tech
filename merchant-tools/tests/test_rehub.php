@@ -44,7 +44,30 @@ function wp_insert_term($name, $tax, $a = array()) {
 function wp_set_object_terms($id, $terms, $tax, $append = false) {
     $GLOBALS['assigned'][$id][$tax] = $terms;
 }
-function get_posts($a = array()) { return $GLOBALS['query_ids']; }
+// Honours posts_per_page and the _vc_rehub_run meta query, so the batching
+// can actually be tested. It used to ignore every argument and return the
+// same list, which is why a batch with no cursor looked fine here.
+function get_posts($a = array()) {
+    $ids = $GLOBALS['query_ids'];
+
+    foreach ($a['meta_query'] ?? array() as $clause) {
+        if (!is_array($clause) || ($clause['key'] ?? '') !== '_vc_rehub_run') {
+            continue;
+        }
+        // The OR pair means: not marked for this run. Either clause alone
+        // expresses it, so applying the '!=' one is enough.
+        if (($clause['compare'] ?? '') === '!=') {
+            $want = (string) $clause['value'];
+            $ids = array_values(array_filter($ids, function ($id) use ($want) {
+                return (string) ($GLOBALS['meta'][$id]['_vc_rehub_run'] ?? '') !== $want;
+            }));
+        }
+    }
+
+    $limit = (int) ($a['posts_per_page'] ?? -1);
+
+    return $limit > 0 ? array_slice($ids, 0, $limit) : $ids;
+}
 function is_wp_error($t) { return $t instanceof WP_Error; }
 function apply_filters($tag, $value) {
     foreach ($GLOBALS['filters'][$tag] ?? array() as $fn) { $value = $fn($value); }
@@ -86,6 +109,7 @@ function get_the_terms($id, $tax) {
 }
 function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
 function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
+function delete_option($k) { unset($GLOBALS['options'][$k]); return true; }
 function get_permalink($id = null) { return 'https://vapingcheap.com/stores/store-' . $id . '/'; }
 function get_term_link($t) {
     $t = is_object($t) ? $t : ($GLOBALS['terms'][$t] ?? null);
@@ -828,6 +852,91 @@ $plain = store(705, array('coupon_intro' => 'Only an intro.'));
 check('a store with no facts still gets its intro first',
     strpos($map['brand_short_description']($plain), 'Only an intro.') === 0,
     $map['brand_short_description']($plain));
+
+/* --- Batching has to make progress ------------------------------------
+ *
+ * The batch took the first N merchants every time, with no record of what
+ * it had done, so pressing Sync again re-synced the same 25 and the
+ * remaining count could never be reached. The only way through 112 stores
+ * was to type a batch size larger than the catalogue, which defeats the
+ * point of batching on a host that times out.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$GLOBALS['query_ids'] = array();
+$GLOBALS['meta'] = array();
+$GLOBALS['terms'] = array();
+$GLOBALS['titles'] = array();
+
+for ($i = 1; $i <= 10; $i++) {
+    $id = 800 + $i;
+    $GLOBALS['query_ids'][] = $id;
+    $GLOBALS['titles'][$id] = 'Store ' . $i;
+    $GLOBALS['meta'][$id] = array('display_brand_name' => 'Store ' . $i,
+                                  'brand_url' => 'https://s' . $i . '.example');
+}
+
+$seen = array();
+$passes = 0;
+do {
+    $r = vc_rehub_sync_batch(3, false);
+    $passes++;
+    foreach ($GLOBALS['query_ids'] as $id) {
+        if (($GLOBALS['meta'][$id]['_vc_rehub_run'] ?? '') !== '') {
+            $seen[$id] = ($seen[$id] ?? 0) + 0; // touched at least once
+        }
+    }
+    if ($passes > 20) { break; }
+} while ($r['remaining'] > 0);
+
+check('a batch of 3 over 10 stores finishes in four presses',
+    $passes === 4, $passes . ' presses');
+check('and the last press reports nothing remaining',
+    $r['remaining'] === 0, $r['remaining']);
+check('every store was reached',
+    count($seen) === 10, count($seen) . ' of 10');
+
+// Each press must move forward, not repeat the first batch.
+$GLOBALS['options'] = array();
+foreach ($GLOBALS['query_ids'] as $id) { unset($GLOBALS['meta'][$id]['_vc_rehub_run']); }
+
+$first = vc_rehub_sync_batch(3, false);
+$marked_after_one = array_values(array_filter($GLOBALS['query_ids'], function ($id) {
+    return ($GLOBALS['meta'][$id]['_vc_rehub_run'] ?? '') !== '';
+}));
+check('the first press does three stores', count($marked_after_one) === 3,
+    count($marked_after_one));
+check('and reports seven remaining', $first['remaining'] === 7, $first['remaining']);
+
+$second = vc_rehub_sync_batch(3, false);
+$marked_after_two = array_values(array_filter($GLOBALS['query_ids'], function ($id) {
+    return ($GLOBALS['meta'][$id]['_vc_rehub_run'] ?? '') !== '';
+}));
+check('the second press does three DIFFERENT stores, not the same three',
+    count($marked_after_two) === 6, count($marked_after_two));
+check('and the count goes down', $second['remaining'] === 4, $second['remaining']);
+
+// Finishing a run clears the token, so the next press starts a fresh pass.
+vc_rehub_sync_batch(0, false);
+check('a finished run clears its token',
+    get_option('vc_rehub_run', '') === '', get_option('vc_rehub_run', ''));
+$fresh = vc_rehub_sync_batch(3, false);
+check('so a later press starts over rather than finding nothing to do',
+    $fresh['stores'] === 3, $fresh['stores']);
+
+// A store that errors must be marked too, or it blocks everything behind it.
+$GLOBALS['options'] = array();
+foreach ($GLOBALS['query_ids'] as $id) { unset($GLOBALS['meta'][$id]['_vc_rehub_run']); }
+$GLOBALS['meta'][801]['display_brand_name'] = '';
+$GLOBALS['titles'][801] = '';
+
+$runs = 0;
+do {
+    $r = vc_rehub_sync_batch(3, false);
+    $runs++;
+} while ($r['remaining'] > 0 && $runs <= 20);
+check('a store that cannot be synced does not block the rest',
+    $runs === 4, $runs . ' presses');
 
 echo "\n";
 if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }

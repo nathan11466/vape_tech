@@ -574,26 +574,65 @@ function vc_rehub_sync_merchant($post_id, $overwrite = false) {
 /**
  * Mirror a batch of merchants.
  */
-function vc_rehub_sync_batch($limit = 0, $overwrite = false) {
-    $ids = get_posts(array(
+/**
+ * The token identifying the run in progress, started if there is none.
+ *
+ * Batching needs to know what it has already done. Without this the batch
+ * took the first N merchants every time, so pressing Sync again re-synced
+ * the same 25 and the remaining count could never be reached -- the only way
+ * through 112 stores was to type a batch size larger than the catalogue,
+ * which defeats the point of batching on a host that times out.
+ */
+function vc_rehub_run_token($start = true) {
+    $token = (string) get_option('vc_rehub_run', '');
+    if ($token === '' && $start) {
+        // uniqid, not time(): finishing a run and starting another inside the
+        // same second produced the same token, so every store still carried
+        // it and the new run found nothing to do.
+        $token = uniqid('r', true);
+        update_option('vc_rehub_run', $token);
+    }
+
+    return $token;
+}
+
+/**
+ * Merchants this run has not reached yet.
+ */
+function vc_rehub_pending_ids($token, $limit = 0) {
+    return get_posts(array(
         'post_type'      => vc_merchant_post_types(),
         'post_status'    => 'any',
-        'posts_per_page' => -1,
+        'posts_per_page' => $limit > 0 ? (int) $limit : -1,
         'fields'         => 'ids',
+        'orderby'        => 'ID',
+        'order'          => 'ASC',
+        'meta_query'     => array(
+            'relation' => 'OR',
+            // Never synced in any run.
+            array('key' => '_vc_rehub_run', 'compare' => 'NOT EXISTS'),
+            // Synced, but in an earlier run than this one.
+            array('key' => '_vc_rehub_run', 'value' => $token, 'compare' => '!='),
+        ),
     ));
+}
+
+function vc_rehub_sync_batch($limit = 0, $overwrite = false) {
+    $token = vc_rehub_run_token();
+
+    $ids = vc_rehub_pending_ids($token, $limit);
+    $outstanding = count(vc_rehub_pending_ids($token));
 
     $report = array('stores' => 0, 'fields' => 0, 'offer' => 0, 'kept' => 0,
                     'renamed' => 0, 'errors' => array(), 'remaining' => 0);
     $done = 0;
 
     foreach ($ids as $post_id) {
-        if ($limit > 0 && $done >= $limit) {
-            $report['remaining'] = count($ids) - $done;
-            break;
-        }
-
         $result = vc_rehub_sync_merchant($post_id, $overwrite);
         $done++;
+        // Marked whatever the outcome: a merchant that errors must not be
+        // retried forever, blocking every store behind it.
+        update_post_meta($post_id, '_vc_rehub_run', $token);
 
         if (is_wp_error($result)) {
             $name = function_exists('vc_merchant_display_name')
@@ -607,6 +646,13 @@ function vc_rehub_sync_batch($limit = 0, $overwrite = false) {
         $report['offer']  += $result['offer'];
         $report['kept']   += $result['kept'];
         $report['renamed'] += $result['renamed'];
+    }
+
+    $report['remaining'] = max(0, $outstanding - $done);
+
+    // Run finished: the next press starts a fresh pass over every store.
+    if ($report['remaining'] === 0) {
+        delete_option('vc_rehub_run');
     }
 
     return $report;
@@ -705,6 +751,16 @@ function vc_rehub_screen() {
                     __('Synced %1$d stores. Store fields written: %2$d. Offer fields written: %3$d. Remaining: %4$d.', 'vc-merchant'),
                     $report['stores'], $report['fields'], $report['offer'], $report['remaining']
                 )); ?></p>
+                <?php if ($report['remaining'] > 0) : ?>
+                    <p><strong><?php echo esc_html(sprintf(
+                        /* translators: %d: stores still to do */
+                        _n('Press Sync again for the last store.',
+                           'Press Sync again: %d stores still to do, and each press now moves on to the next batch.',
+                           $report['remaining'], 'vc-merchant'),
+                        $report['remaining'])); ?></strong></p>
+                <?php else : ?>
+                    <p><?php esc_html_e('Every store is done. The next press starts a fresh pass over all of them.', 'vc-merchant'); ?></p>
+                <?php endif; ?>
                 <?php if (!empty($report['renamed'])) : ?>
                     <p><?php echo esc_html(sprintf(
                         /* translators: %d: number of stores */
