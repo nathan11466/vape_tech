@@ -1,0 +1,178 @@
+--- wcd-orig/wp-coupon-deals/includes/class-ajax.php	2026-08-06 04:55:45.000000000 +0000
++++ wcd/wp-coupon-deals/includes/class-ajax.php	2026-10-09 20:01:17.722720210 +0000
+@@ -17,7 +17,7 @@
+ 	}
+ 
+ 	private static function check( $post_id ) {
+-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'wcd_frontend_nonce' ) ) {
++		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'wcd_frontend_nonce' ) ) {
+ 			wp_send_json_error( array( 'message' => 'Invalid nonce' ), 403 );
+ 		}
+ 		if ( get_post_type( $post_id ) !== 'wcd_coupon' ) {
+@@ -30,6 +30,16 @@
+ 	}
+ 
+ 	/**
++	 * A key for the current caller, salted with the site's own keys.
++	 *
++	 * Not a durable record: every use below is a transient that expires, and
++	 * the salt means the stored value is not a bare hash of an IP address.
++	 */
++	private static function caller_key( $suffix ) {
++		return wp_hash( self::client_ip() . '|' . $suffix );
++	}
++
++	/**
+ 	 * Simple transient-based rate limit: true if the caller may proceed,
+ 	 * false if they've hit this key too recently.
+ 	 */
+@@ -41,6 +51,37 @@
+ 	}
+ 
+ 	/**
++	 * A quota rather than a cooldown: at most $max events per $window.
++	 *
++	 * rate_limit_ok() only enforces a gap between events, which a script
++	 * defeats by waiting. Anything that writes a number readers are shown
++	 * needs a ceiling as well.
++	 */
++	private static function quota_ok( $key, $max, $window ) {
++		$transient = 'wcd_q_' . md5( $key );
++		$used = (int) get_transient( $transient );
++		if ( $used >= $max ) { return false; }
++		// Keep the original window: re-setting it on every event would let a
++		// steady trickle hold the counter open indefinitely.
++		set_transient( $transient, $used + 1, $window );
++		return true;
++	}
++
++	/**
++	 * Whether a displayed counter may be incremented for this caller.
++	 *
++	 * Deliberately separate from whether the request succeeds. A reader
++	 * opening the same coupon ten times should get the code every time and
++	 * count once -- the number on the card is a claim about other people.
++	 */
++	private static function may_count( $post_id ) {
++		$key = 'wcd_cnt_' . md5( self::caller_key( 'count_' . $post_id ) );
++		if ( get_transient( $key ) ) { return false; }
++		set_transient( $key, 1, HOUR_IN_SECONDS );
++		return true;
++	}
++
++	/**
+ 	 * Bumps a real (not fabricated) "used today" counter for a coupon, kept
+ 	 * as a day-scoped transient so it naturally resets and self-cleans -
+ 	 * used by WCD_Frontend::used_today() to display on the card.
+@@ -54,9 +95,15 @@
+ 	public static function reveal_code() {
+ 		$post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+ 		self::check( $post_id );
+-		$count = (int) get_post_meta( $post_id, '_wcd_reveal_count', true );
+-		update_post_meta( $post_id, '_wcd_reveal_count', $count + 1 );
+-		self::bump_used_today( $post_id );
++
++		// The reveal always works. Only the counters are throttled, because
++		// "N used today" is rendered on the card as evidence about other
++		// shoppers and was previously inflatable in a loop.
++		if ( self::may_count( $post_id ) ) {
++			$count = (int) get_post_meta( $post_id, '_wcd_reveal_count', true );
++			update_post_meta( $post_id, '_wcd_reveal_count', $count + 1 );
++			self::bump_used_today( $post_id );
++		}
+ 		wp_send_json_success( array(
+ 			'code' => get_post_meta( $post_id, '_wcd_code', true ),
+ 			'url'  => get_post_meta( $post_id, '_wcd_destination_url', true ),
+@@ -66,9 +113,13 @@
+ 	public static function track_click() {
+ 		$post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+ 		self::check( $post_id );
+-		$count = (int) get_post_meta( $post_id, '_wcd_click_count', true );
+-		update_post_meta( $post_id, '_wcd_click_count', $count + 1 );
+-		self::bump_used_today( $post_id );
++
++		if ( self::may_count( $post_id ) ) {
++			$count = (int) get_post_meta( $post_id, '_wcd_click_count', true );
++			update_post_meta( $post_id, '_wcd_click_count', $count + 1 );
++			self::bump_used_today( $post_id );
++		}
++
+ 		wp_send_json_success();
+ 	}
+ 
+@@ -82,11 +133,38 @@
+ 			wp_send_json_error( array( 'message' => __( 'You already voted on this coupon.', 'wp-coupon-deals' ) ) );
+ 		}
+ 
++		// These counts decide whether a code is presented as verified, so a
++		// cookie alone is not enough: clearing it, or opening a private
++		// window, previously allowed unlimited votes. Both guards below are
++		// short-lived transients, not a stored record of anyone.
++		if ( ! self::rate_limit_ok( self::caller_key( 'vote_' . $post_id ), 7 * DAY_IN_SECONDS ) ) {
++			wp_send_json_error( array( 'message' => __( 'You already voted on this coupon.', 'wp-coupon-deals' ) ) );
++		}
++
++		// A ceiling as well as a gap, so one visitor cannot swing many
++		// coupons at once. Generous enough that a genuine reader voting as
++		// they shop will never see it.
++		if ( ! self::quota_ok( self::caller_key( 'votes_day' ), 20, DAY_IN_SECONDS ) ) {
++			wp_send_json_error( array( 'message' => __( 'Thanks - that is enough votes from you for today.', 'wp-coupon-deals' ) ) );
++		}
++
+ 		$key   = $vote === 'yes' ? '_wcd_success_count' : '_wcd_fail_count';
+ 		$count = (int) get_post_meta( $post_id, $key, true );
+ 		update_post_meta( $post_id, $key, $count + 1 );
+ 
+-		setcookie( $cookie_name, '1', time() + ( 30 * DAY_IN_SECONDS ), COOKIEPATH ? COOKIEPATH : '/' );
++		// Hardened cookie: not readable from JavaScript, HTTPS-only where the
++		// site is, and not sent on cross-site requests.
++		if ( PHP_VERSION_ID >= 70300 ) {
++			setcookie( $cookie_name, '1', array(
++				'expires'  => time() + ( 30 * DAY_IN_SECONDS ),
++				'path'     => COOKIEPATH ? COOKIEPATH : '/',
++				'secure'   => is_ssl(),
++				'httponly' => true,
++				'samesite' => 'Lax',
++			) );
++		} else {
++			setcookie( $cookie_name, '1', time() + ( 30 * DAY_IN_SECONDS ), COOKIEPATH ? COOKIEPATH : '/', '', is_ssl(), true );
++		}
+ 
+ 		$success = (int) get_post_meta( $post_id, '_wcd_success_count', true );
+ 		$fail    = (int) get_post_meta( $post_id, '_wcd_fail_count', true );
+@@ -106,7 +184,7 @@
+ 
+ 		if ( ! empty( $_POST['wcd_hp'] ) ) { wp_send_json_success( array( 'approved' => false, 'message' => __( 'Thanks!', 'wp-coupon-deals' ) ) ); }
+ 
+-		if ( ! self::rate_limit_ok( 'note_' . self::client_ip() . '_' . $post_id, 20 ) ) {
++		if ( ! self::rate_limit_ok( self::caller_key( 'note_' . $post_id ), 20 ) ) {
+ 			wp_send_json_error( array( 'message' => __( 'Please wait a moment before posting again.', 'wp-coupon-deals' ) ) );
+ 		}
+ 
+@@ -150,7 +228,7 @@
+ 	 * Brand shopping-tip + star rating submission.
+ 	 */
+ 	public static function submit_brand_review() {
+-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'wcd_frontend_nonce' ) ) {
++		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'wcd_frontend_nonce' ) ) {
+ 			wp_send_json_error( array( 'message' => 'Invalid nonce' ), 403 );
+ 		}
+ 
+@@ -162,7 +240,7 @@
+ 
+ 		if ( ! empty( $_POST['wcd_hp'] ) ) { wp_send_json_success( array( 'approved' => false, 'message' => __( 'Thanks!', 'wp-coupon-deals' ) ) ); }
+ 
+-		if ( ! self::rate_limit_ok( 'review_' . self::client_ip() . '_' . $term_id, 30 ) ) {
++		if ( ! self::rate_limit_ok( self::caller_key( 'review_' . $term_id ), 30 ) ) {
+ 			wp_send_json_error( array( 'message' => __( 'Please wait a moment before posting again.', 'wp-coupon-deals' ) ) );
+ 		}
+ 
+@@ -211,7 +289,7 @@
+ 	 * on every debounced keystroke, not just deliberate saves.
+ 	 */
+ 	public static function preview_coupon() {
+-		if ( ! isset( $_POST['wcd_meta_nonce'] ) || ! wp_verify_nonce( $_POST['wcd_meta_nonce'], 'wcd_save_meta' ) ) {
++		if ( ! isset( $_POST['wcd_meta_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['wcd_meta_nonce'] ) ), 'wcd_save_meta' ) ) {
+ 			wp_send_json_error( array( 'message' => 'Invalid nonce' ), 403 );
+ 		}
+ 

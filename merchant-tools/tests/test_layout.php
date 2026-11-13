@@ -1,0 +1,538 @@
+<?php
+/**
+ * Configurable headings, custom blocks and the appearance tokens.
+ *
+ * The risk in all three is the same: a stored setting that silently reverts,
+ * or a default that quietly overwrites a deliberate choice. A heading an
+ * editor cleared on purpose must stay cleared, and a token left alone must
+ * keep the stylesheet's own value rather than being pinned to a copy of it.
+ *
+ *     php tests/test_layout.php
+ */
+error_reporting(E_ALL & ~E_DEPRECATED);
+define('ABSPATH', '/tmp/');
+
+$GLOBALS['options'] = array();
+$GLOBALS['head'] = '';
+$GLOBALS['shortcodes_run'] = array();
+
+function get_option($k, $d = false) { return $GLOBALS['options'][$k] ?? $d; }
+function update_option($k, $v) { $GLOBALS['options'][$k] = $v; return true; }
+function delete_option($k) { unset($GLOBALS['options'][$k]); return true; }
+function add_action($tag, $fn = null, $p = 10, $n = 1) { $GLOBALS['hooks'][$tag][] = $fn; }
+function add_filter() {}
+function add_submenu_page() {}
+// Runs the filters actually registered. It used to return $v untouched,
+// which silently made every filter-based check in this file assert nothing.
+function apply_filters($t, $v) {
+    $args = func_get_args();
+    foreach ($GLOBALS['filters'][$t] ?? array() as $fn) {
+        $v = $fn($v, $args[2] ?? null, $args[3] ?? null);
+    }
+    return $v;
+}
+function current_user_can() { return true; }
+function wp_verify_nonce() { return !empty($GLOBALS['nonce_ok']); }
+function wp_nonce_field() {}
+function submit_button() {}
+function selected($a, $b, $e = true) { return ''; }
+function sanitize_hex_color($c) {
+    return preg_match('/^#[0-9a-f]{6}$/i', (string) $c) ? strtolower($c) : null;
+}
+function sanitize_text_field($v) { return is_string($v) ? trim(strip_tags($v)) : ''; }
+function wp_kses_post($v) {
+    // Close enough for these checks: strip <script> but keep ordinary markup
+    // and shortcode brackets.
+    return preg_replace('#<script.*?</script>#is', '', (string) $v);
+}
+function wp_unslash($v) { return $v; }
+function esc_html($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
+function esc_attr($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
+function esc_textarea($v) { return htmlspecialchars((string) $v, ENT_QUOTES); }
+function esc_url($v) { return (string) $v; }
+function esc_html__($v, $d = null) { return $v; }
+function esc_html_e($v, $d = null) { echo $v; }
+function esc_attr_e($v, $d = null) { echo $v; }
+function __($v, $d = null) { return $v; }
+function _e($v, $d = null) { echo $v; }
+function _n($s, $p, $n, $d = null) { return $n === 1 ? $s : $p; }
+function wpautop($s) { return '<p>' . $s . '</p>'; }
+function do_shortcode($s) {
+    $GLOBALS['shortcodes_run'][] = $s;
+    return str_replace('[merchant_name]', 'VooPoo', $s);
+}
+function vc_merchant_post_types() { return array('merchant'); }
+function vc_merchant_display_name($id = null) { return 'VooPoo'; }
+// True, so the shortcode-backed blocks (policies, FAQs, related) run and
+// the do_shortcode stub records them. With it false they return '' and a
+// routing check cannot tell "in the wrong slot" from "did not render".
+function shortcode_exists($t) { return true; }
+
+// Every block helper emits a marker naming its block, so the routing checks
+// can see which blocks a slot rendered without replacing vc_merchant_block,
+// which lives in the file under test.
+function vc_merchant_offer_badge($id = null) { return ''; }
+function vc_merchant_hero($id = null) { return '<!--b:hero-->'; }
+function vc_merchant_destinations($id = null) { return '<!--b:destinations-->'; }
+function vc_merchant_taxonomy_tags($id = null) { return '<!--b:tags-->'; }
+function vc_merchant_quick_facts($id = null) { return '<!--b:quickfacts-->'; }
+function vc_merchant_info_panel($id = null) { return '<!--b:info-->'; }
+function vc_merchant_trust_info($id = null) { return 'Trust text.'; }
+function vc_merchant_links($id = null) { return '<!--b:links-->'; }
+function vc_merchant_coupon_section($id = null) { return '<!--b:coupon-->'; }
+function vc_merchant_coupon_shortcode($id = null) { return '[coupon_deals]'; }
+function add_shortcode($tag, $fn) { $GLOBALS['shortcodes'][$tag] = $fn; }
+function shortcode_atts($p, $a, $sc = '') { return array_merge($p, (array) $a); }
+function get_the_ID() { return 1; }
+function get_post_meta($id, $k, $s = false) { return ''; }
+function get_the_title($id = null) { return 'VooPoo'; }
+function get_permalink($id = null) { return 'https://vapingcheap.com/stores/voopoo/'; }
+function is_wp_error($t) { return false; }
+function get_the_terms($id, $tax) { return false; }
+function taxonomy_exists($t) { return false; }
+
+require __DIR__ . '/../wp-merchant-settings.php';
+require __DIR__ . '/../wp-merchant-render.php';
+
+$fail = 0;
+function check($l, $c, $d = '') {
+    global $fail;
+    if ($c) echo "PASS: $l\n"; else { echo "FAIL: $l" . ($d ? " -- $d" : '') . "\n"; $fail++; }
+}
+
+/* -------------------------------------------------------------------------
+ * Nothing changes until a setting is touched
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$layout = vc_layout_get();
+
+check('the three custom blocks exist as blocks',
+    isset($layout['where']['custom1'], $layout['where']['custom2'], $layout['where']['custom3']));
+check('and are hidden until used, so adding them changed no page',
+    $layout['where']['custom1'] === 'off'
+    && $layout['where']['custom2'] === 'off'
+    && $layout['where']['custom3'] === 'off',
+    json_encode(array($layout['where']['custom1'], $layout['where']['custom2'])));
+check('no headings are stored on a fresh install', $layout['headings'] === array(),
+    json_encode($layout['headings']));
+check('and no custom content', $layout['custom'] === array(), json_encode($layout['custom']));
+
+/* -------------------------------------------------------------------------
+ * Headings
+ * ---------------------------------------------------------------------- */
+
+check('an untouched block reports its shipped wording via the fallback',
+    vc_block_heading('about', 1, 'About VooPoo') === 'About VooPoo');
+
+$GLOBALS['options'][VC_LAYOUT_OPTION] = array(
+    'headings' => array('about' => 'Who are {brand}?'),
+);
+check('a saved heading is used', vc_block_heading('about', 1, 'About VooPoo') === 'Who are VooPoo?',
+    vc_block_heading('about', 1, 'About VooPoo'));
+check('{brand} is replaced', strpos(vc_block_heading('about', 1, 'x'), '{brand}') === false);
+check('an untouched sibling still uses its own fallback',
+    vc_block_heading('save', 1, 'Best ways to save at VooPoo') === 'Best ways to save at VooPoo');
+
+// The case that a naive array_merge over defaults would break.
+$GLOBALS['options'][VC_LAYOUT_OPTION] = array('headings' => array('trust' => ''));
+check('a heading cleared on purpose stays cleared',
+    vc_block_heading('trust', 1, 'Company information') === '',
+    vc_block_heading('trust', 1, 'Company information'));
+
+check('an unknown block has no configurable heading',
+    vc_layout_heading('not_a_block', 1) === '');
+
+check('every heading default belongs to a real block',
+    empty(array_diff(
+        array_keys(vc_layout_heading_defaults()),
+        array_merge(array_keys(vc_layout_defaults()), array('expired')))),
+    json_encode(array_diff(array_keys(vc_layout_heading_defaults()),
+        array_merge(array_keys(vc_layout_defaults()), array('expired')))));
+
+/* -------------------------------------------------------------------------
+ * Saving
+ * ---------------------------------------------------------------------- */
+
+function save($post) {
+    $GLOBALS['nonce_ok'] = true;
+    $_POST = array_merge(array('vc_layout_nonce' => 'x'), $post);
+    ob_start();
+    vc_layout_screen();
+    ob_get_clean();
+    $_POST = array();
+    $GLOBALS['nonce_ok'] = false;
+}
+
+$GLOBALS['options'] = array();
+save(array(
+    'heading' => array('about' => 'Who are {brand}?', 'trust' => ''),
+    'custom'  => array('custom1' => 'Our pick. [merchant_name] is solid.'),
+    'where'   => array('custom1' => 'main'),
+    'radius'  => '0',
+    'heading_size' => '1.8',
+    'surface' => '#fafafa',
+));
+
+$layout = vc_layout_get();
+check('a heading survives a save', ($layout['headings']['about'] ?? null) === 'Who are {brand}?',
+    json_encode($layout['headings']));
+check('a cleared heading survives a save as an empty string',
+    array_key_exists('trust', $layout['headings']) && $layout['headings']['trust'] === '',
+    json_encode($layout['headings']));
+check('custom content survives a save',
+    strpos($layout['custom']['custom1'] ?? '', 'Our pick') === 0,
+    json_encode($layout['custom']));
+check('moving a custom block out of Hidden sticks',
+    $layout['where']['custom1'] === 'main', $layout['where']['custom1']);
+check('the new appearance values survive',
+    (int) $layout['visual']['radius'] === 0
+    && (float) $layout['visual']['heading_size'] === 1.8
+    && $layout['visual']['surface'] === '#fafafa',
+    json_encode($layout['visual']));
+
+// Out-of-range and junk values must be clamped or rejected, not stored.
+save(array('radius' => '9999', 'heading_size' => '-5', 'text_size' => '99',
+           'surface' => 'javascript:alert(1)'));
+$v = vc_layout_get()['visual'];
+check('an absurd radius is clamped', (int) $v['radius'] === 40, (string) $v['radius']);
+check('a negative heading size is clamped up', (float) $v['heading_size'] >= 0.9,
+    (string) $v['heading_size']);
+check('an oversized text size is clamped', (float) $v['text_size'] <= 1.6, (string) $v['text_size']);
+check('a non-colour falls back to the default rather than being stored',
+    $v['surface'] === vc_layout_visual_defaults()['surface'], $v['surface']);
+
+// A reset must clear the new arrays too.
+save(array('vc_layout_reset' => '1'));
+$layout = vc_layout_get();
+check('a reset clears headings and custom content',
+    $layout['headings'] === array() && $layout['custom'] === array(),
+    json_encode(array($layout['headings'], $layout['custom'])));
+
+/* -------------------------------------------------------------------------
+ * Custom block rendering
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['options'][VC_LAYOUT_OPTION] = array(
+    'custom'   => array('custom1' => 'Our pick. [merchant_name] is solid.'),
+    'headings' => array('custom1' => 'Why we rate {brand}'),
+);
+
+$out = vc_merchant_custom_block('custom1', 1);
+check('a custom block renders its content', strpos($out, 'Our pick.') !== false, $out);
+check('its shortcodes are expanded', strpos($out, 'VooPoo is solid') !== false, $out);
+check('its heading renders with {brand} resolved',
+    strpos($out, '<h2>Why we rate VooPoo</h2>') !== false, $out);
+check('and it is wrapped so it can be styled',
+    strpos($out, 'vc-custom--custom1') !== false, $out);
+
+$GLOBALS['options'][VC_LAYOUT_OPTION] = array(
+    'custom' => array('custom1' => 'No heading here'),
+);
+$out = vc_merchant_custom_block('custom1', 1);
+check('a block with no heading renders without an empty h2',
+    strpos($out, '<h2>') === false && strpos($out, 'No heading here') !== false, $out);
+
+$GLOBALS['options'][VC_LAYOUT_OPTION] = array('custom' => array('custom1' => '   '));
+check('an empty custom block renders nothing at all',
+    vc_merchant_custom_block('custom1', 1) === '',
+    vc_merchant_custom_block('custom1', 1));
+check('an unused slot renders nothing', vc_merchant_custom_block('custom3', 1) === '');
+
+/* -------------------------------------------------------------------------
+ * CSS tokens
+ * ---------------------------------------------------------------------- */
+
+function head_css() {
+    $GLOBALS['head'] = '';
+    ob_start();
+    foreach ($GLOBALS['hooks']['wp_head'] ?? array() as $fn) { $fn(); }
+    return ob_get_clean();
+}
+
+$GLOBALS['options'] = array();
+check('an untouched install emits no inline CSS at all',
+    trim(head_css()) === '', head_css());
+
+$GLOBALS['options'][VC_LAYOUT_OPTION] = array('visual' => array_merge(
+    vc_layout_visual_defaults(),
+    array('radius' => 2, 'heading_size' => 1.8, 'surface' => '#fafafa')));
+$css = head_css();
+check('only the changed tokens are emitted',
+    strpos($css, '--vc-radius:2px') !== false
+    && strpos($css, '--vc-heading-size:1.8rem') !== false
+    && strpos($css, '--vc-surface:#fafafa') !== false, $css);
+check('and an unchanged token is left to the stylesheet',
+    strpos($css, '--vc-text:') === false && strpos($css, '--vc-section-gap') === false, $css);
+
+/* --- Splitting the page around the coupon widget -----------------------
+ *
+ * On a ReHub store page the theme prints the coupons mid-page, and every
+ * block this plugin renders landed above them -- so a reader met the whole
+ * profile before reaching the codes they came for. The split point is the
+ * coupon block in the order already set, so there is no second list to keep
+ * in step with it.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+
+$above = vc_layout_split_blocks('above');
+$below = vc_layout_split_blocks('below');
+
+check('by default only a little sits above the coupons',
+    count($above) <= 3, implode(', ', $above));
+check('and the title is part of it',
+    in_array('title', $above, true), implode(', ', $above));
+check('the heavy reference blocks sit below',
+    in_array('policies', $below, true) && in_array('faqs', $below, true)
+    && in_array('destinations', $below, true), implode(', ', $below));
+
+// The theme renders the coupons, so neither part may render them again.
+check('the coupon block itself is in neither part',
+    !in_array('coupon', $above, true) && !in_array('coupon', $below, true));
+
+// Every main block has to land somewhere, or a block silently disappears.
+$main = vc_layout_blocks('main');
+$rejoined = array_merge($above, array('coupon'), $below);
+check('no main block is lost by the split',
+    $rejoined === $main,
+    implode(',', $rejoined) . ' vs ' . implode(',', $main));
+
+// Moving a block in the Layout screen has to move it on the page.
+$layout = vc_layout_get();
+$order = $layout['order'];
+$order = array_values(array_diff($order, array('policies')));
+array_splice($order, array_search('coupon', $order, true), 0, 'policies');
+update_option('vc_merchant_layout',
+    array('order' => $order, 'where' => $layout['where']));
+
+check('dragging a block above Coupon widget moves it above the coupons',
+    in_array('policies', vc_layout_split_blocks('above'), true),
+    implode(', ', vc_layout_split_blocks('above')));
+check('and it leaves the lower part',
+    !in_array('policies', vc_layout_split_blocks('below'), true));
+
+$GLOBALS['options'] = array();
+
+// Coupon widget switched off: there is no split point, and the safe side to
+// fail to is the behaviour that worked before the split existed.
+$layout = vc_layout_get();
+$where = $layout['where'];
+$where['coupon'] = 'off';
+update_option('vc_merchant_layout',
+    array('order' => $layout['order'], 'where' => $where));
+
+check('with the coupon block off, everything stays above',
+    vc_layout_split_blocks('above') === vc_layout_blocks('main'),
+    implode(', ', vc_layout_split_blocks('above')));
+check('and nothing is rendered twice below',
+    vc_layout_split_blocks('below') === array());
+
+$GLOBALS['options'] = array();
+
+/* --- Three slots, and every block in exactly one -----------------------
+ *
+ * ReHub lays a store page out in three places: above its offer list, below
+ * it, and the sidebar. Our layout has to partition into exactly those. The
+ * bug this pins: the side blocks used to be appended to the LOWER slot, so
+ * Merchant information, Company information, the link lists and Similar
+ * stores rendered in the middle of the main column as though they were body
+ * copy, and the sidebar got nothing.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+
+$above = vc_layout_split_blocks('above');
+$below = vc_layout_split_blocks('below');
+$side  = vc_layout_blocks('side');
+
+check('the side blocks are a slot of their own, not part of the lower one',
+    array_intersect($side, $below) === array(),
+    implode(',', array_intersect($side, $below)));
+check('and not part of the upper one either',
+    array_intersect($side, $above) === array(),
+    implode(',', array_intersect($side, $above)));
+
+// The reference material belongs beside the page, not inside it.
+foreach (array('info', 'trust', 'links', 'related') as $block) {
+    check("$block is a sidebar block",
+        in_array($block, $side, true), implode(',', $side));
+}
+
+// Nothing may be lost, and nothing may appear twice.
+$all = array_merge($above, array('coupon'), $below, $side);
+$layout = vc_layout_get();
+$live = array_values(array_filter($layout['order'], function ($k) use ($layout) {
+    return $layout['where'][$k] !== 'off';
+}));
+sort($all);
+sort($live);
+check('the three slots plus the coupon list account for every live block',
+    $all === $live,
+    implode(',', array_diff($live, $all)) . ' missing / '
+    . implode(',', array_diff($all, $live)) . ' extra');
+check('and no block lands in two slots',
+    count($all) === count(array_unique($all)));
+
+/* --- The renderer must actually route them that way --------------------
+ *
+ * The partition above is arithmetic on a list; this calls the renderer and
+ * looks at what each slot emits. The bug was here, not in the arithmetic:
+ * the side blocks were appended to the lower slot, and no check noticed
+ * because nothing exercised vc_merchant_render_page.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$GLOBALS['rendered'] = array();
+
+/**
+ * Which blocks a slot renders, read from the shortcodes it ran.
+ *
+ * vc_merchant_block cannot be replaced -- it lives in the file under test --
+ * so the do_shortcode stub's record is the signal instead. Each block emits
+ * its own [merchant_*] shortcode, which names it.
+ */
+function render_slot($slot) {
+    $GLOBALS['shortcodes_run'] = array();
+    $html = vc_merchant_render_page(
+        array('id' => 1, 'sidebar' => 'no', 'split' => $slot));
+
+    $names = array();
+    foreach ($GLOBALS['shortcodes_run'] as $sc) {
+        if (preg_match('/^\[([a-z_]+)/', $sc, $m)) {
+            $names[$m[1]] = true;
+        }
+    }
+    if (preg_match_all('/<!--b:([a-z:]+)-->/', $html, $m)) {
+        foreach ($m[1] as $marker) {
+            $names[$marker] = true;
+        }
+    }
+    if (strpos($html, 'vc-page-title') !== false) { $names['title'] = true; }
+    if (strpos($html, 'vc-trust-section') !== false) { $names['trust'] = true; }
+
+    return array_keys($names);
+}
+
+/** The shortcode a block is expected to run, where it runs one. */
+function slot_has($rendered, $shortcode) {
+    return in_array($shortcode, $rendered, true);
+}
+
+$r_above = render_slot('above');
+$r_below = render_slot('below');
+$r_side  = render_slot('side');
+
+// The sidebar's own reference blocks, by the shortcode each one runs.
+$side_shortcodes = array('info', 'trust', 'links', 'merchant_related');
+
+foreach ($side_shortcodes as $sc) {
+    check("the sidebar slot renders $sc", slot_has($r_side, $sc),
+        implode(',', $r_side));
+    // This is the bug, stated directly.
+    check("the lower slot does NOT render $sc", !slot_has($r_below, $sc),
+        implode(',', $r_below));
+    check("and nor does the upper slot", !slot_has($r_above, $sc),
+        implode(',', $r_above));
+}
+
+// The main-column blocks must be in the main slots, not the sidebar.
+foreach (array('merchant_policies', 'merchant_faqs', 'destinations') as $sc) {
+    check("$sc renders in a main slot",
+        slot_has($r_below, $sc) || slot_has($r_above, $sc),
+        'above: ' . implode(',', $r_above) . ' | below: ' . implode(',', $r_below));
+    check("$sc does not render in the sidebar", !slot_has($r_side, $sc),
+        implode(',', $r_side));
+}
+
+check('the title is in the upper slot, under the store heading',
+    slot_has($r_above, 'title'), implode(',', $r_above));
+check('and not repeated in the lower slot',
+    !slot_has($r_below, 'title'), implode(',', $r_below));
+
+// Unsplit, the whole page still renders everything: our own merchant pages
+// have no theme laying them out.
+$r_all = render_slot('');
+foreach (array_merge($side_shortcodes, array('merchant_policies')) as $sc) {
+    check("unsplit, $sc still renders", slot_has($r_all, $sc),
+        implode(',', $r_all));
+}
+
+/* --- The ReHub arrangement --------------------------------------------
+ *
+ * What a reader is doing at each point decides the place. Above the offers
+ * they are judging whether the shop is worth their time: what it is, how to
+ * save there, who checked. Below are the details they want once they have a
+ * code. The sidebar takes reference panels, not prose -- long copy in a
+ * 250px column is what made it look wrong.
+ * -------------------------------------------------------------------- */
+
+$GLOBALS['options'] = array();
+$moved = vc_layout_apply_rehub_preset();
+
+$above = vc_layout_split_blocks('above');
+$below = vc_layout_split_blocks('below');
+$side  = vc_layout_blocks('side');
+
+foreach (array('about', 'save', 'editorial') as $block) {
+    check("$block sits above the offers", in_array($block, $above, true),
+        implode(',', $above));
+    check("and not in the sidebar", !in_array($block, $side, true),
+        implode(',', $side));
+}
+
+foreach (array('policies', 'faqs', 'destinations', 'quickfacts') as $block) {
+    check("$block sits below the offers", in_array($block, $below, true),
+        implode(',', $below));
+}
+
+foreach (array('info', 'trust', 'links', 'related') as $block) {
+    check("$block stays a sidebar panel", in_array($block, $side, true),
+        implode(',', $side));
+}
+
+// The upper slot has to stay short: it is what delays the offers.
+check('the upper slot holds five blocks or fewer',
+    count($above) <= 5, count($above) . ': ' . implode(',', $above));
+
+// Nothing may be lost, and the coupon block must remain the split point.
+check('the preset accounts for every block',
+    $moved === count(vc_layout_defaults()),
+    $moved . ' of ' . count(vc_layout_defaults()));
+check('the coupon block is still the split point and renders in neither half',
+    !in_array('coupon', $above, true) && !in_array('coupon', $below, true));
+
+// Visual settings are a separate concern and must survive.
+$GLOBALS['options'] = array();
+update_option(VC_LAYOUT_OPTION, array(
+    'order' => array_keys(vc_layout_defaults()),
+    'where' => array_map(function ($d) { return $d['where']; }, vc_layout_defaults()),
+    'visual' => array('accent' => '#ff0000') + vc_layout_visual_defaults(),
+));
+vc_layout_apply_rehub_preset();
+check('applying the preset keeps the visual settings',
+    vc_layout_get()['visual']['accent'] === '#ff0000',
+    vc_layout_get()['visual']['accent']);
+
+// A block the preset does not name keeps its place rather than vanishing.
+$GLOBALS['filters']['vc_layout_rehub_preset'][] = function ($p) {
+    unset($p['policies']);
+    return $p;
+};
+$GLOBALS['options'] = array();
+vc_layout_apply_rehub_preset();
+// Asserted against the STORED option, not vc_layout_get(): that backfills
+// a missing key from the defaults, so it cannot tell "kept" from "dropped".
+$stored = get_option(VC_LAYOUT_OPTION);
+check('a block the preset omits is still in the stored order',
+    in_array('policies', $stored['order'], true),
+    implode(',', $stored['order']));
+check('and still has a stored place of its own',
+    isset($stored['where']['policies']),
+    json_encode(array_keys($stored['where'])));
+$GLOBALS['filters']['vc_layout_rehub_preset'] = array();
+$GLOBALS['options'] = array();
+
+echo "\n";
+if ($fail) { echo "$fail check(s) FAILED\n"; exit(1); }
+echo "All layout customisation checks passed.\n";
