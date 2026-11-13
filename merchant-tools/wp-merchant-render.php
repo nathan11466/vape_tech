@@ -259,6 +259,14 @@ function vc_merchant_block($block, $post_id, $atts = array()) {
             }
             return do_shortcode('[merchant_related id="' . $post_id . '" limit="6"]');
 
+        case 'stats':
+            return shortcode_exists('merchant_stats')
+                ? do_shortcode('[merchant_stats id="' . $post_id . '"]') : '';
+
+        case 'offertable':
+            return shortcode_exists('merchant_offer_table')
+                ? do_shortcode('[merchant_offer_table id="' . $post_id . '"]') : '';
+
         case 'editorial':
             return shortcode_exists('merchant_editorial')
                 ? do_shortcode('[merchant_editorial id="' . $post_id . '"]') : '';

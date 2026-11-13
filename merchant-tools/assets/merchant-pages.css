@@ -1025,3 +1025,60 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
 /* Link lists: the label wraps, the bullet stays put. */
 .vc-storepage--side .vc-links li,
 .vc-storepage--side .vc-related-links li { display: list-item; }
+
+/* ---------- Counted store stats ----------
+   Numbers a reader can scan in two seconds, where prose used to be. */
+
+.vc-stats { margin: 0 0 1.25rem; }
+
+.vc-stats__list { list-style: none; margin: 0; padding: 0; }
+
+.vc-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.42rem 0;
+  border-bottom: 1px solid var(--vc-border);
+  font-size: 0.88rem;
+}
+
+.vc-stat:last-child { border-bottom: 0; }
+.vc-stat__label { color: var(--vc-text-soft); }
+.vc-stat__value { font-weight: 650; text-align: right; white-space: nowrap; }
+
+/* ---------- Offer summary table ---------- */
+
+.vc-offer-table { margin: 2rem 0; }
+.vc-offer-table table { width: 100%; border-collapse: collapse; font-size: 0.94rem; }
+
+.vc-offer-table th {
+  text-align: left;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vc-text-soft);
+  border-bottom: 2px solid var(--vc-border);
+  padding: 0 0.75rem 0.5rem 0;
+}
+
+.vc-offer-table td {
+  padding: 0.65rem 0.75rem 0.65rem 0;
+  border-bottom: 1px solid var(--vc-border);
+  vertical-align: top;
+}
+
+.vc-offer-table td:first-child { width: 52%; }
+.vc-offer-table code { font-size: 0.86rem; letter-spacing: 0.04em; }
+
+@media (max-width: 640px) {
+  /* Four columns do not fit a phone; the offer keeps its row and the rest
+     stack under it as labelled pairs. */
+  .vc-offer-table thead { display: none; }
+  .vc-offer-table tr { display: block; padding: 0.6rem 0; border-bottom: 1px solid var(--vc-border); }
+  .vc-offer-table td { display: flex; justify-content: space-between; gap: 1rem; border: 0; padding: 0.15rem 0; }
+  .vc-offer-table td:first-child { width: auto; font-weight: 650; }
+  .vc-offer-table td:nth-child(2)::before { content: "Discount"; color: var(--vc-text-soft); }
+  .vc-offer-table td:nth-child(3)::before { content: "Expires"; color: var(--vc-text-soft); }
+  .vc-offer-table td:nth-child(4)::before { content: "Code"; color: var(--vc-text-soft); }
+}
