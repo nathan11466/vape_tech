@@ -458,10 +458,12 @@
 .widget .vc-related-links { grid-template-columns: 1fr; }
 
 .vc-sidebar .vc-merchant-info dl,
-.widget .vc-merchant-info dl { grid-template-columns: 1fr; gap: 0.15rem; }
+.widget .vc-merchant-info dl,
+.vc-storepage--side .vc-merchant-info dl { grid-template-columns: 1fr; gap: 0.15rem; }
 
 .vc-sidebar .vc-merchant-info dd,
-.widget .vc-merchant-info dd { margin-bottom: 0.6rem; }
+.widget .vc-merchant-info dd,
+.vc-storepage--side .vc-merchant-info dd { margin-bottom: 0.6rem; }
 
 /* ---------- Small screens ---------- */
 
@@ -983,8 +985,22 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
 .vc-storepage--side dt { font-size: 0.86rem; line-height: 1.45; }
 
 /* A label/value grid cannot work in this width: stack it. */
+/* Any label/value grid in this column stacks, named or not.
+   The sidebar is about 220px wide. A two-column grid there gives the label
+   160px and the value what is left, so "United States" came out as one
+   letter per line. The rule to stack these already existed but was scoped
+   to .vc-sidebar and .widget, and this column is neither -- so enumerating
+   the blocks is what failed. This catches the next one too. */
 .vc-storepage--side .vc-policy,
-.vc-storepage--side .vc-fact { grid-template-columns: 1fr; gap: 0.15rem; }
+.vc-storepage--side .vc-fact,
+.vc-storepage--side dl {
+  display: block;
+  grid-template-columns: 1fr;
+  gap: 0.15rem;
+}
+
+.vc-storepage--side dt { margin-top: 0.5rem; }
+.vc-storepage--side dd { margin: 0 0 0.15rem; }
 
 .vc-storepage--side ul { padding-left: 1.1rem; margin: 0; }
 
@@ -1023,8 +1039,10 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
 .vc-storepage--side p,
 .vc-storepage--side li,
 .vc-storepage--side a {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* break-word, not anywhere: break a word only when it genuinely cannot
+     fit. `anywhere` also shrinks the min-content width, which lets a column
+     collapse far narrower than its text and makes this worse, not better. */
+  overflow-wrap: break-word;
   min-width: 0;
 }
 
