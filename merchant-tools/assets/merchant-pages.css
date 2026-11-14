@@ -452,10 +452,36 @@
 
 .vc-count { color: var(--vc-text-soft); font-size: 0.85rem; }
 
-/* ---------- Narrow columns (sidebar / widget) ---------- */
+/* ---------- Narrow columns (sidebar / widget) ----------
+ *
+ * Every grid in this stylesheet that fits its own columns asks for a track
+ * of 150-230px. A narrow column is ~220px, so any of them can end up with a
+ * track wider than the column, and the overflow is silent: the text does not
+ * wrap, it hangs outside. Collapsing them all to one column here, in one
+ * place, is what stops the next grid added above from inheriting the bug.
+ *
+ * tests/test_css.php checks this list against the stylesheet, so a new
+ * auto-fitting grid fails the suite until it is named here.
+ */
 
 .vc-sidebar .vc-related-links,
-.widget .vc-related-links { grid-template-columns: 1fr; }
+.widget .vc-related-links,
+.vc-storepage--side .vc-related-links,
+.vc-sidebar .vc-archive-siblings ul,
+.widget .vc-archive-siblings ul,
+.vc-storepage--side .vc-archive-siblings ul,
+.vc-sidebar .vc-quickfacts,
+.widget .vc-quickfacts,
+.vc-storepage--side .vc-quickfacts,
+.vc-sidebar .vc-links__groups,
+.widget .vc-links__groups,
+.vc-storepage--side .vc-links__groups,
+.vc-sidebar .vc-destination-index__list,
+.widget .vc-destination-index__list,
+.vc-storepage--side .vc-destination-index__list,
+.vc-sidebar .vc-law-list__items,
+.widget .vc-law-list__items,
+.vc-storepage--side .vc-law-list__items { grid-template-columns: 1fr; }
 
 .vc-sidebar .vc-merchant-info dl,
 .widget .vc-merchant-info dl,
@@ -959,6 +985,8 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
 .vc-storepage--side .vc-section,
 .vc-storepage--side .vc-trust-section,
 .vc-storepage--side .vc-links,
+.vc-storepage--side .vc-editorial,
+.vc-storepage--side .vc-stats,
 .vc-storepage--side .vc-related-stores {
   margin: 0 0 1.1rem;
   padding: 0;
@@ -993,7 +1021,11 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
    the blocks is what failed. This catches the next one too. */
 .vc-storepage--side .vc-policy,
 .vc-storepage--side .vc-fact,
-.vc-storepage--side dl {
+.vc-storepage--side dl,
+.vc-sidebar .vc-policy,
+.vc-sidebar .vc-fact,
+.widget .vc-policy,
+.widget .vc-fact {
   display: block;
   grid-template-columns: 1fr;
   gap: 0.15rem;
@@ -1056,6 +1088,50 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
 /* Link lists: the label wraps, the bullet stays put. */
 .vc-storepage--side .vc-links li,
 .vc-storepage--side .vc-related-links li { display: list-item; }
+
+/* Social chips at full size wrap two to a row and cost six lines for six
+   links. Smaller type and tighter padding fits three to a row. */
+.vc-storepage--side .vc-links__list--social a {
+  padding: 0.22em 0.6em;
+  font-size: 0.78rem;
+}
+
+.vc-storepage--side .vc-links__groups { gap: 0.9rem 1rem; }
+
+/* Reviewed by / how we checked. Short lines of attribution, so they read as
+   a caption rather than as another paragraph competing with the panels. */
+.vc-storepage--side .vc-editorial {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--vc-text-soft);
+  border-top: 1px solid var(--vc-border);
+  padding-top: 0.8rem;
+}
+
+/* Serves / sells. These are taxonomy links, so the theme was colouring them
+   with its own link colour and the block read as a row of adverts. In the
+   sidebar the label goes above the values, as every other panel does. */
+.vc-storepage--side .vc-tags__row {
+  font-size: 0.85rem;
+  margin: 0 0 0.6rem;
+}
+
+.vc-storepage--side .vc-tags__row strong {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vc-text-soft);
+  margin-bottom: 0.1rem;
+}
+
+.vc-storepage--side .vc-tags__row a {
+  color: var(--vc-deal);
+  text-decoration: none;
+}
+
+.vc-storepage--side .vc-tags__row a:hover { text-decoration: underline; }
 
 /* ---------- Counted store stats ----------
    Numbers a reader can scan in two seconds, where prose used to be. */

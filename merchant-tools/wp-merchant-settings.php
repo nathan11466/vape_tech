@@ -158,7 +158,6 @@ function vc_layout_rehub_preset() {
         'hero'         => 'main',
         'about'        => 'main',
         'save'         => 'main',
-        'editorial'    => 'main',
         'coupon'       => 'main',
         'quickfacts'   => 'main',
         'policies'     => 'main',
@@ -166,9 +165,12 @@ function vc_layout_rehub_preset() {
         'faqs'         => 'main',
         'internal'     => 'main',
         'offertable'   => 'main',
+        // The sidebar, top to bottom: the numbers, then the facts behind
+        // them, then who stands behind the facts, then where to go next.
         'stats'        => 'side',
         'info'         => 'side',
         'trust'        => 'side',
+        'editorial'    => 'side',
         'links'        => 'side',
         'related'      => 'side',
         'tags'         => 'side',

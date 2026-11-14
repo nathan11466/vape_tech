@@ -461,10 +461,13 @@ foreach (array_merge($side_shortcodes, array('merchant_policies')) as $sc) {
 /* --- The ReHub arrangement --------------------------------------------
  *
  * What a reader is doing at each point decides the place. Above the offers
- * they are judging whether the shop is worth their time: what it is, how to
- * save there, who checked. Below are the details they want once they have a
- * code. The sidebar takes reference panels, not prose -- long copy in a
- * 250px column is what made it look wrong.
+ * they are judging whether the shop is worth their time: what it is and how
+ * to save there. Below are the details they want once they have a code.
+ *
+ * The sidebar takes everything short and referable -- counted figures,
+ * contact details, who checked and when, social and store links -- and no
+ * prose. Long copy in a 220px column is what made it look wrong, and a
+ * paragraph is long however few words it has.
  * -------------------------------------------------------------------- */
 
 $GLOBALS['options'] = array();
@@ -474,7 +477,7 @@ $above = vc_layout_split_blocks('above');
 $below = vc_layout_split_blocks('below');
 $side  = vc_layout_blocks('side');
 
-foreach (array('about', 'save', 'editorial') as $block) {
+foreach (array('about', 'save') as $block) {
     check("$block sits above the offers", in_array($block, $above, true),
         implode(',', $above));
     check("and not in the sidebar", !in_array($block, $side, true),
@@ -486,9 +489,20 @@ foreach (array('policies', 'faqs', 'destinations', 'quickfacts') as $block) {
         implode(',', $below));
 }
 
-foreach (array('info', 'trust', 'links', 'related') as $block) {
+foreach (array('stats', 'info', 'trust', 'editorial', 'links', 'related',
+               'tags') as $block) {
     check("$block stays a sidebar panel", in_array($block, $side, true),
         implode(',', $side));
+    check("and renders in neither half of the main column",
+        !in_array($block, $above, true) && !in_array($block, $below, true),
+        implode(',', $above) . ' | ' . implode(',', $below));
+}
+
+// The two blocks that are paragraphs rather than panels. Naming them keeps
+// the rule from being quietly relaxed one block at a time.
+foreach (array('about', 'save') as $block) {
+    check("$block is not in the sidebar, because it is prose",
+        !in_array($block, $side, true), implode(',', $side));
 }
 
 // The upper slot has to stay short: it is what delays the offers.
