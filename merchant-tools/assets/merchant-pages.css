@@ -478,21 +478,34 @@
   .vc-archive-card__cta a { display: block; text-align: center; }
 }
 
-/* ---------- Dark mode, when the theme opts in ---------- */
+/* ---------- Dark mode, only when the PAGE says it is dark ----------
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --vc-text: #e9ecef;
-    --vc-text-soft: #a6aeb8;
-    --vc-border: #2f353c;
-    --vc-border-strong: #3c434b;
-    --vc-surface: #1a1e23;
-    --vc-surface-alt: #21262c;
-    --vc-accent-soft: #1530240;
-    --vc-deal-soft: #15283a;
-    --vc-warn-bg: #2f2718;
-    --vc-shadow: 0 1px 3px rgba(0, 0, 0, .35);
-  }
+   This used to key off prefers-color-scheme behind
+   `:root:not([data-theme="light"])`, which reads as an opt-in and is the
+   opposite: no theme sets data-theme="light", so the :not() always matched
+   and these variables flipped on any visitor whose operating system was in
+   dark mode. ReHub has no data-theme attribute and no prefers-color-scheme
+   rules of its own, so it stayed light while our blocks went dark -- dark
+   boxes with white text in the middle of a light page.
+
+   We render inside someone else's theme now, so we follow the page rather
+   than the operating system. That means a positive opt-in: an explicit
+   data-theme="dark", or ReHub's own dark_body class, which is what it
+   actually sets when its dark style is switched on. */
+
+:root[data-theme="dark"],
+body.dark_body {
+  --vc-text: #e9ecef;
+  --vc-text-soft: #a6aeb8;
+  --vc-border: #2f353c;
+  --vc-border-strong: #3c434b;
+  --vc-surface: #1a1e23;
+  --vc-surface-alt: #21262c;
+  /* Was #1530240 -- seven hex digits, so invalid and silently ignored. */
+  --vc-accent-soft: #153024;
+  --vc-deal-soft: #15283a;
+  --vc-warn-bg: #2f2718;
+  --vc-shadow: 0 1px 3px rgba(0, 0, 0, .35);
 }
 
 /* ---------- Merchant links ---------- */

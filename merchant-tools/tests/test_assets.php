@@ -117,6 +117,46 @@ check('and turning the filter off restores the default',
     !vc_merchant_needs_styles());
 
 echo "\n";
+/* --- The stylesheet must not impose a colour scheme ---------------------
+ *
+ * We render inside someone else's theme. Keying dark mode off the visitor's
+ * operating system put dark boxes with white text in the middle of ReHub's
+ * light page: ReHub sets no data-theme attribute and has no
+ * prefers-color-scheme rules, so nothing on its side went dark with us.
+ *
+ * The old guard, `:root:not([data-theme="light"])`, read as an opt-in and
+ * was the opposite -- no theme sets data-theme="light", so it always
+ * matched.
+ * -------------------------------------------------------------------- */
+
+$css = file_get_contents(__DIR__ . '/../assets/merchant-pages.css');
+
+// Strip comments first: the fix is explained in one, and a naive search
+// would find its own explanation and pass.
+$rules = preg_replace('!/\*.*?\*/!s', '', $css);
+
+check('the stylesheet follows the page, not the operating system',
+    strpos($rules, 'prefers-color-scheme') === false,
+    'a prefers-color-scheme rule is back');
+
+check('and dark mode is a positive opt-in',
+    strpos($rules, ':root[data-theme="dark"]') !== false);
+
+check('never a negative one, which matches every theme that sets nothing',
+    strpos($rules, ':not([data-theme="light"])') === false);
+
+check('ReHub\'s own dark class is honoured',
+    strpos($rules, 'body.dark_body') !== false);
+
+// A hex colour with the wrong digit count is silently dropped by the
+// browser, so the value falls back and nothing looks obviously broken.
+preg_match_all('/#[0-9a-fA-F]+/', $rules, $hexes);
+$bad = array_values(array_filter($hexes[0], function ($h) {
+    return !in_array(strlen($h) - 1, array(3, 4, 6, 8), true);
+}));
+check('every hex colour has a valid digit count',
+    $bad === array(), implode(', ', $bad));
+
 if ($fails) {
     echo count($fails) . " check(s) FAILED: " . implode(', ', $fails) . "\n";
     exit(1);
