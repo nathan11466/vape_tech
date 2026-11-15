@@ -4,28 +4,37 @@ The plugin was built to render its own store pages at `/stores/<slug>/`. It
 is now an adapter that feeds ReHub's store pages at `/coupon-codes/<slug>/`.
 Those are different jobs, and most of the first one is still present.
 
-Current surface: **20 modules, ~11,300 lines, 28 shortcodes, 15 options,
-12 admin screens, 7 WP-CLI commands.**
+Current surface: **21 modules, ~11,565 lines, 28 shortcodes, 14 options,
+12 admin screens, 8 WP-CLI commands**, plus 9 Python data scripts.
 
 `wp merchant doctor` reads this install and says which features are live,
 idle, inert or causing a problem. This file is the part that can be decided
 without looking at a database.
 
-## The decision everything else hangs on
+## How much of this is actually dead
 
-**Are `/stores/` pages still a destination, or not?**
+Very little, and it is worth saying so before the list of candidates below.
+Of 227 functions, **2** are never referenced anywhere else
+(`vc_merchant_is_publishable`, `vc_layout_has_sidebar`). All 28 shortcodes
+are referenced. The plugin is not rotting.
 
-While they are, roughly a third of this plugin has to stay: the `merchant`
-post type's own single template, the two-column layout, the title and hero
-blocks, H1 wording, sidebar width, the archive pages. While they are *also*
-live alongside ReHub's pages, every shop has two indexable URLs with the
-same content.
+What it has instead is code sized for jobs that have since ended. That is a
+different problem and it needs a different fix: deciding, not hunting.
 
-Switching the handover on (ReHub Sync screen) 301s them to ReHub. After
-that, the rendering half becomes genuinely dead rather than merely unused,
-and can go.
+## The decision everything else hung on — now made
 
-Until that call is made, nothing below can be deleted safely.
+**Are `/stores/` pages still a destination?** No. Checked live:
+
+    /staging/stores/2fdeal/        301 -> /staging/coupon-codes/2fdeal/
+    /staging/stores/central-vapors/ 301 -> /staging/coupon-codes/central-vapors/
+    /staging/stores/vape-com/      301 -> /staging/coupon-codes/vape-com/
+
+The handover is on. That unblocks everything this file previously held
+back: the rendering half is now genuinely dead rather than merely unused.
+
+One leftover: **`/staging/stores/` itself still returns 200** (the post-type
+archive index). It carries `noindex, nofollow`, so it is not an SEO problem,
+but it is a live page nothing links to and nothing needs.
 
 ## Live, and load-bearing
 
@@ -55,7 +64,10 @@ Not broken — simply unreachable while ReHub renders the store page.
 - **The two-column split layout** (`.vc-merchant-page--split`) — the store
   page passes `sidebar => 'no'` and uses ReHub's column.
 
-These become deletable the day `/stores/` stops serving. Not before.
+That day has come: `/stores/` single pages 301 to ReHub, so these are
+deletable now. They are listed here rather than deleted because removing a
+rendering path is the kind of change that wants one deliberate pass with the
+tests, not a line here and there.
 
 ## Legacy of the coupon plugin
 
@@ -99,14 +111,30 @@ currently the only copy of that data.
    ever documented, so a page using it degrades to nothing rather than
    printing raw text.
 
+## Over-building, as distinct from dead code
+
+Three places where the machinery outgrew the job:
+
+- **The layout system.** `render` + `settings` is about 1,000 lines giving
+  every block an order, a column, an on/off switch, an editable heading and
+  a set of visual tokens. In practice the arrangement is now one button:
+  "Arrange for a ReHub store page". The blocks themselves (`sections`) earn
+  their keep; the machinery around choosing between them mostly does not.
+- **Twelve admin screens** for one plugin, several of them a single form
+  that runs once (Import Logos, Import Page Copy, Law links). These could be
+  tabs on one screen, or CLI-only, without losing anything.
+- **`coupons` (1,077 lines) and `migrate/`** exist to talk to a plugin that
+  is being retired. They stay only until the 42 coupons are migrated, and
+  that migration is the thing blocking their removal.
+
 ## The honest risk
 
 Most of this is inert rather than harmful: dead code in a plugin costs
-maintenance, not correctness. The two things that are actively causing a
-problem both show up in `wp merchant doctor`:
+maintenance, not correctness. What is actually outstanding:
 
-- **two live URLs per shop** while the handover is off, and
-- **law links pointing at `/staging/`**, which break on going live.
+- **law links pointing at `/staging/`**, which break on going live, and
+- **42 coupons still in the old plugin**, which is what holds `coupons`
+  and `migrate/` in place and leaves store pages with an empty middle.
 
-Those are worth fixing this week. The deletions can wait for the `/stores/`
-decision.
+Those two are worth fixing before any deletion. Deleting code does not make
+a page work; those two do.
