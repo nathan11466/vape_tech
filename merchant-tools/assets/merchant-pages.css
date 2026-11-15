@@ -29,6 +29,19 @@
   --vc-figure-size: 3.1rem;
   --vc-radius: 10px;
   --vc-radius-lg: 14px;
+
+  /* Icons, as mask images. They are masks rather than background images so
+     they take their colour from the text they sit beside -- one definition
+     works in light and dark, and in a rebrand that changes the accent.
+     Stroked rather than filled, so they stay legible at 15px. Override one
+     here to change it everywhere it is used. */
+  --vc-icon-chart: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M6 21V11M12 21V4M18 21v-7'/%3E%3C/svg%3E");
+  --vc-icon-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5M12 7.6v.4'/%3E%3C/svg%3E");
+  --vc-icon-shield: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7.5 3v5.2c0 4.6-3.1 8.1-7.5 10.3C7.6 19.3 4.5 15.8 4.5 11.2V6L12 3z'/%3E%3Cpath d='M9 12l2.2 2.2L15.5 10'/%3E%3C/svg%3E");
+  --vc-icon-link: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.5 13.5a4.5 4.5 0 006.7.5l2.8-2.8a4.5 4.5 0 00-6.4-6.4l-1.6 1.6'/%3E%3Cpath d='M13.5 10.5a4.5 4.5 0 00-6.7-.5L4 12.8a4.5 4.5 0 006.4 6.4l1.6-1.6'/%3E%3C/svg%3E");
+  --vc-icon-store: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 9.5h17M5 9.5V5h14v4.5M5 9.5V20h14V9.5'/%3E%3Cpath d='M10 20v-5h4v5'/%3E%3C/svg%3E");
+  --vc-icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M8.2 12.2l2.6 2.6 5-5.2'/%3E%3C/svg%3E");
+  --vc-icon-tag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.2 13.2L13 20.4a2 2 0 01-2.8 0l-6.6-6.6V4h9.8l6.8 6.8a1.7 1.7 0 010 2.4z'/%3E%3Cpath d='M7.6 7.6v.01'/%3E%3C/svg%3E");
   --vc-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .06);
 }
 
@@ -1188,4 +1201,244 @@ p.vc-law-link { margin: 0.75rem 0 0; font-weight: 600; }
   .vc-offer-table td:nth-child(2)::before { content: "Discount"; color: var(--vc-text-soft); }
   .vc-offer-table td:nth-child(3)::before { content: "Expires"; color: var(--vc-text-soft); }
   .vc-offer-table td:nth-child(4)::before { content: "Code"; color: var(--vc-text-soft); }
+}
+
+/* =========================================================================
+ * Sidebar panels: cards, icons and badges
+ *
+ * The sidebar was a column of headings and text with nothing to stop the
+ * eye. A reader scanning a store page is looking for one fact at a time --
+ * what it costs to ship, whether anyone checked this, where the social
+ * accounts are -- and a flat column makes them read to find it.
+ *
+ * So each block becomes a card with its own heading icon. Icons are drawn
+ * with CSS masks rather than added to the markup: the mask takes its colour
+ * from currentColor, so one icon works in both themes and in a rebrand, and
+ * no block's PHP has to change to get one.
+ * ====================================================================== */
+
+/* The card. Light surface, hairline border, enough padding to separate the
+   blocks without eating the 220px column -- content keeps about 194px. */
+.vc-storepage--side .vc-stats,
+.vc-storepage--side .vc-merchant-info,
+.vc-storepage--side .vc-trust-section,
+.vc-storepage--side .vc-links,
+.vc-storepage--side .vc-related-stores,
+.vc-storepage--side .vc-editorial,
+.vc-storepage--side .vc-tags {
+  background: var(--vc-surface);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  padding: 0.85rem 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+/* Headings carry the icon. Flex rather than a floated ::before, so a heading
+   that wraps to two lines keeps its text aligned under itself. */
+.vc-storepage--side .vc-stats > h2,
+.vc-storepage--side .vc-merchant-info > h2,
+.vc-storepage--side .vc-trust-section > h2,
+.vc-storepage--side .vc-links > h2,
+.vc-storepage--side .vc-related-stores > h2,
+.vc-storepage--side .vc-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--vc-border);
+  color: var(--vc-text-soft);
+  /* The Layout screen's heading size is set as
+     `.vc-merchant-page .vc-trust-section > h2`, which outranks the sidebar's
+     own scale and printed "Company information" at body size while every
+     other panel heading stayed small. These selectors match that weight and
+     come later, so the sidebar keeps one scale whatever the setting is. */
+  font-size: 0.82rem;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* One rule for the icon box; each block only supplies its own shape. */
+.vc-storepage--side .vc-stats > h2::before,
+.vc-storepage--side .vc-merchant-info > h2::before,
+.vc-storepage--side .vc-trust-section > h2::before,
+.vc-storepage--side .vc-links > h2::before,
+.vc-storepage--side .vc-related-stores > h2::before,
+.vc-storepage--side .vc-editorial::before,
+.vc-storepage--side .vc-tags::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+/* Counted figures: a bar chart. */
+.vc-storepage--side .vc-stats > h2::before {
+  -webkit-mask-image: var(--vc-icon-chart);
+  mask-image: var(--vc-icon-chart);
+}
+
+/* Merchant facts: an information mark. */
+.vc-storepage--side .vc-merchant-info > h2::before {
+  -webkit-mask-image: var(--vc-icon-info);
+  mask-image: var(--vc-icon-info);
+}
+
+/* Company information: a shield, because this is the trust block. */
+.vc-storepage--side .vc-trust-section > h2::before {
+  -webkit-mask-image: var(--vc-icon-shield);
+  mask-image: var(--vc-icon-shield);
+}
+
+/* Store pages and social: a link. */
+.vc-storepage--side .vc-links > h2::before {
+  -webkit-mask-image: var(--vc-icon-link);
+  mask-image: var(--vc-icon-link);
+}
+
+/* Similar stores: a storefront. */
+.vc-storepage--side .vc-related-stores > h2::before {
+  -webkit-mask-image: var(--vc-icon-store);
+  mask-image: var(--vc-icon-store);
+}
+
+/* ---------- Stats: the one block a reader scans ---------- */
+
+.vc-storepage--side .vc-stat {
+  padding: 0.38rem 0;
+  font-size: 0.85rem;
+  border-bottom: 1px dashed var(--vc-border);
+}
+
+.vc-storepage--side .vc-stat:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.vc-storepage--side .vc-stat__label { color: var(--vc-text-soft); }
+
+.vc-storepage--side .vc-stat__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--vc-text);
+}
+
+/* ---------- Merchant facts ---------- */
+
+.vc-storepage--side .vc-merchant-info dt {
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vc-text-soft);
+  margin-top: 0.55rem;
+}
+
+.vc-storepage--side .vc-merchant-info dt:first-of-type { margin-top: 0; }
+
+.vc-storepage--side .vc-merchant-info dd {
+  font-size: 0.88rem;
+  color: var(--vc-text);
+  margin: 0 0 0.1rem;
+}
+
+/* ---------- Reviewed by / how we checked ---------- *
+ *
+ * This is the page's accountability note, so it gets the accent colour and a
+ * tick rather than the grey everything else uses. It is the one block that
+ * says a person stands behind the facts above it.
+ */
+
+.vc-storepage--side .vc-editorial {
+  position: relative;
+  background: var(--vc-accent-soft);
+  border-color: transparent;
+  padding-left: 2.1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--vc-text-soft);
+  border-top: 1px solid transparent;
+}
+
+.vc-storepage--side .vc-editorial::before {
+  position: absolute;
+  left: 0.85rem;
+  top: 0.95rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--vc-accent);
+  -webkit-mask-image: var(--vc-icon-check);
+  mask-image: var(--vc-icon-check);
+}
+
+/* The first line is who, and it carries the weight. */
+.vc-storepage--side .vc-editorial p:first-child {
+  font-weight: 650;
+  color: var(--vc-accent-dark);
+}
+
+/* ---------- Serves / sells ---------- */
+
+.vc-storepage--side .vc-tags { position: relative; padding-left: 2.1rem; }
+
+.vc-storepage--side .vc-tags::before {
+  position: absolute;
+  left: 0.85rem;
+  top: 0.95rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--vc-text-soft);
+  -webkit-mask-image: var(--vc-icon-tag);
+  mask-image: var(--vc-icon-tag);
+}
+
+/* ---------- Links ---------- */
+
+.vc-storepage--side .vc-links__group h3 {
+  font-size: 0.72rem;
+  margin: 0 0 0.35rem;
+}
+
+.vc-storepage--side .vc-links__list a { font-size: 0.86rem; }
+
+/* ---------- Similar stores ---------- */
+
+.vc-storepage--side .vc-related-links a { font-size: 0.86rem; }
+
+/* ---------- Company information ----------
+ *
+ * The citation link had no colour of ours, so the theme painted it its own
+ * link red -- the one loud thing in a panel of grey facts, and red on a
+ * trust block reads as a warning rather than a source. */
+
+.vc-storepage--side .vc-trust-section { font-size: 0.86rem; }
+
+.vc-storepage--side .vc-trust__source,
+.vc-storepage--side .vc-trust-section p { font-size: 0.82rem; }
+
+/* Every link in this column, not one block at a time. The theme's link red
+   kept surfacing wherever a block had not set a colour of its own -- the
+   source citation, the support address, the serves/sells terms -- and three
+   separate patches would have left the fourth one red. */
+.vc-storepage--side a {
+  color: var(--vc-deal);
+  text-decoration: none;
+}
+
+.vc-storepage--side a:hover { text-decoration: underline; }
+
+/* A browser without mask support gets the cards and the spacing but no
+   icons, rather than a row of empty boxes where the icons should be. */
+@supports not ((-webkit-mask-image: none) or (mask-image: none)) {
+  .vc-storepage--side h2::before,
+  .vc-storepage--side .vc-editorial::before,
+  .vc-storepage--side .vc-tags::before { display: none; }
+
+  .vc-storepage--side .vc-editorial,
+  .vc-storepage--side .vc-tags { padding-left: 0.9rem; }
 }
