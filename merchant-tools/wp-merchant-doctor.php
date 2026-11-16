@@ -170,12 +170,34 @@ function vc_doctor_report() {
             'overridden on a ReHub store page; live only at /stores/');
     }
 
-    $law = function_exists('vc_law_base') ? vc_law_base() : '';
-    if ($law !== '' && strpos($law, '/staging/') !== false) {
+    /* This used to warn whenever the law base URL contained "/staging/",
+     * which was wrong and cried wolf on every staging install. vc_law_base()
+     * falls back to home_url('/vape-laws/'), so on staging a correctly
+     * DERIVED url contains "/staging/" too, and moves to the production host
+     * by itself. Only a url that was typed in and pinned to somewhere other
+     * than this site breaks on go-live, so that is what this now asks. */
+    $stored = trim((string) get_option('vc_law_base_url', ''));
+    if ($stored === '') {
+        $rows[] = vc_doctor_row('Law links', 'live',
+            'Law links follow this site',
+            'No base URL is stored, so they derive from the WordPress home '
+            . 'URL and move with it. Nothing to do before a go-live.');
+    } else {
+        /* A stored URL is reported whatever it says, and deliberately not
+         * judged. The tempting checks all fail on the case that matters:
+         * "does it start with home_url" waves through
+         * https://site.com/staging/vape-laws/ on a production install,
+         * because the production home IS a prefix of the staging path. And
+         * nothing here can know where the law pages really live. What IS
+         * true of every stored value is that it stops following the site,
+         * so that is what this says. */
         $rows[] = vc_doctor_row('Law links', 'warn',
-            'Law links point at /staging/',
-            'Set the base URL on Stores -> Law links to the production '
-            . '/vape-laws/, or all 51 links break when this goes live.');
+            'Law links are pinned to a URL set by hand',
+            sprintf('Set to %s while this site is %s. A stored URL does not '
+                . 'follow a move, so confirm it is right for the site you '
+                . 'are on -- or clear it on Stores -> Law links and let it '
+                . 'derive, which is correct on staging and production both.',
+                $stored, home_url('/')));
     }
 
     /* --- Half-finished data ------------------------------------------- */
