@@ -19,18 +19,45 @@ exactly what to map.
 store names that exist on the site today, so a test import matches real
 stores rather than silently creating new ones.
 
-| column | maps to | required | notes |
-| --- | --- | --- | --- |
-| `store` | **taxonomy `dealstore`** | **yes** | Must match an existing term EXACTLY, including capitals and spaces: `Binoid CBD`, not `binoid-cbd`. This is the field whose absence hid all 39 coupons. |
-| `title` | post title | yes | What the card shows as the offer's heading. |
-| `coupon_code` | `rehub_offer_product_coupon` | for coupons | Leave EMPTY for a deal with no code. |
-| `discount` | `rehub_offer_discount` | no | `10%`, `$15`, `Free shipping`. Only a per-cent value is comparable, so only those are ranked when the page works out a store's best discount. |
-| `expires` | `rehub_offer_coupon_date` | no | Format `Y-m-d H:i`, e.g. `2027-03-31 23:59`. Empty means no expiry. A wrong format is read as no expiry rather than failing. |
-| `destination_url` | `rehub_offer_product_url` | yes | The affiliate link the button opens. |
-| `button_text` | `rehub_offer_btn_text` | no | `Get Code` for a coupon, `Shop Now` for a deal. |
-| `description` | `rehub_offer_product_desc` | no | One or two lines under the title. |
-| `disclaimer` | `rehub_offer_disclaimer` | no | Small print: minimum spend, exclusions. |
-| `offer_type` | — | no | Not imported. It is there so a human can sort the sheet, and as a reminder that a row with no code is a deal. |
+### The ones that must be right
+
+| column | maps to | notes |
+| --- | --- | --- |
+| `id` | — | **Your own stable key**, any format, as long as a given coupon keeps the same one forever. It is not a ReHub field. It is what lets a second import UPDATE a coupon instead of adding a duplicate: without it, re-importing a corrected sheet of 40 leaves you with 80 posts. Add it even if nothing reads it yet. |
+| `store` | **taxonomy `dealstore`** | Must match an existing term EXACTLY, including capitals and spaces: `Binoid CBD`, not `binoid-cbd`. This is the field whose absence hid all 39 coupons. |
+| `title` | post title | What the card shows as the offer's heading. |
+| `destination_url` | `rehub_offer_product_url` | The affiliate link the button opens. |
+| `coupon_code` | `rehub_offer_product_coupon` | Required for coupons. Leave EMPTY for a deal with no code. |
+
+### Worth filling
+
+| column | maps to | notes |
+| --- | --- | --- |
+| `discount` | `rehub_offer_discount` | `10%`, `$15`, `Free shipping`. Only a per-cent value is comparable, so only those are ranked when the stats panel works out a store's best discount. |
+| `expires` | `rehub_offer_coupon_date` | Format `Y-m-d H:i`, e.g. `2027-03-31 23:59`. Empty means no expiry. A wrong format is read as no expiry rather than failing, so it fails quietly. |
+| `verified` | `rehub_offer_verify_label` | **Drives the "Verified" count in the sidebar stats panel** — that panel counts offers whose label is non-empty. A date works well. Only fill it for an offer somebody actually checked; an unchecked offer leaves it empty, because the figure is published as a claim about the shop. |
+| `status` | post status | `publish` or `draft`. Importing as `draft` lets a batch land for review before any of it is public. Row 4 of the sample is a draft so the shape is visible. |
+| `button_text` | `rehub_offer_btn_text` | `Get Code` for a coupon, `Shop Now` for a deal. |
+| `description` | `rehub_offer_product_desc` | One or two lines under the title. |
+| `disclaimer` | `rehub_offer_disclaimer` | Small print: minimum spend, exclusions. |
+
+### Only for some offers
+
+| column | maps to | notes |
+| --- | --- | --- |
+| `logo_url` | `rehub_offer_logo_url` | A per-offer logo. Usually unnecessary: the logo pipeline already sets a logo per shop, and this would override it for one card. |
+| `image_url` | `rehub_offer_product_thumb` | An image on the card. Worth it for a named-product deal, not for a sitewide code. |
+| `price` / `was_price` | `rehub_offer_product_price` / `rehub_offer_product_price_old` | For a specific product at a specific price — the card then shows the new price struck through the old. Meaningless on a sitewide code, so leave both empty there. Row 6 of the sample is this shape. |
+| `offer_type` | — | Not imported. It is there so a human can sort the sheet, and as a reminder that a row with no code is a deal. |
+
+### Deliberately not in the sheet
+
+- **`offerexpiration`** is a ReHub taxonomy with a single term, `yes`. The
+  theme adds it ITSELF once the expiry date passes, lazily, the first time a
+  visitor opens the page. Do not map it; setting it by hand marks a live
+  offer expired.
+- **`rehub_offer_name`** duplicates the post title in practice.
+- **`rehub_offer_shortcode_generate`** is internal to the theme's own editor.
 
 ## The one field that is not in the spreadsheet
 
